@@ -25,7 +25,7 @@ pub struct ProcessMetadata {
     command: String,
 }
 
-///
+/// Describes a process
 impl ProcessMetadata {
     /// Returns the process identifier assigned to the process by the OS
     ///
