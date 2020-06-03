@@ -20,6 +20,7 @@ pub trait ProcessScanner {
 }
 
 /// Basic metadata of a process (PID, command, etc...)
+#[derive(Eq, PartialEq, Debug)]
 pub struct ProcessMetadata {
     pid: PID,
     command: String,
@@ -134,22 +135,22 @@ mod test_pid_scanner {
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
     use std::path::Path;
+    use std::io::Write;
 
     use tempfile::{NamedTempFile, tempdir};
 
     use super::*;
 
-    fn create_tempdir<'a, T: Into<&'a Path>>(name: &str, dir: T) -> bool {
+    fn create_tempdir<T: Into<PathBuf>>(name: &str, dir: T) -> std::io::Result<()> {
         fs::create_dir(dir.into().join(name))
-            .is_ok()
     }
 
-    fn create_tempfile<'a, T: Into<&'a Path>>(name: &str, dir: T) -> bool {
+    fn create_tempfile<T: Into<PathBuf>>(name: &str, dir: T) -> std::io::Result<fs::File> {
         let fp = dir.into().join(name);
 
         match NamedTempFile::new() {
-            Ok(ntf) => ntf.persist(fp).is_ok(),
-            Err(_) => false
+            Ok(ntf) => Ok(ntf.persist(fp).expect("Could not persist file")),
+            Err(e) => Err(e)
         }
     }
 
@@ -169,18 +170,20 @@ mod test_pid_scanner {
         // 987 46a
         let test_proc_dir = tempdir().expect("Could not create tmp dir");
 
-        let proc_content = vec![
+        let proc_subdirs = vec![
             create_tempdir("123", test_proc_dir.path()),
             create_tempdir("456", test_proc_dir.path()),
             create_tempdir("abc", test_proc_dir.path()),
             create_tempdir("1ec", test_proc_dir.path()),
             create_tempdir("1.2", test_proc_dir.path()),
+        ];
+        let proc_subfiles = vec![
             create_tempfile("987", test_proc_dir.path()),
             create_tempfile("46a", test_proc_dir.path())
         ];
 
-        if proc_content.iter().any(|i| !*i) {
-            panic!("Could not create all temp dir/files: {:?}", proc_content);
+        if proc_subdirs.iter().any(|i| i.is_err()) || proc_subfiles.iter().any(|i| i.is_err()) {
+            panic!("Could not create all temp dir/files: {:?} / {:?}", proc_subdirs, proc_subfiles);
         }
 
         let proc_scanner = ProcProcessScanner {
