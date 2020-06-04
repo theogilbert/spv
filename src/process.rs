@@ -13,6 +13,37 @@ enum ProcessError {
     NotProcessDir,
 }
 
+
+/// Basic metadata of a process (PID, command, etc...)
+#[derive(Eq, PartialEq, Debug)]
+pub struct ProcessMetadata {
+    pid: PID,
+    command: String,
+}
+
+/// Describes a process
+impl ProcessMetadata {
+    /// Returns a new instance of a ProcessMetadata
+    fn new<T>(pid: PID, command: T) -> ProcessMetadata
+        where T: Into<String> {
+        ProcessMetadata { pid, command: command.into() }
+    }
+
+    /// Returns the process identifier assigned to the process by the OS
+    ///
+    /// Whilst a PID can be recycled, two running processes can not share the same PID
+    pub fn pid(&self) -> PID {
+        self.pid
+    }
+
+    /// Returns the command used to execute the given process
+    ///
+    /// This method does not return the arguments passed to the command
+    pub fn command(&self) -> &str {
+        self.command.as_str()
+    }
+}
+
 /// An object that detects running processes and keeps track of them
 pub struct ProcessSentry<T>
     where T: ProcessScanner {
@@ -77,13 +108,18 @@ mod test_process_sentry {
                 .iter()
                 .find(|pm| pm.pid == pid) {
                 Some(pm) => {
-                    Ok(ProcessMetadata { pid: pm.pid, command: pm.command.clone() })
+                    Ok(ProcessMetadata::new(pid, &pm.command))
                 }
                 None => {
                     Err(Error::InvalidPID)
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_get_metadata_of_running_process() {
+        let scanner = MockProcessScanner { processes: vec![] };
     }
 }
 
@@ -99,30 +135,6 @@ pub trait ProcessScanner {
     ///
     /// * `pid`: The process identifier of the currently running process
     fn metadata(&self, pid: PID) -> Result<ProcessMetadata>;
-}
-
-/// Basic metadata of a process (PID, command, etc...)
-#[derive(Eq, PartialEq, Debug)]
-pub struct ProcessMetadata {
-    pid: PID,
-    command: String,
-}
-
-/// Describes a process
-impl ProcessMetadata {
-    /// Returns the process identifier assigned to the process by the OS
-    ///
-    /// Whilst a PID can be recycled, two running processes can not share the same PID
-    pub fn pid(&self) -> PID {
-        self.pid
-    }
-
-    /// Returns the command used to execute the given process
-    ///
-    /// This method does not return the arguments passed to the command
-    pub fn command(&self) -> &str {
-        self.command.as_str()
-    }
 }
 
 
