@@ -7,7 +7,8 @@ use crate::spv::{Error, Result};
 /// On Linux 64 bits, the theoretical maximum value for a PID is 4194304
 type PID = u32;
 
-/// Errors internal to this module
+/// Errors internal to the process module
+#[derive(Debug, Eq, PartialEq)]
 enum ProcessError {
     NotProcessDir,
 }
@@ -145,7 +146,7 @@ impl ProcProcessScanner {
     /// # Arguments
     /// * `dir_name` - An optional string slice that holds the name of a directory
     ///
-    fn pid_from_proc_dir(dir_name: Option<&str>) -> Result<PID, ProcessError> {
+    fn pid_from_proc_dir(dir_name: Option<&str>) -> std::result::Result<PID, ProcessError> {
         let pid_ret = match dir_name {
             Some(dir_name) => dir_name.parse::<PID>(),
             None => Err(ProcessError::NotProcessDir)?
@@ -190,7 +191,7 @@ impl ProcessScanner for ProcProcessScanner {
             .join("comm");
 
         let mut file = File::open(comm_file_path)
-            .or_else(|io_err| Err(Error::ProcessParsingError(io_err.to_string())))?;
+            .or_else(|io_err| Err(Error::InvalidPID))?;
 
         file.read_to_string(&mut command)
             .or_else(|io_err| Err(Error::ProcessParsingError(io_err.to_string())))?;
