@@ -345,7 +345,7 @@ mod test_pid_scanner {
     }
 
     #[test]
-    fn test_invalid_process_metadata() {
+    fn test_get_metadata_with_invalid_pid() {
         let test_proc_dir = tempdir().expect("Could not create tmp dir");
 
         let proc_scanner = ProcProcessScanner {
