@@ -7,17 +7,97 @@ use crate::spv::{Error, Result};
 /// On Linux 64 bits, the theoretical maximum value for a PID is 4194304
 type PID = u32;
 
+/// Errors internal to this module
+enum ProcessError {
+    NotProcessDir,
+}
+
+/// An object that detects running processes and keeps track of them
+pub struct ProcessSentry<T>
+    where T: ProcessScanner {
+    scanner: T,
+}
+
+impl<T> ProcessSentry<T>
+    where T: ProcessScanner {
+    /// Returns a new ProcessSentry
+    ///
+    /// # Arguments
+    ///  * `scanner`: The scanner that will be used to get information about running processes
+    pub fn new(scanner: T) -> ProcessSentry<T> {
+        ProcessSentry { scanner }
+    }
+
+    /// Returns the metadata of a process
+    ///
+    /// # Arguments
+    ///  * `pid`: The PID of the process for which to retrieve information
+    pub fn metadata(&self, _pid: PID) -> Result<&ProcessMetadata> {
+        unimplemented!()
+    }
+
+    /// Returns the metadata of all currently running processes, consuming the sentry in the
+    /// process
+    pub fn dump_processes(self) -> Vec<ProcessMetadata> {
+        unimplemented!()
+    }
+
+    /// Scans the running processes to detect new or killed processes
+    ///
+    /// # Arguments
+    ///  * `on_process_spawn`: A closure which takes as parameter a `&ProcessMetadata`.
+    /// This closure will be called for all newly spawned processes.
+    ///  * `on_process_killed`: A closure which takes as parameter a `ProcessMetadata`.
+    /// This closure will be called for all newly killed processes.
+    pub fn scan<U, V>(&self, on_process_spawn: U, on_process_killed: V) -> Result<()>
+        where U: Fn(&ProcessMetadata) -> (), V: Fn(ProcessMetadata) -> () {
+        unimplemented!()
+    }
+}
+
+#[cfg(test)]
+mod test_process_sentry {
+    use super::*;
+
+    struct MockProcessScanner {
+        processes: Vec<ProcessMetadata>
+    }
+
+    impl ProcessScanner for MockProcessScanner {
+        fn scan(&self) -> Result<Vec<PID>> {
+            Ok(self.processes
+                .iter()
+                .map(|pm| pm.pid)
+                .collect())
+        }
+
+        fn metadata(&self, pid: u32) -> Result<ProcessMetadata> {
+            match self.processes
+                .iter()
+                .find(|pm| pm.pid == pid) {
+                Some(pm) => {
+                    Ok(ProcessMetadata { pid: pm.pid, command: pm.command.clone() })
+                }
+                None => {
+                    Err(Error::InvalidPID)
+                }
+            }
+        }
+    }
+}
+
+
 /// Trait with methods to retrieve basic information about running processes
 pub trait ProcessScanner {
     /// Returns a list containing the PIDs of all currently running processes
-    fn scan_processes(&self) -> Result<Vec<PID>>;
+    fn scan(&self) -> Result<Vec<PID>>;
 
     /// Returns The ProcessMetadata of the currently running process with the given PID
     ///
     /// # Arguments
     ///
-    /// * pid: The process identifier of the currently running process
-    fn process_metadata(&self, pid: PID) -> Result<ProcessMetadata>;
+    /// * `pid`: The process identifier of the currently running process
+    fn metadata(&self, pid: PID) -> Result<ProcessMetadata>;
 }
 
 /// Basic metadata of a process (PID, command, etc...)
@@ -31,14 +111,14 @@ pub struct ProcessMetadata {
 impl ProcessMetadata {
     /// Returns the process identifier assigned to the process by the OS
     ///
-    /// At any given time in the lifetime of a running process, this PID should be unique
+    /// Whilst a PID can be recycled, two running processes can not share the same PID
     pub fn pid(&self) -> PID {
         self.pid
     }
 
     /// Returns the command used to execute the given process
     ///
-    /// This method does not return the arguments sent to the command
+    /// This method does not return the arguments passed to the command
     pub fn command(&self) -> &str {
         self.command.as_str()
     }
@@ -46,13 +126,15 @@ impl ProcessMetadata {
 
 
 /// Implementation of ProcessScanner that uses the `/proc` Linux virtual directory as source
+#[cfg(target_os = "linux")]
 pub struct ProcProcessScanner {
     proc_dir: PathBuf
 }
 
+/// Scan running processes on a Linux host by scanning the content of /proc directory
+#[cfg(target_os = "linux")]
 impl ProcProcessScanner {
-    /// Creates a new ProcProcessScanner instance
-    ///
+    /// Returns a new ProcProcessScanner instance
     pub fn new() -> ProcProcessScanner {
         ProcProcessScanner { proc_dir: PathBuf::from("/proc") }
     }
@@ -61,23 +143,22 @@ impl ProcProcessScanner {
     /// Parses a PID from a directory name, if it represents an unsigned integer
     ///
     /// # Arguments
-    ///
     /// * `dir_name` - An optional string slice that holds the name of a directory
     ///
-    fn pid_from_proc_dir(dir_name: Option<&str>) -> Result<PID> {
+    fn pid_from_proc_dir(dir_name: Option<&str>) -> Result<PID, ProcessError> {
         let pid_ret = match dir_name {
             Some(dir_name) => dir_name.parse::<PID>(),
-            None => Err(Error::InvalidPidDirName)?
+            None => Err(ProcessError::NotProcessDir)?
         };
 
-        pid_ret.or_else(|_| Err(Error::InvalidPidDirName))
+        pid_ret.or_else(|_| Err(ProcessError::NotProcessDir))
     }
 }
 
+#[cfg(target_os = "linux")]
 impl ProcessScanner for ProcProcessScanner {
-    /// Scan all running processes on a Linux host by scanning the content of /proc directory
     /// Returns the PIDs of currently running processes
-    fn scan_processes(&self) -> Result<Vec<PID>> {
+    fn scan(&self) -> Result<Vec<PID>> {
         let dir_iter = read_dir(self.proc_dir.as_path())
             .or_else(|e| Err(Error::ProcessScanningFailure(e.to_string())))?;
 
@@ -98,8 +179,11 @@ impl ProcessScanner for ProcProcessScanner {
         Ok(pids)
     }
 
-    /// Creates a ProcessMetadata instance given the process' PID
-    fn process_metadata(&self, pid: PID) -> Result<ProcessMetadata> {
+    /// Fetch and returns the metadata of a process
+    ///
+    /// # Arguments
+    ///  * `pid`: The identifier of the process for which to retrieve metadata
+    fn metadata(&self, pid: PID) -> Result<ProcessMetadata> {
         let mut command = String::new();
         let comm_file_path = self.proc_dir
             .join(pid.to_string())
@@ -116,6 +200,7 @@ impl ProcessScanner for ProcProcessScanner {
 }
 
 #[cfg(test)]
+#[cfg(target_os = "linux")]
 mod test_pid_from_proc_dir {
     use super::*;
 
@@ -130,19 +215,19 @@ mod test_pid_from_proc_dir {
     fn test_pid_from_invalid_proc_dir_name() {
         let invalid_pid = ProcProcessScanner::pid_from_proc_dir(Some("abc"));
 
-        assert_eq!(invalid_pid, Err(Error::InvalidPidDirName));
+        assert_eq!(invalid_pid, Err(ProcessError::NotProcessDir));
     }
 
     #[test]
     fn test_pid_from_no_proc_dir_name() {
         let invalid_pid = ProcProcessScanner::pid_from_proc_dir(None);
 
-        assert_eq!(invalid_pid, Err(Error::InvalidPidDirName));
+        assert_eq!(invalid_pid, Err(ProcessError::NotProcessDir));
     }
 }
 
-#[cfg(target_os = "linux")]
 #[cfg(test)]
+#[cfg(target_os = "linux")]
 mod test_pid_scanner {
     use std::fs;
     use std::io::Write;
@@ -203,7 +288,7 @@ mod test_pid_scanner {
         };
 
         // when we scan processes
-        let mut pids = proc_scanner.scan_processes()
+        let mut pids = proc_scanner.scan()
             .expect("Could not scan processes");
         pids.sort();
 
@@ -222,7 +307,7 @@ mod test_pid_scanner {
         };
 
         // when we scan processes
-        let pids = proc_scanner.scan_processes();
+        let pids = proc_scanner.scan();
 
         println!("Scanning result: {:?}", pids);
 
@@ -249,12 +334,25 @@ mod test_pid_scanner {
             proc_dir: test_proc_dir.path().to_path_buf()
         };
 
-        let process_metadata = proc_scanner.process_metadata(123)
+        let process_metadata = proc_scanner.metadata(123)
             .expect("Could not get processes metadata");
 
         assert_eq!(process_metadata, ProcessMetadata {
             pid: 123,
             command: String::from("test_cmd"),
         });
+    }
+
+    #[test]
+    fn test_invalid_process_metadata() {
+        let test_proc_dir = tempdir().expect("Could not create tmp dir");
+
+        let proc_scanner = ProcProcessScanner {
+            proc_dir: test_proc_dir.path().to_path_buf()
+        };
+
+        let process_metadata_ret = proc_scanner.metadata(123);
+
+        assert_eq!(process_metadata_ret, Err(Error::InvalidPID));
     }
 }

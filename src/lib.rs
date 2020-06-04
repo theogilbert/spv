@@ -5,8 +5,8 @@ mod spv {
     #[derive(Debug, Eq, PartialEq)]
     pub enum Error {
         ProcessScanningFailure(String),
-        InvalidPidDirName,
         ProcessParsingError(String),
+        InvalidPID,
     }
 
     pub type Result<T> = std::result::Result<T, Error>;
