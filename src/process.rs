@@ -3,6 +3,7 @@ use std::io::Read;
 use std::path::PathBuf;
 
 use crate::spv::{Error, Result};
+use std::collections::HashMap;
 
 /// On Linux 64 bits, the theoretical maximum value for a PID is 4194304
 type PID = u32;
@@ -15,7 +16,7 @@ enum ProcessError {
 
 
 /// Basic metadata of a process (PID, command, etc...)
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub struct ProcessMetadata {
     pid: PID,
     command: String,
@@ -48,6 +49,7 @@ impl ProcessMetadata {
 pub struct ProcessSentry<T>
     where T: ProcessScanner {
     scanner: T,
+    running_processes: HashMap<PID, ProcessMetadata>,
 }
 
 impl<T> ProcessSentry<T>
@@ -57,21 +59,7 @@ impl<T> ProcessSentry<T>
     /// # Arguments
     ///  * `scanner`: The scanner that will be used to get information about running processes
     pub fn new(scanner: T) -> ProcessSentry<T> {
-        ProcessSentry { scanner }
-    }
-
-    /// Returns the metadata of a process
-    ///
-    /// # Arguments
-    ///  * `pid`: The PID of the process for which to retrieve information
-    pub fn metadata(&self, _pid: PID) -> Result<&ProcessMetadata> {
-        unimplemented!()
-    }
-
-    /// Returns the metadata of all currently running processes, consuming the sentry in the
-    /// process
-    pub fn dump_processes(self) -> Vec<ProcessMetadata> {
-        unimplemented!()
+        ProcessSentry { scanner, running_processes: HashMap::new() }
     }
 
     /// Scans the running processes to detect new or killed processes
@@ -81,9 +69,19 @@ impl<T> ProcessSentry<T>
     /// This closure will be called for all newly spawned processes.
     ///  * `on_process_killed`: A closure which takes as parameter a `ProcessMetadata`.
     /// This closure will be called for all newly killed processes.
-    pub fn scan<U, V>(&self, on_process_spawn: U, on_process_killed: V) -> Result<()>
-        where U: Fn(&ProcessMetadata) -> (), V: Fn(ProcessMetadata) -> () {
-        unimplemented!()
+    pub fn scan<U, V>(&mut self, mut on_process_spawn: U, mut on_process_killed: V) -> Result<()>
+        where U: FnMut(&ProcessMetadata) -> (), V: FnMut(ProcessMetadata) -> () {
+        let pids = self.scanner.scan()?;
+
+        for pid in pids.into_iter() {
+            let metadata = self.scanner.metadata(pid)?;
+
+            self.running_processes.insert(pid, metadata);
+
+            on_process_spawn(&self.running_processes.get(&pid).unwrap());
+        }
+
+        Ok(())
     }
 }
 
@@ -108,7 +106,7 @@ mod test_process_sentry {
                 .iter()
                 .find(|pm| pm.pid == pid) {
                 Some(pm) => {
-                    Ok(ProcessMetadata::new(pid, &pm.command))
+                    Ok(pm.clone())
                 }
                 None => {
                     Err(Error::InvalidPID)
@@ -118,8 +116,22 @@ mod test_process_sentry {
     }
 
     #[test]
-    fn test_get_metadata_of_running_process() {
-        let scanner = MockProcessScanner { processes: vec![] };
+    fn test_initial_scan() {
+        let scanner = MockProcessScanner { processes: vec![ProcessMetadata::new(1, "ping")] };
+
+        let mut sentry = ProcessSentry::new(scanner);
+
+        let mut new_processes: Vec<ProcessMetadata> = Vec::new();
+        let mut killed_processes: Vec<ProcessMetadata> = Vec::new();
+
+        let on_new_proc = |pm: &ProcessMetadata| { new_processes.push(pm.clone()) };
+        let on_killed_proc = |pm: ProcessMetadata| { killed_processes.push(pm); };
+
+        sentry.scan(on_new_proc, on_killed_proc)
+            .expect("Could not scan processes");
+
+        assert_eq!(new_processes, vec![ProcessMetadata::new(1, "ping")]);
+        assert_eq!(killed_processes, vec![]);
     }
 }
 
@@ -203,7 +215,7 @@ impl ProcessScanner for ProcProcessScanner {
             .join("comm");
 
         let mut file = File::open(comm_file_path)
-            .or_else(|io_err| Err(Error::InvalidPID))?;
+            .or_else(|_| Err(Error::InvalidPID))?;
 
         file.read_to_string(&mut command)
             .or_else(|io_err| Err(Error::ProcessParsingError(io_err.to_string())))?;
