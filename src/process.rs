@@ -3,17 +3,19 @@ use std::fs::{DirEntry, File, read_dir};
 use std::io::Read;
 use std::path::PathBuf;
 
-use crate::spv::{Error, Result};
-
 /// On Linux 64 bits, the theoretical maximum value for a PID is 4194304
 type PID = u32;
 
 /// Errors internal to the process module
-#[derive(Debug, Eq, PartialEq)]
-enum ProcessError {
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum Error {
     NotProcessDir,
+    ProcessScanningFailure(String),
+    ProcessParsingError(String),
+    InvalidPID,
 }
 
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// Basic metadata of a process (PID, command, etc...)
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -347,13 +349,13 @@ impl ProcProcessScanner {
     /// # Arguments
     /// * `dir_name` - An optional string slice that holds the name of a directory
     ///
-    fn pid_from_proc_dir(dir_name: Option<&str>) -> std::result::Result<PID, ProcessError> {
+    fn pid_from_proc_dir(dir_name: Option<&str>) -> std::result::Result<PID, Error> {
         let pid_ret = match dir_name {
             Some(dir_name) => dir_name.parse::<PID>(),
-            None => Err(ProcessError::NotProcessDir)?
+            None => Err(Error::NotProcessDir)?
         };
 
-        pid_ret.or_else(|_| Err(ProcessError::NotProcessDir))
+        pid_ret.or_else(|_| Err(Error::NotProcessDir))
     }
 }
 
@@ -421,14 +423,14 @@ mod test_pid_from_proc_dir {
     fn test_pid_from_invalid_proc_dir_name() {
         let invalid_pid = ProcProcessScanner::pid_from_proc_dir(Some("abc"));
 
-        assert_eq!(invalid_pid, Err(ProcessError::NotProcessDir));
+        assert_eq!(invalid_pid, Err(Error::NotProcessDir));
     }
 
     #[test]
     fn test_pid_from_no_proc_dir_name() {
         let invalid_pid = ProcProcessScanner::pid_from_proc_dir(None);
 
-        assert_eq!(invalid_pid, Err(ProcessError::NotProcessDir));
+        assert_eq!(invalid_pid, Err(Error::NotProcessDir));
     }
 }
 
