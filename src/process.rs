@@ -1,9 +1,9 @@
+use std::collections::HashMap;
 use std::fs::{DirEntry, File, read_dir};
 use std::io::Read;
 use std::path::PathBuf;
 
 use crate::spv::{Error, Result};
-use std::collections::HashMap;
 
 /// On Linux 64 bits, the theoretical maximum value for a PID is 4194304
 type PID = u32;
@@ -73,7 +73,53 @@ impl<T> ProcessSentry<T>
         where U: FnMut(&ProcessMetadata) -> (), V: FnMut(ProcessMetadata) -> () {
         let pids = self.scanner.scan()?;
 
-        for pid in pids.into_iter() {
+        self.clean_killed_processes(&pids, &mut on_process_killed);
+        self.add_spawned_processes(&pids, &mut on_process_spawn)?;
+
+        Ok(())
+    }
+
+    /// Remove processes that are no longer running from `self.running_processes`, and for all of
+    /// them call `on_process_killed`
+    ///
+    /// # Arguments
+    ///  * `pids`: The pids of the currently running processes
+    ///  * `on_process_killed`: A closure that takes a `ProcessMetadata` as parameter, that will be
+    ///     called for each process that has been detected as no longer running
+    ///
+    fn clean_killed_processes<V>(&mut self, pids: &Vec<PID>, mut on_process_killed: V) -> ()
+        where V: FnMut(ProcessMetadata) -> () {
+        let killed_pids: Vec<PID> = self.running_processes
+            .keys()
+            .filter(|pid_ref| !pids.contains(pid_ref))
+            .map(|pid_ref| *pid_ref)
+            .collect();
+
+        for pid in killed_pids {
+            match self.running_processes.remove(&pid) {
+                Some(pm) => on_process_killed(pm),
+                // The other case should never happen:
+                None => panic!("Could not remove PID which should exist in running_processes map")
+            }
+        }
+    }
+
+    /// Adds newly spawned processes to `self.running_processes`, and calls `on_process_spawn` for
+    /// all of these processes.
+    ///
+    /// # Arguments
+    ///  * `pids`: The pids of currently running processes
+    ///  * `on_process_spawn`: A closure which takes a `&ProcessMetadata` as parameter, called for
+    ///     all new processes
+    ///
+    fn add_spawned_processes<U>(&mut self, pids: &Vec<PID>, on_process_spawn: &mut U) -> Result<()>
+        where U: FnMut(&ProcessMetadata) -> () {
+        let new_pids: Vec<PID> = pids.into_iter()
+            .filter(|pid_ref| !self.running_processes.contains_key(pid_ref))
+            .map(|pid_ref| *pid_ref)
+            .collect();
+
+        for pid in new_pids {
             let metadata = self.scanner.metadata(pid)?;
 
             self.running_processes.insert(pid, metadata);
@@ -90,18 +136,29 @@ mod test_process_sentry {
     use super::*;
 
     struct MockProcessScanner {
-        processes: Vec<ProcessMetadata>
+        processes: Vec<ProcessMetadata>, // List of "supposedly" running processes
+        scanning_error: Option<Error>,  // makes self.scan() return an Err if set to Some(...)
+        metadata_error: Option<Error>, // makes self.metadata() return an Err if set to Some(...)
     }
 
     impl ProcessScanner for MockProcessScanner {
         fn scan(&self) -> Result<Vec<PID>> {
-            Ok(self.processes
-                .iter()
-                .map(|pm| pm.pid)
-                .collect())
+            match self.scanning_error.as_ref() {
+                Some(e) => Err(e.clone()),
+                None => {
+                    Ok(self.processes
+                        .iter()
+                        .map(|pm| pm.pid)
+                        .collect())
+                }
+            }
         }
 
         fn metadata(&self, pid: u32) -> Result<ProcessMetadata> {
+            if let Some(e) = self.metadata_error.as_ref() {
+                return Err(e.clone());
+            }
+
             match self.processes
                 .iter()
                 .find(|pm| pm.pid == pid) {
@@ -117,21 +174,141 @@ mod test_process_sentry {
 
     #[test]
     fn test_initial_scan() {
-        let scanner = MockProcessScanner { processes: vec![ProcessMetadata::new(1, "ping")] };
+        let scanner = MockProcessScanner {
+            processes: vec![ProcessMetadata::new(1, "ping")],
+            scanning_error: None,
+            metadata_error: None,
+        };
 
         let mut sentry = ProcessSentry::new(scanner);
 
-        let mut new_processes: Vec<ProcessMetadata> = Vec::new();
-        let mut killed_processes: Vec<ProcessMetadata> = Vec::new();
+        let mut spawned_processes: Vec<ProcessMetadata> = Vec::new();
 
-        let on_new_proc = |pm: &ProcessMetadata| { new_processes.push(pm.clone()) };
-        let on_killed_proc = |pm: ProcessMetadata| { killed_processes.push(pm); };
+        let on_proc_spawn = |pm: &ProcessMetadata| {
+            spawned_processes.push(pm.clone())
+        };
+        let on_proc_killed = |_pm: ProcessMetadata| {
+            panic!("No process should have been killed")
+        };
 
-        sentry.scan(on_new_proc, on_killed_proc)
+        sentry.scan(on_proc_spawn, on_proc_killed)
             .expect("Could not scan processes");
 
-        assert_eq!(new_processes, vec![ProcessMetadata::new(1, "ping")]);
-        assert_eq!(killed_processes, vec![]);
+        assert_eq!(spawned_processes, vec![ProcessMetadata::new(1, "ping")]);
+    }
+
+    #[test]
+    fn test_no_spawning_process_on_second_scan() {
+        let scanner = MockProcessScanner {
+            processes: vec![ProcessMetadata::new(1, "ping")],
+            scanning_error: None,
+            metadata_error: None,
+        };
+
+        let mut sentry = ProcessSentry::new(scanner);
+
+        let on_proc_killed = |_pm: ProcessMetadata| {
+            panic!("No process should have been killed")
+        };
+
+        sentry.scan(|_pm| {}, on_proc_killed)
+            .expect("Error performing initial scan");
+
+        sentry.scan(|_pm| panic!("No process should have spawned"),
+                    |_pm| panic!("No process should have been killed"))
+            .expect("Error performing secondary scan");
+    }
+
+    #[test]
+    fn test_spawning_process_on_second_scan() {
+        let scanner = MockProcessScanner {
+            processes: vec![],
+            scanning_error: None,
+            metadata_error: None,
+        };
+
+        let mut sentry = ProcessSentry::new(scanner);
+
+        let on_proc_killed = |_pm: ProcessMetadata| {
+            panic!("No process should have been killed")
+        };
+
+        sentry.scan(|_pm| panic!("No process should have spawned"),
+                    |_pm| panic!("No process should have been killed"))
+            .expect("Error performing initial scan");
+
+        sentry.scanner.processes.push(ProcessMetadata::new(1, "ping"));
+
+        let mut spawned_processes = Vec::new();
+
+        let on_new_process = |pm: &ProcessMetadata| {
+            spawned_processes.push(pm.clone());
+        };
+
+        sentry.scan(on_new_process, on_proc_killed)
+            .expect("Could not scan processes");
+
+        assert_eq!(spawned_processes, vec![ProcessMetadata::new(1, "ping")]);
+    }
+
+    #[test]
+    fn test_killing_processes_on_second_scan() {
+        let scanner = MockProcessScanner {
+            processes: vec![ProcessMetadata::new(1, "ping")],
+            scanning_error: None,
+            metadata_error: None,
+        };
+
+        let mut sentry = ProcessSentry::new(scanner);
+        sentry.scan(|_pm| {},
+                    |_pm| { panic!("No process should be killed") })
+            .expect("Failure on initial scan"); // First scan here
+
+        sentry.scanner.processes.remove(0);
+
+        let mut killed_processes: Vec<ProcessMetadata> = Vec::new();
+
+        let on_new_proc = |_pm: &ProcessMetadata| {
+            panic!("No process should spawn")
+        };
+        let on_killed_proc = |pm: ProcessMetadata| {
+            killed_processes.push(pm);
+        };
+
+        sentry.scan(on_new_proc, on_killed_proc)
+            .expect("Failure on secondary scan");
+
+        assert_eq!(killed_processes, vec![ProcessMetadata::new(1, "ping")]);
+    }
+
+    #[test]
+    fn test_scan_causes_error() {
+        let scanner = MockProcessScanner {
+            processes: vec![],
+            scanning_error: Some(Error::ProcessScanningFailure(String::new())),
+            metadata_error: None,
+        };
+
+        let mut sentry = ProcessSentry::new(scanner);
+        let ret = sentry.scan(|_pm| { panic!("No process should be spawned ") },
+                              |_pm| { panic!("No process should be killed") });
+
+        assert_eq!(ret, Err(Error::ProcessScanningFailure(String::new())));
+    }
+
+    #[test]
+    fn test_metadata_causes_error() {
+        let scanner = MockProcessScanner {
+            processes: vec![ProcessMetadata::new(1, "ping")],
+            scanning_error: None,
+            metadata_error: Some(Error::ProcessParsingError(String::new())),
+        };
+
+        let mut sentry = ProcessSentry::new(scanner);
+        let ret = sentry.scan(|_pm| { panic!("No process should be spawned ") },
+                              |_pm| { panic!("No process should be killed") });
+
+        assert_eq!(ret, Err(Error::ProcessParsingError(String::new())));
     }
 }
 

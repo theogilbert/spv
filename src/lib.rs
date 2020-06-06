@@ -2,7 +2,7 @@ pub mod process;
 
 // The different types of errors that can be returned within the spv application
 mod spv {
-    #[derive(Debug, Eq, PartialEq)]
+    #[derive(Debug, Eq, PartialEq, Clone)]
     pub enum Error {
         ProcessScanningFailure(String),
         ProcessParsingError(String),
