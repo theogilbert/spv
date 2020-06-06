@@ -397,6 +397,10 @@ impl ProcessScanner for ProcProcessScanner {
         file.read_to_string(&mut command)
             .or_else(|io_err| Err(Error::ProcessParsingError(io_err.to_string())))?;
 
+        if command.ends_with('\n') {  // Remove trailing newline
+            command.pop();
+        }
+
         Ok(ProcessMetadata { pid, command })
     }
 }
@@ -530,6 +534,32 @@ mod test_pid_scanner {
             .expect("Could not create comm file");
 
         comm_file.write(b"test_cmd")
+            .expect("Could not write to comm file"); // The process 123's command is test_cmd
+
+        let proc_scanner = ProcProcessScanner {
+            proc_dir: test_proc_dir.path().to_path_buf()
+        };
+
+        let process_metadata = proc_scanner.metadata(123)
+            .expect("Could not get processes metadata");
+
+        assert_eq!(process_metadata, ProcessMetadata {
+            pid: 123,
+            command: String::from("test_cmd"),
+        });
+    }
+
+    #[test]
+    fn test_process_metadata_with_newline() {
+        let test_proc_dir = tempdir().expect("Could not create tmp dir");
+
+        create_tempdir("123", test_proc_dir.path())
+            .expect("Could not create process dir");
+
+        let mut comm_file = create_tempfile("comm", test_proc_dir.path().join("123").as_os_str())
+            .expect("Could not create comm file");
+
+        comm_file.write(b"test_cmd\n")
             .expect("Could not write to comm file"); // The process 123's command is test_cmd
 
         let proc_scanner = ProcProcessScanner {
