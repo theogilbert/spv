@@ -331,16 +331,16 @@ pub trait ProcessScanner {
 
 /// Implementation of ProcessScanner that uses the `/proc` Linux virtual directory as source
 #[cfg(target_os = "linux")]
-pub struct ProcProcessScanner {
+pub struct ProcfsScanner {
     proc_dir: PathBuf
 }
 
 /// Scan running processes on a Linux host by scanning the content of /proc directory
 #[cfg(target_os = "linux")]
-impl ProcProcessScanner {
-    /// Returns a new ProcProcessScanner instance
-    pub fn new() -> ProcProcessScanner {
-        ProcProcessScanner { proc_dir: PathBuf::from("/proc") }
+impl ProcfsScanner {
+    /// Returns a new ProcfsScanner instance
+    pub fn new() -> ProcfsScanner {
+        ProcfsScanner { proc_dir: PathBuf::from("/proc") }
     }
 
 
@@ -360,7 +360,7 @@ impl ProcProcessScanner {
 }
 
 #[cfg(target_os = "linux")]
-impl ProcessScanner for ProcProcessScanner {
+impl ProcessScanner for ProcfsScanner {
     /// Returns the PIDs of currently running processes
     fn scan(&self) -> Result<Vec<PID>> {
         let dir_iter = read_dir(self.proc_dir.as_path())
@@ -414,21 +414,21 @@ mod test_pid_from_proc_dir {
 
     #[test]
     fn test_pid_from_valid_proc_dir_name() {
-        let valid_pid = ProcProcessScanner::pid_from_proc_dir(Some("123"));
+        let valid_pid = ProcfsScanner::pid_from_proc_dir(Some("123"));
 
         assert_eq!(valid_pid, Ok(123));
     }
 
     #[test]
     fn test_pid_from_invalid_proc_dir_name() {
-        let invalid_pid = ProcProcessScanner::pid_from_proc_dir(Some("abc"));
+        let invalid_pid = ProcfsScanner::pid_from_proc_dir(Some("abc"));
 
         assert_eq!(invalid_pid, Err(Error::NotProcessDir));
     }
 
     #[test]
     fn test_pid_from_no_proc_dir_name() {
-        let invalid_pid = ProcProcessScanner::pid_from_proc_dir(None);
+        let invalid_pid = ProcfsScanner::pid_from_proc_dir(None);
 
         assert_eq!(invalid_pid, Err(Error::NotProcessDir));
     }
@@ -491,7 +491,7 @@ mod test_pid_scanner {
             panic!("Could not create all temp dir/files: {:?} / {:?}", proc_subdirs, proc_subfiles);
         }
 
-        let proc_scanner = ProcProcessScanner {
+        let proc_scanner = ProcfsScanner {
             proc_dir: test_proc_dir.path().to_path_buf()
         };
 
@@ -510,7 +510,7 @@ mod test_pid_scanner {
         let test_proc_dir = tempdir().expect("Could not create tmp dir");
         set_dir_permissions(test_proc_dir.path(), 0o000).expect("Could not set dir permissions");
 
-        let proc_scanner = ProcProcessScanner {
+        let proc_scanner = ProcfsScanner {
             proc_dir: test_proc_dir.path().to_path_buf()
         };
 
@@ -538,7 +538,7 @@ mod test_pid_scanner {
         comm_file.write(b"test_cmd")
             .expect("Could not write to comm file"); // The process 123's command is test_cmd
 
-        let proc_scanner = ProcProcessScanner {
+        let proc_scanner = ProcfsScanner {
             proc_dir: test_proc_dir.path().to_path_buf()
         };
 
@@ -564,7 +564,7 @@ mod test_pid_scanner {
         comm_file.write(b"test_cmd\n")
             .expect("Could not write to comm file"); // The process 123's command is test_cmd
 
-        let proc_scanner = ProcProcessScanner {
+        let proc_scanner = ProcfsScanner {
             proc_dir: test_proc_dir.path().to_path_buf()
         };
 
@@ -581,7 +581,7 @@ mod test_pid_scanner {
     fn test_get_metadata_with_invalid_pid() {
         let test_proc_dir = tempdir().expect("Could not create tmp dir");
 
-        let proc_scanner = ProcProcessScanner {
+        let proc_scanner = ProcfsScanner {
             proc_dir: test_proc_dir.path().to_path_buf()
         };
 
