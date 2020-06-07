@@ -3,8 +3,8 @@ use std::fs::{DirEntry, File, read_dir};
 use std::io::Read;
 use std::path::PathBuf;
 
-/// On Linux 64 bits, the theoretical maximum value for a PID is 4194304
-type PID = u32;
+/// On Linux 64 bits, the theoretical maximum value for a PID is 4194304, hence u32
+pub type PID = u32;
 
 /// Errors internal to the process module
 #[derive(Debug, Eq, PartialEq, Clone)]
