@@ -26,7 +26,8 @@ mod procfs {
     }
 
     trait ProcfsData: Sized {
-        fn from_file(file: &mut File) -> Result<Self, ProcfsError>;
+        fn read<T>(file: &mut T) -> Result<Self, ProcfsError>
+            where T: std::io::Read;
     }
 
     /// Handles the IO part of procfs parsing
@@ -47,7 +48,7 @@ mod procfs {
                 .seek(SeekFrom::Start(0))
                 .or_else(|e| Err(ProcfsError::IoError(e.to_string())))?;
 
-            T::from_file(&mut self.file)
+            T::read(&mut self.file)
         }
     }
 
@@ -87,7 +88,9 @@ mod procfs {
     }
 
     impl ProcfsData for PidStat {
-        fn from_file(file: &mut File) -> Result<Self, ProcfsError> {
+        // TODO take T where T: Read as parameter, makes it easier to test, no need to write files
+        fn read<T>(file: &mut T) -> Result<Self, ProcfsError>
+            where T: std::io::Read {
             // Might be optimized, by not reallocating at each call
             let mut stat_content = String::new();
 
@@ -107,42 +110,19 @@ mod procfs {
 
     #[cfg(test)]
     mod test_pid_stat {
-        use std::io::Write;
-        use std::path::PathBuf;
-
-        use tempfile::{NamedTempFile, tempdir, tempfile};
-
         use super::*;
-        use std::fs::OpenOptions;
+        use std::io::Cursor;
 
         #[test]
         fn test_parse_stat_file() {
-            let tmp_dir = tempdir().expect("Could not create tmp dir");
-
-            let fp: PathBuf = tmp_dir.path().join("stat").into();
-            NamedTempFile::new()
-                .expect("Could not create NamedTempFile")
-                .persist(&fp)
-                .expect("Could not persist file");
-
-            let mut file: File = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .create(true)
-                .open(&fp)
-                .expect("Could not open file");
-
-            file.write(b"1905 (python3) S 1877 1905 1877 34822 1905 4194304 1096 0 0 \
+            let content = "1905 (python3) S 1877 1905 1877 34822 1905 4194304 1096 0 0 \
 13 42 11 10 0 20 0 1 0 487679 13963264 2541 18446744073709551615 4194304 7010805 \
 140731882007344 0 0 0 0 16781312 134217730 1 0 0 17 0 0 0 0 0 0 9362864 9653016 \
-10731520 140731882009319 140731882009327 140731882009327 140731882012647 0")
-                .expect("Could not write data to stat file");
+10731520 140731882009319 140731882009327 140731882009327 140731882012647 0".to_string();
 
-            file.flush();
+            let mut data_cursor = Cursor::new(content);
 
-            file.seek(SeekFrom::Start(0));
-
-            let pid_stat = PidStat::from_file(&mut file)
+            let pid_stat = PidStat::read(&mut data_cursor)
                 .expect("Could not create PidStat from file");
 
             assert_eq!(pid_stat, PidStat {
