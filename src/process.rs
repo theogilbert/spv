@@ -89,12 +89,12 @@ impl<T> ProcessSentry<T>
     ///  * `on_process_killed`: A closure that takes a `ProcessMetadata` as parameter, that will be
     ///     called for each process that has been detected as no longer running
     ///
-    fn clean_killed_processes<V>(&mut self, pids: &Vec<PID>, mut on_process_killed: V) -> ()
+    fn clean_killed_processes<V>(&mut self, pids: &[PID], mut on_process_killed: V)
         where V: FnMut(ProcessMetadata) -> () {
         let killed_pids: Vec<PID> = self.running_processes
             .keys()
             .filter(|pid_ref| !pids.contains(pid_ref))
-            .map(|pid_ref| *pid_ref)
+            .copied()
             .collect();
 
         for pid in killed_pids {
@@ -114,11 +114,11 @@ impl<T> ProcessSentry<T>
     ///  * `on_process_spawn`: A closure which takes a `&ProcessMetadata` as parameter, called for
     ///     all new processes
     ///
-    fn add_spawned_processes<U>(&mut self, pids: &Vec<PID>, on_process_spawn: &mut U) -> Result<()>
+    fn add_spawned_processes<U>(&mut self, pids: &[PID], on_process_spawn: &mut U) -> Result<()>
         where U: FnMut(&ProcessMetadata) -> () {
-        let new_pids: Vec<PID> = pids.into_iter()
+        let new_pids: Vec<PID> = pids.iter()
             .filter(|pid_ref| !self.running_processes.contains_key(pid_ref))
-            .map(|pid_ref| *pid_ref)
+            .copied()
             .collect();
 
         for pid in new_pids {
@@ -138,8 +138,10 @@ mod test_process_sentry {
     use super::*;
 
     struct MockProcessScanner {
-        processes: Vec<ProcessMetadata>, // List of "supposedly" running processes
-        scanning_error: Option<Error>,  // makes self.scan() return an Err if set to Some(...)
+        processes: Vec<ProcessMetadata>,
+        // List of "supposedly" running processes
+        scanning_error: Option<Error>,
+        // makes self.scan() return an Err if set to Some(...)
         metadata_error: Option<Error>, // makes self.metadata() return an Err if set to Some(...)
     }
 
@@ -330,13 +332,12 @@ pub trait ProcessScanner {
 
 
 /// Implementation of ProcessScanner that uses the `/proc` Linux virtual directory as source
-#[cfg(target_os = "linux")]
+#[derive(Default)]
 pub struct ProcfsScanner {
     proc_dir: PathBuf
 }
 
 /// Scan running processes on a Linux host by scanning the content of /proc directory
-#[cfg(target_os = "linux")]
 impl ProcfsScanner {
     /// Returns a new ProcfsScanner instance
     pub fn new() -> ProcfsScanner {
@@ -352,14 +353,14 @@ impl ProcfsScanner {
     fn pid_from_proc_dir(dir_name: Option<&str>) -> std::result::Result<PID, Error> {
         let pid_ret = match dir_name {
             Some(dir_name) => dir_name.parse::<PID>(),
-            None => Err(Error::NotProcessDir)?
+            None => return Err(Error::NotProcessDir)
         };
 
         pid_ret.or_else(|_| Err(Error::NotProcessDir))
     }
 }
 
-#[cfg(target_os = "linux")]
+
 impl ProcessScanner for ProcfsScanner {
     /// Returns the PIDs of currently running processes
     fn scan(&self) -> Result<Vec<PID>> {
@@ -408,7 +409,6 @@ impl ProcessScanner for ProcfsScanner {
 }
 
 #[cfg(test)]
-#[cfg(target_os = "linux")]
 mod test_pid_from_proc_dir {
     use super::*;
 
@@ -435,7 +435,6 @@ mod test_pid_from_proc_dir {
 }
 
 #[cfg(test)]
-#[cfg(target_os = "linux")]
 mod test_pid_scanner {
     use std::fs;
     use std::io::Write;

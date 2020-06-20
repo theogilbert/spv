@@ -14,9 +14,8 @@ trait Probe<T>
 /// Set of objects to parse and interpret files from `/proc` FS
 mod procfs {
     use std::fs::File;
-    use std::io::{Read, Seek, SeekFrom};
+    use std::io::{Seek, SeekFrom};
     use std::path::Path;
-    use std::slice::SliceIndex;
 
     #[derive(Eq, PartialEq, Debug)]
     enum ProcfsError {
@@ -73,7 +72,7 @@ mod procfs {
     /// # Arguments
     ///  * `tokens`: A collection of tokens
     ///  * `pos`: The position in `tokens` of the token to parse
-    fn parse_token<T>(tokens: &Vec<&str>, pos: usize) -> Result<T, ProcfsError>
+    fn parse_token<T>(tokens: &[&str], pos: usize) -> Result<T, ProcfsError>
         where T: std::str::FromStr {
         Ok(tokens.get(pos)
             .ok_or({
