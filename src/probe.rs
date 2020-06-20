@@ -77,17 +77,47 @@ mod procfs {
         Ok(tokens.get(pos)
             .ok_or({
                 let err_msg = format!("Could not get token at position {}", pos);
-                ProcfsError::InvalidFileContent(err_msg)
+                ProcfsError::InvalidFileFormat(err_msg)
             })?
             .parse::<T>()
             .or({
                 let err_msg = format!("The token at position {} could not be parsed", pos);
-                Err(ProcfsError::InvalidFileFormat(err_msg))
+                Err(ProcfsError::InvalidFileContent(err_msg))
             })?)
     }
 
+    #[cfg(test)]
+    mod test_token_parsing {
+        use super::*;
+
+        #[test]
+        fn test_parse_valid_str_token() {
+            assert_eq!(parse_token(&vec!["a", "b", "c"], 2), Ok("c".to_string()));
+        }
+
+        #[test]
+        fn test_parse_valid_u8_token() {
+            assert_eq!(parse_token::<u8>(&vec!["1", "2", "3"], 2), Ok(3));
+        }
+
+        #[test]
+        fn test_parse_invalid_u8_token() {
+            let expected_err_msg = "The token at position 2 could not be parsed".to_string();
+
+            assert_eq!(parse_token::<u8>(&vec!["a", "b", "c"], 2),
+                       Err(ProcfsError::InvalidFileContent(expected_err_msg)));
+        }
+
+        #[test]
+        fn test_parse_token_at_invalid_pos() {
+            let expected_err_msg = "Could not get token at position 2".to_string();
+
+            assert_eq!(parse_token::<u8>(&vec!["a", "b"], 2),
+                       Err(ProcfsError::InvalidFileFormat(expected_err_msg)));
+        }
+    }
+
     impl ProcfsData for PidStat {
-        // TODO take T where T: Read as parameter, makes it easier to test, no need to write files
         fn read<T>(file: &mut T) -> Result<Self, ProcfsError>
             where T: std::io::Read {
             // Might be optimized, by not reallocating at each call
@@ -109,8 +139,9 @@ mod procfs {
 
     #[cfg(test)]
     mod test_pid_stat {
-        use super::*;
         use std::io::Cursor;
+
+        use super::*;
 
         #[test]
         fn test_parse_stat_file() {
