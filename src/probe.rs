@@ -14,7 +14,7 @@ trait Probe<T>
 /// Set of objects to parse and interpret files from `/proc` FS
 mod procfs {
     use std::fs::File;
-    use std::io::{Seek, SeekFrom};
+    use std::io::{Seek, SeekFrom, Read};
     use std::path::Path;
 
     #[derive(Eq, PartialEq, Debug)]
@@ -25,8 +25,86 @@ mod procfs {
     }
 
     trait ProcfsData: Sized {
-        fn read<T>(file: &mut T) -> Result<Self, ProcfsError>
-            where T: std::io::Read;
+        fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError>;
+    }
+
+
+    /// Parses space-separated token from a given multi-line string reference
+    struct TokenParser<'a> {
+        lines: Vec<Vec<&'a str>>
+    }
+
+    impl<'a> TokenParser<'a> {
+        /// Builds a token parser from a string slice
+        /// # Arguments
+        ///  * `content` The string slice from which to parse tokens
+        fn new(content: &'a str) -> TokenParser<'a> {
+            let mut lines = Vec::<Vec<&'a str>>::new();
+
+            for line in content.split('\n') {
+                let tokens: Vec<&str> = line.split(' ').collect();
+                lines.push(tokens);
+            }
+
+            TokenParser { lines }
+        }
+
+        /// Get the value of a token from the parser
+        /// # Arguments
+        ///  * `line_no`: The line number from which to retrieve the token
+        ///  * `pos`: The position of the token in the line (e.g. 1 for token 'b' in line 'a b c')
+        fn token<T>(&self, line_no: usize, pos: usize) -> Result<T, ProcfsError>
+            where T: std::str::FromStr {
+            Ok(self.lines.get(line_no)
+                .ok_or({
+                    let err_msg = format!("Could not get data at line {} and position {}",
+                                          line_no, pos);
+                    ProcfsError::InvalidFileFormat(err_msg)
+                })?
+                .get(pos)
+                .ok_or({
+                    let err_msg = format!("Could not get token at position {}", pos);
+                    ProcfsError::InvalidFileFormat(err_msg)
+                })?
+                .parse::<T>()
+                .or({
+                    let err_msg = format!("The token at position {} could not be parsed", pos);
+                    Err(ProcfsError::InvalidFileContent(err_msg))
+                })?)
+        }
+    }
+
+    #[cfg(test)]
+    mod test_token_parser {
+        use super::*;
+
+        #[test]
+        fn test_extract_data_from_content() {
+            let tp = TokenParser::new("1 2 3\n4 5 6");
+
+            assert_eq!(tp.token::<u8>(1, 1), Ok(5));
+        }
+
+        #[test]
+        fn test_returns_err_when_invalid_line() {
+            let tp = TokenParser::new("1 2 3");
+
+            assert!(tp.token::<u8>(1, 1).is_err());
+        }
+
+        #[test]
+        fn test_returns_err_when_invalid_col() {
+            let tp = TokenParser::new("1 2 3\n4 5 6");
+
+            assert!(tp.token::<u8>(1, 4).is_err());
+        }
+
+        #[test]
+        fn test_returns_err_when_invalid_parse() {
+            let tp = TokenParser::new("1 2 3\n4 a 6");
+
+            assert!(tp.token::<u8>(1, 1).is_err());
+        }
     }
 
     /// Handles the IO part of procfs parsing
@@ -47,7 +125,14 @@ mod procfs {
                 .seek(SeekFrom::Start(0))
                 .or_else(|e| Err(ProcfsError::IoError(e.to_string())))?;
 
-            T::read(&mut self.file)
+            // Might be optimized, by not reallocating at each call
+            let mut stat_content = String::new();
+            self.file.read_to_string(&mut stat_content)
+                .or_else(|io_err| Err(ProcfsError::IoError(io_err.to_string())))?;
+
+            let tp = TokenParser::new(&stat_content);
+
+            T::parse(&tp)
         }
     }
 
@@ -68,76 +153,18 @@ mod procfs {
         cstime: i32,
     }
 
-    /// Given a collection of String tokens, parse one as type `T`
-    /// # Arguments
-    ///  * `tokens`: A collection of tokens
-    ///  * `pos`: The position in `tokens` of the token to parse
-    fn parse_token<T>(tokens: &[&str], pos: usize) -> Result<T, ProcfsError>
-        where T: std::str::FromStr {
-        Ok(tokens.get(pos)
-            .ok_or({
-                let err_msg = format!("Could not get token at position {}", pos);
-                ProcfsError::InvalidFileFormat(err_msg)
-            })?
-            .parse::<T>()
-            .or({
-                let err_msg = format!("The token at position {} could not be parsed", pos);
-                Err(ProcfsError::InvalidFileContent(err_msg))
-            })?)
-    }
-
-    #[cfg(test)]
-    mod test_token_parsing {
-        use super::*;
-
-        #[test]
-        fn test_parse_valid_str_token() {
-            assert_eq!(parse_token(&vec!["a", "b", "c"], 2), Ok("c".to_string()));
-        }
-
-        #[test]
-        fn test_parse_valid_u8_token() {
-            assert_eq!(parse_token::<u8>(&vec!["1", "2", "3"], 2), Ok(3));
-        }
-
-        #[test]
-        fn test_parse_invalid_u8_token() {
-            let expected_err_msg = "The token at position 2 could not be parsed".to_string();
-
-            assert_eq!(parse_token::<u8>(&vec!["a", "b", "c"], 2),
-                       Err(ProcfsError::InvalidFileContent(expected_err_msg)));
-        }
-
-        #[test]
-        fn test_parse_token_at_invalid_pos() {
-            let expected_err_msg = "Could not get token at position 2".to_string();
-
-            assert_eq!(parse_token::<u8>(&vec!["a", "b"], 2),
-                       Err(ProcfsError::InvalidFileFormat(expected_err_msg)));
-        }
-    }
-
     impl ProcfsData for PidStat {
-        fn read<T>(file: &mut T) -> Result<Self, ProcfsError>
-            where T: std::io::Read {
-            // Might be optimized, by not reallocating at each call
-            let mut stat_content = String::new();
-
-            file.read_to_string(&mut stat_content)
-                .or_else(|io_err| Err(ProcfsError::IoError(io_err.to_string())))?;
-
-            let tokens: Vec<&str> = stat_content.split(' ').collect();
-
+        fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
             Ok(PidStat {
-                utime: parse_token(&tokens, 12)?,
-                stime: parse_token(&tokens, 13)?,
-                cutime: parse_token(&tokens, 14)?,
-                cstime: parse_token(&tokens, 15)?,
+                utime: token_parser.token(0, 12)?,
+                stime: token_parser.token(0, 13)?,
+                cutime: token_parser.token(0, 14)?,
+                cstime: token_parser.token(0, 15)?,
             })
         }
     }
 
-    #[cfg(test)]
+        #[cfg(test)]
     mod test_pid_stat {
         use std::io::Cursor;
 
@@ -150,9 +177,9 @@ mod procfs {
 140731882007344 0 0 0 0 16781312 134217730 1 0 0 17 0 0 0 0 0 0 9362864 9653016 \
 10731520 140731882009319 140731882009327 140731882009327 140731882012647 0".to_string();
 
-            let mut data_cursor = Cursor::new(content);
+            let token_parser = TokenParser::new(&content);
 
-            let pid_stat = PidStat::read(&mut data_cursor)
+            let pid_stat = PidStat::parse(&token_parser)
                 .expect("Could not read PidStat");
 
             assert_eq!(pid_stat, PidStat {
