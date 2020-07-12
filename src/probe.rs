@@ -153,7 +153,7 @@ mod procfs {
             let mut data_cursor = Cursor::new(content);
 
             let pid_stat = PidStat::read(&mut data_cursor)
-                .expect("Could not create PidStat from file");
+                .expect("Could not read PidStat");
 
             assert_eq!(pid_stat, PidStat {
                 utime: 13,
