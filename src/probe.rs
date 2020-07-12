@@ -14,7 +14,7 @@ trait Probe<T>
 /// Set of objects to parse and interpret files from `/proc` FS
 mod procfs {
     use std::fs::File;
-    use std::io::{Seek, SeekFrom, Read};
+    use std::io::{Read, Seek, SeekFrom};
     use std::path::Path;
 
     #[derive(Eq, PartialEq, Debug)]
@@ -164,7 +164,7 @@ mod procfs {
         }
     }
 
-        #[cfg(test)]
+    #[cfg(test)]
     mod test_pid_stat {
         use std::io::Cursor;
 
@@ -192,8 +192,57 @@ mod procfs {
     }
 
     /// Represents data and additional computed data from `/proc/stat`
+    #[derive(Eq, PartialEq, Debug)]
     struct Stat {
-        /// Sum of all time spent by the process, as indicated by the cpu line
-        cumul_cpu_time: u64,
+        user: u64,
+        // Time spent in user mode
+        nice: u64,
+        // Time spent in user mode with low priority (nice)
+        system: u64,
+        // Time spent in system mode
+        // Time spent running a virtual CPU for guest operatin system under the control of the Linux
+        // kernel
+        guest: u64,
+        // Time spent running a niced guest (virtual CPU for guest operating systems under the
+        // control of the Linux kernel)
+        guest_nice: u64,
+    }
+
+    impl ProcfsData for Stat {
+        fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
+            Ok(Stat {
+                user: token_parser.token(0, 1)?,
+                nice: token_parser.token(0, 2)?,
+                system: token_parser.token(0, 3)?,
+                guest: token_parser.token(0, 9)?,
+                guest_nice: token_parser.token(0, 10)?,
+            })
+        }
+    }
+
+    #[cfg(test)]
+    mod test_stat {
+        use std::io::Cursor;
+
+        use super::*;
+
+        #[test]
+        fn test_parse_stat_file() {
+            let content = "cpu 10132153 290696 3084719 46828483 16683 0 25195 0 175628 0
+cpu0 1393280 32966 572056 13343292 6130 0 17875 0 23933 0".to_string();
+
+            let token_parser = TokenParser::new(&content);
+
+            let pid_stat = Stat::parse(&token_parser)
+                .expect("Could not read Stat");
+
+            assert_eq!(pid_stat, Stat {
+                user: 10132153,
+                nice: 290696,
+                system: 3084719,
+                guest: 175628,
+                guest_nice: 0,
+            });
+        }
     }
 }
