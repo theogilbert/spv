@@ -123,11 +123,6 @@ impl Probe<PercentValue> for CpuProbe {
         let ratio = pid_runtime_diff as f64 / self.stat_data.run_time_diff as f64;
         let percent = (100. * ratio) as f32;
 
-        if pid == 1142 {
-            println!("pid runtime diff: {} - global runtime diff: {} - ratio: {}",
-                        pid_runtime_diff, self.stat_data.run_time_diff, ratio);
-        }
-
         Ok(PercentValue::new(percent)
             .or_else(|_e| {
                 Err(Error::ProbingError(format!("Invalid percent: {}", percent)))
