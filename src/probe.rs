@@ -1,13 +1,138 @@
-use crate::metrics::Value;
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+use crate::metrics::{PercentValue, Value};
+use crate::probe::procfs::{PidStat, Stat};
 use crate::process::PID;
 
-trait Probe<T>
+/// Errors related to probing
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum Error {
+    IOError(String),
+    ProbingError(String),
+}
+
+pub trait Probe<T>
     where T: Value {
     /// Probe a specific metric value for a given process
     /// # Arguments
     ///  * `pid`: The ID of the process to probe
     ///
-    fn probe(&mut self, pid: PID) -> T;
+    fn probe(&mut self, pid: PID) -> Result<T, Error>;
+}
+
+pub struct CpuProbe {
+    processes_data: HashMap<PID, ProcessCpuData>,
+    stat_data: StatData,
+}
+
+struct StatData {
+    file: procfs::ProcFile,
+    prev_stat: procfs::Stat,
+    run_time_diff: u64,
+}
+
+struct ProcessCpuData {
+    file: procfs::ProcFile,
+    prev_stat: procfs::PidStat,
+}
+
+impl CpuProbe {
+    pub fn new() -> Result<Self, Error> {
+        let stat_file_path = PathBuf::from("/proc/stat");
+        let mut stat_file = procfs::ProcFile::new(&stat_file_path)
+            .or_else(|e| Err(Error::IOError(e.to_string())))?;
+
+        let stat_data = stat_file
+            .parse()
+            .or_else(|e| Err(Error::ProbingError(e.to_string())))?;
+
+        Ok(CpuProbe {
+            processes_data: HashMap::new(),
+            stat_data: StatData {
+                file: stat_file,
+                prev_stat: stat_data,
+                run_time_diff: 0
+            }
+        })
+    }
+
+    fn build_pid_stat_file_path(pid: PID) -> PathBuf {
+        let mut path = PathBuf::new();
+
+        path.push("/proc");
+        path.push(pid.to_string());
+        path.push("stat");
+
+        path
+    }
+
+    fn create_process_data(pid: PID) -> Result<ProcessCpuData, Error> {
+        let stat_file_path = Self::build_pid_stat_file_path(pid);
+
+        let mut stat_file = procfs::ProcFile::new(&stat_file_path)
+            .or_else(|e| Err(Error::IOError(e.to_string())))?;
+
+        let pid_stat = stat_file
+            .parse()
+            .or_else(|e| Err(Error::ProbingError(e.to_string())))?;
+
+        Ok(ProcessCpuData { file: stat_file, prev_stat: pid_stat })
+    }
+
+    /// Returns a mut reference to `ProcessCpuData` associated with `pid`. If it does not exists,
+    /// this function will create it first.
+    ///
+    /// # Arguments
+    ///  * `pid`: The ID of the process forr which to retrieve the `ProcessCpuData`
+    ///
+    fn get_process_data(&mut self, pid: PID) -> Result<&mut ProcessCpuData, Error> {
+        Ok(match self.processes_data.entry(pid) {
+            Entry::Occupied(o) => o.into_mut(),
+            Entry::Vacant(v) => {
+                let proc_data = Self::create_process_data(pid)?;
+                v.insert(proc_data)
+            }
+        })
+    }
+
+    pub fn tick(&mut self) -> Result<(), Error> {
+        let new_stat: Stat = self.stat_data.file
+            .parse()
+            .or_else(|e| Err(Error::ProbingError(e.to_string())))?;
+
+        self.stat_data.run_time_diff = new_stat.running_time() - self.stat_data.prev_stat.running_time();
+        self.stat_data.prev_stat = new_stat;
+
+        Ok(())
+    }
+}
+
+impl Probe<PercentValue> for CpuProbe {
+    fn probe(&mut self, pid: PID) -> Result<PercentValue, Error> {
+        let mut proc_data = self.get_process_data(pid)?;
+
+        let new_pid_stat: PidStat = proc_data.file
+            .parse()
+            .or_else(|e| Err(Error::ProbingError(e.to_string())))?;
+
+        let pid_runtime_diff = new_pid_stat.running_time() - proc_data.prev_stat.running_time();
+        proc_data.prev_stat = new_pid_stat;
+
+        let ratio = pid_runtime_diff as f64 / self.stat_data.run_time_diff as f64;
+        let percent = (100. * ratio) as f32;
+
+        if pid == 1142 {
+            println!("pid runtime diff: {} - global runtime diff: {} - ratio: {}",
+                        pid_runtime_diff, self.stat_data.run_time_diff, ratio);
+        }
+
+        Ok(PercentValue::new(percent)
+            .or_else(|_e| {
+                Err(Error::ProbingError(format!("Invalid percent: {}", percent)))
+            })?)
+    }
 }
 
 
@@ -18,19 +143,29 @@ mod procfs {
     use std::path::Path;
 
     #[derive(Eq, PartialEq, Debug)]
-    enum ProcfsError {
+    pub(crate) enum ProcfsError {
         InvalidFileContent(String),
         InvalidFileFormat(String),
         IoError(String),
     }
 
-    trait ProcfsData: Sized {
+    impl ToString for ProcfsError {
+        fn to_string(&self) -> String {
+            match self {
+                ProcfsError::InvalidFileContent(s) => s.clone(),
+                ProcfsError::InvalidFileFormat(s) => s.clone(),
+                ProcfsError::IoError(s) => s.clone()
+            }
+        }
+    }
+
+    pub(crate) trait ProcfsData: Sized {
         fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError>;
     }
 
 
     /// Parses space-separated token from a given multi-line string reference
-    struct TokenParser<'a> {
+    pub(crate) struct TokenParser<'a> {
         lines: Vec<Vec<&'a str>>
     }
 
@@ -42,7 +177,9 @@ mod procfs {
             let mut lines = Vec::<Vec<&'a str>>::new();
 
             for line in content.split('\n') {
-                let tokens: Vec<&str> = line.split(' ').collect();
+                let tokens: Vec<&str> = line.split(' ')
+                    .filter(|t| t.len() > 0)
+                    .collect();
                 lines.push(tokens);
             }
 
@@ -63,12 +200,14 @@ mod procfs {
                 })?
                 .get(pos)
                 .ok_or({
-                    let err_msg = format!("Could not get token at position {}", pos);
+                    let err_msg = format!("Could not get token at line {} and position {}",
+                                          line_no, pos);
                     ProcfsError::InvalidFileFormat(err_msg)
                 })?
                 .parse::<T>()
                 .or({
-                    let err_msg = format!("The token at position {} could not be parsed", pos);
+                    let err_msg = format!("The token at line {} and position {} \
+                                                    could not be parsed", line_no, pos);
                     Err(ProcfsError::InvalidFileContent(err_msg))
                 })?)
         }
@@ -108,17 +247,17 @@ mod procfs {
     }
 
     /// Handles the IO part of procfs parsing
-    struct ProcFile {
+    pub struct ProcFile {
         file: File,
     }
 
     impl ProcFile {
-        fn new(file_path: &Path) -> std::io::Result<Self> {
+        pub fn new(file_path: &Path) -> std::io::Result<Self> {
             Ok(ProcFile { file: File::open(file_path)? })
         }
 
         /// Returns the data parsed from the file
-        fn parse<T>(&mut self) -> Result<T, ProcfsError>
+        pub(crate) fn parse<T>(&mut self) -> Result<T, ProcfsError>
             where T: ProcfsData + Sized {
             // rather than re-opening the file at each read, we just seek back the start of the file
             self.file
@@ -137,8 +276,8 @@ mod procfs {
     }
 
     /// Represents data from `/proc/[PID]/stat`
-    #[derive(Eq, PartialEq, Debug)]
-    struct PidStat {
+    #[derive(Eq, PartialEq, Debug, Copy, Clone)]
+    pub struct PidStat {
         /// Time spent by the process in user mode
         // scanf format: %lu
         utime: u32,
@@ -151,6 +290,12 @@ mod procfs {
         /// Time spent by the process waiting for children processes in kernel mode
         // scanf format: %ld
         cstime: i32,
+    }
+
+    impl PidStat {
+        pub fn running_time(&self) -> i64 {
+            self.utime as i64 + self.stime as i64 + self.cutime as i64 + self.cstime as i64
+        }
     }
 
     impl ProcfsData for PidStat {
@@ -166,8 +311,6 @@ mod procfs {
 
     #[cfg(test)]
     mod test_pid_stat {
-        use std::io::Cursor;
-
         use super::*;
 
         #[test]
@@ -189,16 +332,30 @@ mod procfs {
                 cstime: 10,
             });
         }
+
+        #[test]
+        fn test_running_time() {
+            let pid_stat = PidStat {
+                utime: 1,
+                stime: 2,
+                cutime: 4,
+                cstime: 8,
+            };
+
+            assert_eq!(15, pid_stat.running_time())
+        }
     }
 
     /// Represents data and additional computed data from `/proc/stat`
     #[derive(Eq, PartialEq, Debug)]
-    struct Stat {
+    pub struct Stat {
         user: u64,
         // Time spent in user mode
         nice: u64,
         // Time spent in user mode with low priority (nice)
         system: u64,
+        // Time spent in the idle task
+        idle: u64,
         // Time spent in system mode
         // Time spent running a virtual CPU for guest operatin system under the control of the Linux
         // kernel
@@ -208,12 +365,19 @@ mod procfs {
         guest_nice: u64,
     }
 
+    impl Stat {
+        pub fn running_time(&self) -> u64 {
+            self.user + self.nice + self.system + self.idle + self.guest + self.guest_nice
+        }
+    }
+
     impl ProcfsData for Stat {
         fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
             Ok(Stat {
                 user: token_parser.token(0, 1)?,
                 nice: token_parser.token(0, 2)?,
                 system: token_parser.token(0, 3)?,
+                idle: token_parser.token(0, 4)?,
                 guest: token_parser.token(0, 9)?,
                 guest_nice: token_parser.token(0, 10)?,
             })
@@ -222,8 +386,6 @@ mod procfs {
 
     #[cfg(test)]
     mod test_stat {
-        use std::io::Cursor;
-
         use super::*;
 
         #[test]
@@ -240,9 +402,24 @@ cpu0 1393280 32966 572056 13343292 6130 0 17875 0 23933 0".to_string();
                 user: 10132153,
                 nice: 290696,
                 system: 3084719,
+                idle: 46828483,
                 guest: 175628,
                 guest_nice: 0,
             });
+        }
+
+        #[test]
+        fn test_running_time() {
+            let stat = Stat {
+                user: 1,
+                nice: 2,
+                system: 4,
+                idle: 8,
+                guest: 16,
+                guest_nice: 32,
+            };
+
+            assert_eq!(63, stat.running_time())
         }
     }
 }

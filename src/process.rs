@@ -611,7 +611,7 @@ mod unsupported_platform {
             unimplemented!()
         }
 
-        fn metadata(&self, pid: u32) -> Result<ProcessMetadata> {
+        fn metadata(&self, _pid: u32) -> Result<ProcessMetadata> {
             unimplemented!()
         }
     }

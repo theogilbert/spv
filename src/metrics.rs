@@ -2,32 +2,32 @@ use std::fmt::{Display, Formatter};
 use std::fmt;
 
 /// Errors related to metrics
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Error {
-    InvalidPercentValue(u8)
+    InvalidPercentValue(f32)
 }
 
 type Result<T> = std::result::Result<T, Error>;
 
 /// A metric can be a value of any type, as long as two values of the same type can be sorted
-pub trait Value: Display + Ord {
-    type ValueType: Ord;
+pub trait Value: Display + PartialOrd {
+    type ValueType: PartialOrd;
 
     fn value(&self) -> Self::ValueType;
 }
 
 /// Metric that has a value between 0 and 100
-#[derive(Eq, Ord, PartialOrd, PartialEq, Debug)]
-struct PercentValue {
-    percent: u8
+#[derive(PartialEq, PartialOrd, Debug, Copy, Clone)]
+pub struct PercentValue {
+    percent: f32
 }
 
 impl PercentValue {
     /// Returns a `PercentMetric`
     /// # Arguments
     ///  * `percent`: A percentage that must be between 0 and 100
-    pub fn new(percent: u8) -> Result<PercentValue> {
-        if percent > 100 {
+    pub fn new(percent: f32) -> Result<PercentValue> {
+        if percent < 0. || percent > 100. {
             Err(Error::InvalidPercentValue(percent))
         } else {
             Ok(PercentValue { percent })
@@ -37,13 +37,13 @@ impl PercentValue {
 
 impl Display for PercentValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}%", self.percent)
+        write!(f, "{:.1}%", self.percent)
     }
 }
 
 
 impl Value for PercentValue {
-    type ValueType = u8;
+    type ValueType = f32;
 
     fn value(&self) -> Self::ValueType {
         self.percent
@@ -56,22 +56,27 @@ mod test_percent_value {
 
     #[test]
     fn test_percent_metric_value() {
-        let percent_value = PercentValue::new(60)
+        let percent_value = PercentValue::new(60.)
             .expect("Unexpected error when building PercentValue");
 
         assert_eq!(percent_value.value(), 60);
     }
 
     #[test]
-    fn test_create_invalid_percent_value() {
-        assert_eq!(PercentValue::new(150), Err(Error::InvalidPercentValue(150)));
+    fn test_create_too_great_percent_value() {
+        assert_eq!(PercentValue::new(150.), Err(Error::InvalidPercentValue(150.)));
+    }
+
+    #[test]
+    fn test_create_negative_percent_value() {
+        assert_eq!(PercentValue::new(-1.), Err(Error::InvalidPercentValue(-1.)));
     }
 
     #[test]
     fn test_percent_value_cmp() {
-        let lesser_val = PercentValue::new(10)
+        let lesser_val = PercentValue::new(10.)
             .expect("Should be valid percent value");
-        let greater_val = PercentValue::new(60)
+        let greater_val = PercentValue::new(60.)
             .expect("Should be valid percent value");
 
         assert!(lesser_val < greater_val);
@@ -80,7 +85,7 @@ mod test_percent_value {
 
     #[test]
     fn test_percent_value_fmt() {
-        let pv = PercentValue::new(55)
+        let pv = PercentValue::new(55.)
             .expect("Should be a valid percent value");
 
         assert_eq!(format!("{}", pv), "55%");
@@ -89,7 +94,7 @@ mod test_percent_value {
 
 
 /// Metric that has a value in bits / seconds
-#[derive(Eq, Ord, PartialEq, PartialOrd, Debug)]
+#[derive(PartialEq, PartialOrd, Debug)]
 struct BitrateValue {
     bitrate: u32
 }
