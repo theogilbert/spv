@@ -1,6 +1,6 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::sync::mpsc::{Receiver, Sender};
 
 use crate::probe::procfs::{PidStat, ProcfsReader, Stat};
 use crate::process::PID;
@@ -11,6 +11,78 @@ use crate::values::{BitrateValue, PercentValue};
 pub enum Error {
     IOError(String),
     ProbingError(String),
+    MPSCError(String),
+}
+
+// Probe metrics stuff
+
+pub enum Metric {
+    IoRead(BitrateValue),
+    IoWrite(BitrateValue),
+    NetDesc(BitrateValue),
+    NetAsc(BitrateValue),
+    CpuUsage(PercentValue),
+    MemUsage(PercentValue),
+}
+
+/// Contains a `Value` associated to a process
+pub struct ProcessMetric {
+    pid: PID,
+    value: Metric,
+}
+
+/// Contains a list of `ProcessMetric`, one for each probed process
+pub struct ProbedFrame {
+    metrics: Vec<ProcessMetric>,
+}
+
+// Probe threading stuff
+
+/// Contains messages that can be sent to or from a `ProbeThread`
+pub enum ProbeMessage {
+    Kill(),
+    AddProcess(PID),
+    Probe(),
+    NewFrame(ProbedFrame),
+}
+
+pub struct ProbeThread<'a> {
+    pids_to_probe: Vec<PID>,
+    // probe has to be dyn as we must be able to interact with probes in a polymorphous manner:
+    probe: Box<&'a dyn Probe>,
+
+    parent_rx: Receiver<ProbeMessage>,
+    parent_tx: Sender<ProbeMessage>,
+}
+
+impl<'a> ProbeThread<'a> {
+    pub fn new(probe: Box<&'a dyn Probe>, parent_rx: Receiver<ProbeMessage>,
+               parent_tx: Sender<ProbeMessage>) -> Self {
+        ProbeThread {
+            pids_to_probe: Vec::new(),
+            probe,
+            parent_rx,
+            parent_tx,
+        }
+    }
+
+    pub fn run(&self) -> Result<(), Error> {
+        loop {
+            match self.parent_rx.recv() {
+                Ok(msg) => {
+                    if let ProbeMessage::Kill() = msg {
+                        break;
+                    }
+                    self.handle_message(msg)
+                }
+                Err(e) => Err(Error::MPSCError(e.to_string()))?
+            }
+        }
+
+        Ok(())
+    }
+
+    fn handle_message(&self, msg: ProbeMessage) {}
 }
 
 // Probe stuff
@@ -29,28 +101,29 @@ pub trait Probe {
     fn probe(&mut self, pid: PID) -> Result<ProcessMetric, Error>;
 }
 
-struct ProcessCpuData<T>
-    where T: procfs::ProcfsReader {
-    reader: T,
+struct ProcessCpuData {
+    reader: procfs::ProcfsReader<procfs::PidStat>,
     prev_stat: procfs::PidStat,
 }
 
-struct StatData<T>
-    where T: procfs::ProcfsReader {
-    reader: T,
+struct StatData {
+    reader: procfs::ProcfsReader<procfs::Stat>,
     prev_stat: procfs::Stat,
     run_time_diff: u64,
 }
 
-pub(crate) struct CpuProbe<T>
-    where T: procfs::ProcfsReader {
-    processes_data: HashMap<PID, ProcessCpuData<T>>,
-    stat_data: StatData<T>,
+pub(crate) struct CpuProbe {
+    processes_data: HashMap<PID, ProcessCpuData>,
+    stat_data: StatData,
 }
 
-impl<T> CpuProbe<T> where T: procfs::ProcfsReader {
+
+// Idea for testing: move computing part out of CpuProbe. CpuProble only handles file parts,
+// and defers probe/init_iteration calls to a sub computing class. We would only need to test that
+// instance
+impl CpuProbe {
     pub fn new() -> Result<Self, Error> {
-        let mut stat_file = T::new("stat")
+        let mut stat_file = procfs::ProcfsReader::new("stat")
             .or_else(|e| Err(Error::IOError(e.to_string())))?;
 
         let stat_data = stat_file
@@ -67,8 +140,8 @@ impl<T> CpuProbe<T> where T: procfs::ProcfsReader {
         })
     }
 
-    fn create_process_data(pid: PID) -> Result<ProcessCpuData<T>, Error> {
-        let mut stat_file = T::new_for_pid(pid, "stat")
+    fn create_process_data(pid: PID) -> Result<ProcessCpuData, Error> {
+        let mut stat_file = procfs::ProcfsReader::new_for_pid(pid, "stat")
             .or_else(|e| Err(Error::IOError(e.to_string())))?;
 
         let pid_stat = stat_file
@@ -84,7 +157,7 @@ impl<T> CpuProbe<T> where T: procfs::ProcfsReader {
     /// # Arguments
     ///  * `pid`: The ID of the process forr which to retrieve the `ProcessCpuData`
     ///
-    fn get_process_data(&mut self, pid: PID) -> Result<&mut ProcessCpuData<T>, Error> {
+    fn get_process_data(&mut self, pid: PID) -> Result<&mut ProcessCpuData, Error> {
         Ok(match self.processes_data.entry(pid) {
             Entry::Occupied(o) => o.into_mut(),
             Entry::Vacant(v) => v.insert(Self::create_process_data(pid)?)
@@ -92,7 +165,7 @@ impl<T> CpuProbe<T> where T: procfs::ProcfsReader {
     }
 }
 
-impl<T> Probe for CpuProbe<T> where T: procfs::ProcfsReader {
+impl Probe for CpuProbe {
     fn init_iteration(&mut self) -> Result<(), Error> {
         let new_stat: Stat = self.stat_data.reader
             .read()
@@ -107,7 +180,7 @@ impl<T> Probe for CpuProbe<T> where T: procfs::ProcfsReader {
     fn probe(&mut self, pid: PID) -> Result<ProcessMetric, Error> {
         let mut proc_data = self.get_process_data(pid)?;
 
-        let new_pid_stat: PidStat = proc_data.reader
+        let new_pid_stat = proc_data.reader
             .read()
             .or_else(|e| Err(Error::ProbingError(e.to_string())))?;
 
@@ -134,6 +207,7 @@ mod procfs {
     use std::path::PathBuf;
 
     use crate::process::PID;
+    use std::marker::PhantomData;
 
     #[derive(Eq, PartialEq, Debug)]
     pub(crate) enum ProcfsError {
@@ -240,30 +314,23 @@ mod procfs {
     }
 
     /// Handles the IO part of procfs parsing
-    pub(crate) trait ProcfsReader where Self: Sized {
-        fn new(filename: &str) -> Result<Self, ProcfsError>;
-        fn new_for_pid(pid: PID, filename: &str) -> Result<Self, ProcfsError>;
-
-        fn read<T>(&mut self) -> Result<T, ProcfsError>
-            where T: ProcfsData + Sized;
-    }
-
-    pub(crate) struct ProcFile {
+    pub(crate) struct ProcfsReader<T> where T: ProcfsData + Sized {
         file: File,
+        phantom: PhantomData<T>,
     }
 
-    impl ProcfsReader for ProcFile {
-        fn new(filename: &str) -> Result<Self, ProcfsError> {
+    impl<T> ProcfsReader<T> where T: ProcfsData + Sized {
+        pub fn new(filename: &str) -> Result<Self, ProcfsError> {
             let mut path = PathBuf::from("/proc");
             path.push(filename);
 
             let file = File::open(path.as_path())
                 .or_else(|e| Err(ProcfsError::IoError(e.to_string())))?;
 
-            Ok(ProcFile { file })
+            Ok(ProcfsReader::<T> { file, phantom: PhantomData })
         }
 
-        fn new_for_pid(pid: u32, filename: &str) -> Result<Self, ProcfsError> {
+        pub fn new_for_pid(pid: u32, filename: &str) -> Result<Self, ProcfsError> {
             let mut path = PathBuf::from("/proc");
             path.push(pid.to_string());
             path.push(filename);
@@ -271,12 +338,11 @@ mod procfs {
             let file = File::open(path.as_path())
                 .or_else(|e| Err(ProcfsError::IoError(e.to_string())))?;
 
-            Ok(ProcFile { file })
+            Ok(ProcfsReader::<T> { file, phantom: PhantomData })
         }
 
         /// Returns the data parsed from the file
-        fn read<T>(&mut self) -> Result<T, ProcfsError>
-            where T: ProcfsData + Sized {
+        pub fn read(&mut self) -> Result<T, ProcfsError> {
             // rather than re-opening the file at each read, we just seek back the start of the file
             self.file
                 .seek(SeekFrom::Start(0))
@@ -311,6 +377,10 @@ mod procfs {
     }
 
     impl PidStat {
+        pub(crate) fn new(utime: u32, stime: u32, cutime: i32, cstime: i32) -> Self {
+            PidStat { utime, stime, cutime, cstime }
+        }
+
         pub fn running_time(&self) -> i64 {
             self.utime as i64 + self.stime as i64 + self.cutime as i64 + self.cstime as i64
         }
@@ -384,6 +454,11 @@ mod procfs {
     }
 
     impl Stat {
+        pub(crate) fn new(user: u64, nice: u64, system: u64, idle: u64, guest: u64,
+                          guest_nice: u64) -> Self {
+            Stat { user, nice, system, idle, guest, guest_nice }
+        }
+
         pub fn running_time(&self) -> u64 {
             self.user + self.nice + self.system + self.idle + self.guest + self.guest_nice
         }
