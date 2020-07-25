@@ -3,8 +3,6 @@ use std::io::{Read, Seek, SeekFrom};
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
-use crate::process::PID;
-
 #[derive(Eq, PartialEq, Debug)]
 pub enum ProcfsError {
     InvalidFileContent(String),
@@ -195,8 +193,9 @@ impl ProcfsData for PidStat {
 
 #[cfg(test)]
 mod test_pid_stat {
-    use super::*;
     use std::string::ToString;
+
+    use super::*;
 
     #[test]
     fn test_parse_stat_file() {
@@ -252,7 +251,7 @@ pub struct Stat {
 
 impl Stat {
     pub fn new(user: u64, nice: u64, system: u64, idle: u64, guest: u64,
-                      guest_nice: u64) -> Self {
+               guest_nice: u64) -> Self {
         Stat { user, nice, system, idle, guest, guest_nice }
     }
 
@@ -276,8 +275,9 @@ impl ProcfsData for Stat {
 
 #[cfg(test)]
 mod test_stat {
-    use super::*;
     use std::string::ToString;
+
+    use super::*;
 
     #[test]
     fn test_parse_stat_file() {

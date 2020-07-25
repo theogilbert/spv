@@ -1,13 +1,8 @@
+use crate::values::{BitrateValue, PercentValue};
+use crate::process::PID;
+
 pub mod cpu;
 mod procfs;
-
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
-use std::sync::mpsc::{Receiver, Sender};
-
-use crate::probe::procfs::{PidStat, ProcfsReader, Stat};
-use crate::process::PID;
-use crate::values::{BitrateValue, PercentValue};
 
 
 /// Errors related to probing
