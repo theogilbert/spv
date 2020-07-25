@@ -72,7 +72,7 @@ impl<T> ProcessSentry<T>
     ///  * `on_process_killed`: A closure which takes as parameter a `ProcessMetadata`.
     /// This closure will be called for all newly killed processes.
     pub fn scan<U, V>(&mut self, mut on_process_spawn: U, mut on_process_killed: V) -> Result<()>
-        where U: FnMut(&ProcessMetadata) -> (), V: FnMut(ProcessMetadata) -> () {
+        where U: FnMut(&ProcessMetadata), V: FnMut(ProcessMetadata) {
         let pids = self.scanner.scan()?;
 
         self.clean_killed_processes(&pids, &mut on_process_killed);
@@ -90,7 +90,7 @@ impl<T> ProcessSentry<T>
     ///     called for each process that has been detected as no longer running
     ///
     fn clean_killed_processes<V>(&mut self, pids: &[PID], mut on_process_killed: V)
-        where V: FnMut(ProcessMetadata) -> () {
+        where V: FnMut(ProcessMetadata) {
         let killed_pids: Vec<PID> = self.running_processes
             .keys()
             .filter(|pid_ref| !pids.contains(pid_ref))
@@ -115,7 +115,7 @@ impl<T> ProcessSentry<T>
     ///     all new processes
     ///
     fn add_spawned_processes<U>(&mut self, pids: &[PID], on_process_spawn: &mut U) -> Result<()>
-        where U: FnMut(&ProcessMetadata) -> () {
+        where U: FnMut(&ProcessMetadata) {
         let new_pids: Vec<PID> = pids.iter()
             .filter(|pid_ref| !self.running_processes.contains_key(pid_ref))
             .copied()
@@ -366,7 +366,7 @@ mod linux {
                 None => return Err(Error::NotProcessDir)
             };
 
-            pid_ret.or_else(|_| Err(Error::NotProcessDir))
+            pid_ret.map_err(|_| Error::NotProcessDir)
         }
     }
 
@@ -375,7 +375,7 @@ mod linux {
         /// Returns the PIDs of currently running processes
         fn scan(&self) -> Result<Vec<PID>> {
             let dir_iter = read_dir(self.proc_dir.as_path())
-                .or_else(|e| Err(Error::ProcessScanningFailure(e.to_string())))?;
+                .map_err(|e| Error::ProcessScanningFailure(e.to_string()))?;
 
             let pids = dir_iter
                 // only retrieve dir entry which are not err
@@ -405,10 +405,10 @@ mod linux {
                 .join("comm");
 
             let mut file = File::open(comm_file_path)
-                .or_else(|_| Err(Error::InvalidPID))?;
+                .map_err(|_| Error::InvalidPID)?;
 
             file.read_to_string(&mut command)
-                .or_else(|io_err| Err(Error::ProcessParsingError(io_err.to_string())))?;
+                .map_err(|io_err| Error::ProcessParsingError(io_err.to_string()))?;
 
             if command.ends_with('\n') {  // Remove trailing newline
                 command.pop();

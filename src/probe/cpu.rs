@@ -19,10 +19,10 @@ pub struct CpuProbe {
 impl CpuProbe {
     pub fn new() -> Result<Self, Error> {
         let mut stat_reader = StatReader::new("stat")
-            .or_else(|e| Err(Error::IOError(e.to_string())))?;
+            .map_err(|e| Error::IOError(e.to_string()))?;
 
         let stat_data = stat_reader.read()
-            .or_else(|e| Err(Error::ProbingError(e.to_string())))?;
+            .map_err(|e| Error::ProbingError(e.to_string()))?;
 
         Ok(CpuProbe {
             processes_readers: HashMap::new(),
@@ -33,7 +33,7 @@ impl CpuProbe {
 
     fn init_process_reader(pid: PID) -> Result<PidStatReader, Error> {
         PidStatReader::new_for_pid(pid, "stat")
-            .or_else(|e| Err(Error::IOError(e.to_string())))
+            .map_err(|e| Error::IOError(e.to_string()))
     }
 
     fn get_process_reader(&mut self, pid: PID) -> Result<&mut PidStatReader, Error> {
@@ -50,7 +50,7 @@ impl Probe for CpuProbe {
     fn init_iteration(&mut self) -> Result<(), Error> {
         let new_stat: Stat = self.stat_reader
             .read()
-            .or_else(|e| Err(Error::ProbingError(e.to_string())))?;
+            .map_err(|e| Error::ProbingError(e.to_string()))?;
 
         self.calculator.update_stat_data(new_stat);
 
@@ -62,7 +62,7 @@ impl Probe for CpuProbe {
 
         let new_pid_stat = proc_reader
             .read()
-            .or_else(|e| Err(Error::ProbingError(e.to_string())))?;
+            .map_err(|e| Error::ProbingError(e.to_string()))?;
 
         let pct_value = self.calculator.calculate_pid_usage(pid, new_pid_stat)?;
         Ok(ProcessMetric { pid, value: Metric::CpuUsage(pct_value) })
@@ -84,7 +84,7 @@ impl CpuUsageCalculator {
         }
     }
 
-    pub fn update_stat_data(&mut self, stat_data: Stat) -> () {
+    pub fn update_stat_data(&mut self, stat_data: Stat) {
         let cur_runtime = stat_data.running_time();
         let prev_runtime = self.prev_global_stat.running_time();
 
@@ -106,9 +106,9 @@ impl CpuUsageCalculator {
         let percent = (100. * ratio) as f32;
 
         PercentValue::new(percent)
-            .or_else(|_e| {
-                Err(Error::ProbingError(format!("Invalid CPU usage value for PID {} : {}",
-                                                pid, percent)))
+            .map_err(|_e| {
+                Error::ProbingError(format!("Invalid CPU usage value for PID {} : {}",
+                                            pid, percent))
             })
     }
 }

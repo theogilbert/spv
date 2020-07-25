@@ -39,7 +39,7 @@ impl<'a> TokenParser<'a> {
 
         for line in content.split('\n') {
             let tokens: Vec<&str> = line.split(' ')
-                .filter(|t| t.len() > 0)
+                .filter(|t| !t.is_empty())
                 .collect();
             lines.push(tokens);
         }
@@ -119,7 +119,7 @@ impl<T> ProcfsReader<T> where T: ProcfsData + Sized {
         path.push(filename);
 
         let file = File::open(path.as_path())
-            .or_else(|e| Err(ProcfsError::IoError(e.to_string())))?;
+            .map_err(|e| ProcfsError::IoError(e.to_string()))?;
 
         Ok(ProcfsReader::<T> { file, phantom: PhantomData })
     }
@@ -130,7 +130,7 @@ impl<T> ProcfsReader<T> where T: ProcfsData + Sized {
         path.push(filename);
 
         let file = File::open(path.as_path())
-            .or_else(|e| Err(ProcfsError::IoError(e.to_string())))?;
+            .map_err(|e| ProcfsError::IoError(e.to_string()))?;
 
         Ok(ProcfsReader::<T> { file, phantom: PhantomData })
     }
@@ -140,12 +140,12 @@ impl<T> ProcfsReader<T> where T: ProcfsData + Sized {
         // rather than re-opening the file at each read, we just seek back the start of the file
         self.file
             .seek(SeekFrom::Start(0))
-            .or_else(|e| Err(ProcfsError::IoError(e.to_string())))?;
+            .map_err(|e| ProcfsError::IoError(e.to_string()))?;
 
         // Might be optimized, by not reallocating at each call
         let mut stat_content = String::new();
         self.file.read_to_string(&mut stat_content)
-            .or_else(|io_err| Err(ProcfsError::IoError(io_err.to_string())))?;
+            .map_err(|io_err| ProcfsError::IoError(io_err.to_string()))?;
 
         let tp = TokenParser::new(&stat_content);
 
