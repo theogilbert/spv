@@ -6,16 +6,19 @@ use crate::probe::procfs::{PidStat, Stat};
 use crate::process::PID;
 use crate::values::PercentValue;
 
+type PidStatReader = procfs::ProcfsReader<procfs::PidStat>;
+type StatReader = procfs::ProcfsReader<procfs::Stat>;
+
 pub struct CpuProbe {
-    processes_readers: HashMap<PID, procfs::ProcfsReader<procfs::PidStat>>,
-    stat_reader: procfs::ProcfsReader<procfs::Stat>,
+    processes_readers: HashMap<PID, PidStatReader>,
+    stat_reader: StatReader,
     calculator: CpuUsageCalculator,
 }
 
 
 impl CpuProbe {
     pub fn new() -> Result<Self, Error> {
-        let mut stat_reader = procfs::ProcfsReader::new("stat")
+        let mut stat_reader = StatReader::new("stat")
             .or_else(|e| Err(Error::IOError(e.to_string())))?;
 
         let stat_data = stat_reader.read()
@@ -28,15 +31,17 @@ impl CpuProbe {
         })
     }
 
-    fn init_process_reader(pid: PID) -> Result<procfs::ProcfsReader<procfs::PidStat>, Error> {
-        procfs::ProcfsReader::new_for_pid(pid, "stat")
+    fn init_process_reader(pid: PID) -> Result<PidStatReader, Error> {
+        PidStatReader::new_for_pid(pid, "stat")
             .or_else(|e| Err(Error::IOError(e.to_string())))
     }
 
-    fn get_process_reader(&mut self, pid: PID) -> Result<&mut procfs::ProcfsReader<procfs::PidStat>, Error> {
+    fn get_process_reader(&mut self, pid: PID) -> Result<&mut PidStatReader, Error> {
         Ok(match self.processes_readers.entry(pid) {
             Entry::Occupied(o) => o.into_mut(),
-            Entry::Vacant(v) => v.insert(Self::init_process_reader(pid)?)
+            Entry::Vacant(v) => v.insert({
+                Self::init_process_reader(pid)?
+            })
         })
     }
 }
@@ -53,13 +58,14 @@ impl Probe for CpuProbe {
     }
 
     fn probe(&mut self, pid: PID) -> Result<ProcessMetric, Error> {
-        let mut proc_reader = self.get_process_reader(pid)?;
+        let proc_reader = self.get_process_reader(pid)?;
 
         let new_pid_stat = proc_reader
             .read()
             .or_else(|e| Err(Error::ProbingError(e.to_string())))?;
 
-        self.calculator.calculate_pid_usage(pid, new_pid_stat)
+        let pct_value = self.calculator.calculate_pid_usage(pid, new_pid_stat)?;
+        Ok(ProcessMetric { pid, value: Metric::CpuUsage(pct_value) })
     }
 }
 
@@ -79,11 +85,15 @@ impl CpuUsageCalculator {
     }
 
     pub fn update_stat_data(&mut self, stat_data: Stat) -> () {
-        self.global_runtime_diff = (stat_data.running_time() - self.prev_global_stat.running_time()) as f64;
+        let cur_runtime = stat_data.running_time();
+        let prev_runtime = self.prev_global_stat.running_time();
+
+        self.global_runtime_diff = (cur_runtime - prev_runtime) as f64;
         self.prev_global_stat = stat_data;
     }
 
-    pub fn calculate_pid_usage(&mut self, pid: PID, pid_stat_data: PidStat) -> Result<ProcessMetric, Error> {
+    pub fn calculate_pid_usage(&mut self, pid: PID, pid_stat_data: PidStat)
+                               -> Result<PercentValue, Error> {
         let last_iter_runtime = match self.processes_prev_stats.get(&pid) {
             Some(stat_data) => stat_data.running_time(),
             None => 0
@@ -95,12 +105,68 @@ impl CpuUsageCalculator {
         let ratio = pid_runtime_diff as f64 / self.global_runtime_diff;
         let percent = (100. * ratio) as f32;
 
-        let value = PercentValue::new(percent)
+        PercentValue::new(percent)
             .or_else(|_e| {
                 Err(Error::ProbingError(format!("Invalid CPU usage value for PID {} : {}",
                                                 pid, percent)))
-            })?;
+            })
+    }
+}
 
-        Ok(ProcessMetric { pid, value: Metric::CpuUsage(value) })
+
+#[cfg(test)]
+mod test_cpu_calculator {
+    use crate::probe::cpu::CpuUsageCalculator;
+    use crate::probe::procfs;
+    use crate::values::PercentValue;
+
+    fn create_initialized_calc(elapsed_ticks: u64) -> CpuUsageCalculator {
+        let first_stat = procfs::Stat::new(1, 2, 3, 4, 5, 6);
+
+        let individual_ticks = elapsed_ticks / 6;
+        let leftover = elapsed_ticks - 6 * individual_ticks;
+
+        let second_stat = procfs::Stat::new(1 + individual_ticks,
+                                            2 + individual_ticks,
+                                            3 + individual_ticks,
+                                            4 + individual_ticks,
+                                            5 + individual_ticks,
+                                            6 + individual_ticks + leftover);
+
+        let mut calc = CpuUsageCalculator::new(first_stat);
+
+        calc.update_stat_data(second_stat);
+
+        calc
+    }
+
+    #[test]
+    fn test_zero_percent_usage() {
+        let mut calc = create_initialized_calc(60);
+
+        let pid_stat = procfs::PidStat::new(0, 0, 0, 0);
+
+        assert_eq!(calc.calculate_pid_usage(1, pid_stat).unwrap(),
+                   PercentValue::new(0.).unwrap());
+    }
+
+    #[test]
+    fn test_hundred_percent_usage() {
+        let mut calc = create_initialized_calc(123);
+
+        let pid_stat = procfs::PidStat::new(100, 20, 2, 1);
+
+        assert_eq!(calc.calculate_pid_usage(1, pid_stat).unwrap(),
+                   PercentValue::new(100.).unwrap());
+    }
+
+    #[test]
+    fn test_over_hundred_percent_usage() {
+        let mut calc = create_initialized_calc(20);
+
+        let pid_stat = procfs::PidStat::new(10, 10, 10, 10);
+
+        // 40 ticks spent by pid, but only 20 by cpu -> 200% cpu usage
+        assert!(calc.calculate_pid_usage(1, pid_stat).is_err());
     }
 }
