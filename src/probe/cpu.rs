@@ -12,7 +12,7 @@ type StatReader = procfs::ProcfsReader<procfs::Stat>;
 pub struct CpuProbe {
     processes_readers: HashMap<PID, PidStatReader>,
     stat_reader: StatReader,
-    calculator: CpuUsageCalculator,
+    calculator: UsageCalculator,
 }
 
 
@@ -27,7 +27,7 @@ impl CpuProbe {
         Ok(CpuProbe {
             processes_readers: HashMap::new(),
             stat_reader,
-            calculator: CpuUsageCalculator::new(stat_data),
+            calculator: UsageCalculator::new(stat_data),
         })
     }
 
@@ -69,15 +69,15 @@ impl Probe for CpuProbe {
     }
 }
 
-struct CpuUsageCalculator {
+struct UsageCalculator {
     processes_prev_stats: HashMap<PID, procfs::PidStat>,
     prev_global_stat: procfs::Stat,
     global_runtime_diff: f64,
 }
 
-impl CpuUsageCalculator {
+impl UsageCalculator {
     pub fn new(init_stat_data: procfs::Stat) -> Self {
-        CpuUsageCalculator {
+        UsageCalculator {
             processes_prev_stats: HashMap::new(),
             prev_global_stat: init_stat_data,
             global_runtime_diff: 0.,
@@ -116,11 +116,11 @@ impl CpuUsageCalculator {
 
 #[cfg(test)]
 mod test_cpu_calculator {
-    use crate::probe::cpu::CpuUsageCalculator;
+    use crate::probe::cpu::UsageCalculator;
     use crate::probe::procfs;
     use crate::values::PercentValue;
 
-    fn create_initialized_calc(elapsed_ticks: u64) -> CpuUsageCalculator {
+    fn create_initialized_calc(elapsed_ticks: u64) -> UsageCalculator {
         let first_stat = procfs::Stat::new(1, 2, 3, 4, 5, 6);
 
         let individual_ticks = elapsed_ticks / 6;
@@ -133,7 +133,7 @@ mod test_cpu_calculator {
                                             5 + individual_ticks,
                                             6 + individual_ticks + leftover);
 
-        let mut calc = CpuUsageCalculator::new(first_stat);
+        let mut calc = UsageCalculator::new(first_stat);
 
         calc.update_stat_data(second_stat);
 
