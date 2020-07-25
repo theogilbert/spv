@@ -2,9 +2,9 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::metrics::{PercentValue, Value};
 use crate::probe::procfs::{PidStat, Stat};
 use crate::process::PID;
+use crate::values::{BitrateValue, PercentValue, Value};
 
 /// Errors related to probing
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -13,18 +13,25 @@ pub enum Error {
     ProbingError(String),
 }
 
-pub trait Probe<T>
-    where T: Value {
+// Probe stuff
+
+pub trait Probe {
+    /// Allow the initialization of the probe for the current iteration
+    /// This method should be called before calling the probe() method for each pid
+    fn init_iteration(&mut self) -> Result<(), Error> {
+        Ok(())
+    }
+
     /// Probe a specific metric value for a given process
     /// # Arguments
     ///  * `pid`: The ID of the process to probe
     ///
-    fn probe(&mut self, pid: PID) -> Result<T, Error>;
+    fn probe(&mut self, pid: PID) -> Result<ProcessMetric, Error>;
 }
 
-pub struct CpuProbe {
-    processes_data: HashMap<PID, ProcessCpuData>,
-    stat_data: StatData,
+struct ProcessCpuData {
+    file: procfs::ProcFile,
+    prev_stat: procfs::PidStat,
 }
 
 struct StatData {
@@ -33,9 +40,9 @@ struct StatData {
     run_time_diff: u64,
 }
 
-struct ProcessCpuData {
-    file: procfs::ProcFile,
-    prev_stat: procfs::PidStat,
+pub struct CpuProbe {
+    processes_data: HashMap<PID, ProcessCpuData>,
+    stat_data: StatData,
 }
 
 impl CpuProbe {
@@ -53,8 +60,8 @@ impl CpuProbe {
             stat_data: StatData {
                 file: stat_file,
                 prev_stat: stat_data,
-                run_time_diff: 0
-            }
+                run_time_diff: 0,
+            },
         })
     }
 
@@ -90,14 +97,13 @@ impl CpuProbe {
     fn get_process_data(&mut self, pid: PID) -> Result<&mut ProcessCpuData, Error> {
         Ok(match self.processes_data.entry(pid) {
             Entry::Occupied(o) => o.into_mut(),
-            Entry::Vacant(v) => {
-                let proc_data = Self::create_process_data(pid)?;
-                v.insert(proc_data)
-            }
+            Entry::Vacant(v) => v.insert(Self::create_process_data(pid)?)
         })
     }
+}
 
-    pub fn tick(&mut self) -> Result<(), Error> {
+impl Probe for CpuProbe {
+    fn init_iteration(&mut self) -> Result<(), Error> {
         let new_stat: Stat = self.stat_data.file
             .parse()
             .or_else(|e| Err(Error::ProbingError(e.to_string())))?;
@@ -107,10 +113,8 @@ impl CpuProbe {
 
         Ok(())
     }
-}
 
-impl Probe<PercentValue> for CpuProbe {
-    fn probe(&mut self, pid: PID) -> Result<PercentValue, Error> {
+    fn probe(&mut self, pid: PID) -> Result<ProcessMetric, Error> {
         let mut proc_data = self.get_process_data(pid)?;
 
         let new_pid_stat: PidStat = proc_data.file
@@ -123,10 +127,12 @@ impl Probe<PercentValue> for CpuProbe {
         let ratio = pid_runtime_diff as f64 / self.stat_data.run_time_diff as f64;
         let percent = (100. * ratio) as f32;
 
-        Ok(PercentValue::new(percent)
+        let value = PercentValue::new(percent)
             .or_else(|_e| {
                 Err(Error::ProbingError(format!("Invalid percent: {}", percent)))
-            })?)
+            })?;
+
+        Ok(ProcessMetric { pid, value: Metric::CpuUsage(value) })
     }
 }
 

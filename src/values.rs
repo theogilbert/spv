@@ -59,7 +59,7 @@ mod test_percent_value {
         let percent_value = PercentValue::new(60.)
             .expect("Unexpected error when building PercentValue");
 
-        assert_eq!(percent_value.value(), 60);
+        assert_eq!(percent_value.value(), 60.);
     }
 
     #[test]
@@ -88,14 +88,14 @@ mod test_percent_value {
         let pv = PercentValue::new(55.)
             .expect("Should be a valid percent value");
 
-        assert_eq!(format!("{}", pv), "55%");
+        assert_eq!(format!("{}", pv), "55.0%");
     }
 }
 
 
 /// Metric that has a value in bits / seconds
 #[derive(PartialEq, PartialOrd, Debug)]
-struct BitrateValue {
+pub struct BitrateValue {
     bitrate: u32
 }
 

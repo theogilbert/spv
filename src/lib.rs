@@ -1,3 +1,3 @@
 pub mod process;
-pub mod metrics;
+pub mod values;
 pub mod probe;
