@@ -94,7 +94,7 @@ mod test_percent_value {
 
 
 /// Metric that has a value in bits / seconds
-#[derive(PartialEq, PartialOrd, Debug)]
+#[derive(PartialEq, PartialOrd, Debug, Clone)]
 pub struct BitrateValue {
     bitrate: u32
 }

@@ -1,9 +1,11 @@
 use crate::values::{BitrateValue, PercentValue};
 use crate::process::PID;
 
-pub mod cpu;
+mod cpu;
+mod thread;
 mod procfs;
 
+pub type CpuProbe = cpu::CpuProbe;
 
 /// Errors related to probing
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -15,6 +17,7 @@ pub enum Error {
 
 // Probe metrics stuff
 
+#[derive(Debug, PartialEq, Clone)]
 pub enum Metric {
     IoRead(BitrateValue),
     IoWrite(BitrateValue),
@@ -25,14 +28,10 @@ pub enum Metric {
 }
 
 /// Contains a `Value` associated to a process
+#[derive(Debug, PartialEq, Clone)]
 pub struct ProcessMetric {
     pid: PID,
     value: Metric,
-}
-
-/// Contains a list of `ProcessMetric`, one for each probed process
-pub struct ProbedFrame {
-    metrics: Vec<ProcessMetric>,
 }
 
 pub trait Probe {
