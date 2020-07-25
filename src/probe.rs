@@ -2,9 +2,9 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::probe::procfs::{PidStat, Stat};
+use crate::probe::procfs::{PidStat, ProcfsReader, Stat};
 use crate::process::PID;
-use crate::values::{BitrateValue, PercentValue, Value};
+use crate::values::{BitrateValue, PercentValue};
 
 /// Errors related to probing
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -29,63 +29,53 @@ pub trait Probe {
     fn probe(&mut self, pid: PID) -> Result<ProcessMetric, Error>;
 }
 
-struct ProcessCpuData {
-    file: procfs::ProcFile,
+struct ProcessCpuData<T>
+    where T: procfs::ProcfsReader {
+    reader: T,
     prev_stat: procfs::PidStat,
 }
 
-struct StatData {
-    file: procfs::ProcFile,
+struct StatData<T>
+    where T: procfs::ProcfsReader {
+    reader: T,
     prev_stat: procfs::Stat,
     run_time_diff: u64,
 }
 
-pub struct CpuProbe {
-    processes_data: HashMap<PID, ProcessCpuData>,
-    stat_data: StatData,
+pub(crate) struct CpuProbe<T>
+    where T: procfs::ProcfsReader {
+    processes_data: HashMap<PID, ProcessCpuData<T>>,
+    stat_data: StatData<T>,
 }
 
-impl CpuProbe {
+impl<T> CpuProbe<T> where T: procfs::ProcfsReader {
     pub fn new() -> Result<Self, Error> {
-        let stat_file_path = PathBuf::from("/proc/stat");
-        let mut stat_file = procfs::ProcFile::new(&stat_file_path)
+        let mut stat_file = T::new("stat")
             .or_else(|e| Err(Error::IOError(e.to_string())))?;
 
         let stat_data = stat_file
-            .parse()
+            .read()
             .or_else(|e| Err(Error::ProbingError(e.to_string())))?;
 
         Ok(CpuProbe {
             processes_data: HashMap::new(),
             stat_data: StatData {
-                file: stat_file,
+                reader: stat_file,
                 prev_stat: stat_data,
                 run_time_diff: 0,
             },
         })
     }
 
-    fn build_pid_stat_file_path(pid: PID) -> PathBuf {
-        let mut path = PathBuf::new();
-
-        path.push("/proc");
-        path.push(pid.to_string());
-        path.push("stat");
-
-        path
-    }
-
-    fn create_process_data(pid: PID) -> Result<ProcessCpuData, Error> {
-        let stat_file_path = Self::build_pid_stat_file_path(pid);
-
-        let mut stat_file = procfs::ProcFile::new(&stat_file_path)
+    fn create_process_data(pid: PID) -> Result<ProcessCpuData<T>, Error> {
+        let mut stat_file = T::new_for_pid(pid, "stat")
             .or_else(|e| Err(Error::IOError(e.to_string())))?;
 
         let pid_stat = stat_file
-            .parse()
+            .read()
             .or_else(|e| Err(Error::ProbingError(e.to_string())))?;
 
-        Ok(ProcessCpuData { file: stat_file, prev_stat: pid_stat })
+        Ok(ProcessCpuData { reader: stat_file, prev_stat: pid_stat })
     }
 
     /// Returns a mut reference to `ProcessCpuData` associated with `pid`. If it does not exists,
@@ -94,7 +84,7 @@ impl CpuProbe {
     /// # Arguments
     ///  * `pid`: The ID of the process forr which to retrieve the `ProcessCpuData`
     ///
-    fn get_process_data(&mut self, pid: PID) -> Result<&mut ProcessCpuData, Error> {
+    fn get_process_data(&mut self, pid: PID) -> Result<&mut ProcessCpuData<T>, Error> {
         Ok(match self.processes_data.entry(pid) {
             Entry::Occupied(o) => o.into_mut(),
             Entry::Vacant(v) => v.insert(Self::create_process_data(pid)?)
@@ -102,10 +92,10 @@ impl CpuProbe {
     }
 }
 
-impl Probe for CpuProbe {
+impl<T> Probe for CpuProbe<T> where T: procfs::ProcfsReader {
     fn init_iteration(&mut self) -> Result<(), Error> {
-        let new_stat: Stat = self.stat_data.file
-            .parse()
+        let new_stat: Stat = self.stat_data.reader
+            .read()
             .or_else(|e| Err(Error::ProbingError(e.to_string())))?;
 
         self.stat_data.run_time_diff = new_stat.running_time() - self.stat_data.prev_stat.running_time();
@@ -117,8 +107,8 @@ impl Probe for CpuProbe {
     fn probe(&mut self, pid: PID) -> Result<ProcessMetric, Error> {
         let mut proc_data = self.get_process_data(pid)?;
 
-        let new_pid_stat: PidStat = proc_data.file
-            .parse()
+        let new_pid_stat: PidStat = proc_data.reader
+            .read()
             .or_else(|e| Err(Error::ProbingError(e.to_string())))?;
 
         let pid_runtime_diff = new_pid_stat.running_time() - proc_data.prev_stat.running_time();
@@ -141,7 +131,9 @@ impl Probe for CpuProbe {
 mod procfs {
     use std::fs::File;
     use std::io::{Read, Seek, SeekFrom};
-    use std::path::Path;
+    use std::path::PathBuf;
+
+    use crate::process::PID;
 
     #[derive(Eq, PartialEq, Debug)]
     pub(crate) enum ProcfsError {
@@ -165,7 +157,7 @@ mod procfs {
     }
 
 
-    /// Parses space-separated token from a given multi-line string reference
+    /// Parses space-separated token from a given multi-line string slice
     pub(crate) struct TokenParser<'a> {
         lines: Vec<Vec<&'a str>>
     }
@@ -248,17 +240,42 @@ mod procfs {
     }
 
     /// Handles the IO part of procfs parsing
-    pub struct ProcFile {
+    pub(crate) trait ProcfsReader where Self: Sized {
+        fn new(filename: &str) -> Result<Self, ProcfsError>;
+        fn new_for_pid(pid: PID, filename: &str) -> Result<Self, ProcfsError>;
+
+        fn read<T>(&mut self) -> Result<T, ProcfsError>
+            where T: ProcfsData + Sized;
+    }
+
+    pub(crate) struct ProcFile {
         file: File,
     }
 
-    impl ProcFile {
-        pub fn new(file_path: &Path) -> std::io::Result<Self> {
-            Ok(ProcFile { file: File::open(file_path)? })
+    impl ProcfsReader for ProcFile {
+        fn new(filename: &str) -> Result<Self, ProcfsError> {
+            let mut path = PathBuf::from("/proc");
+            path.push(filename);
+
+            let file = File::open(path.as_path())
+                .or_else(|e| Err(ProcfsError::IoError(e.to_string())))?;
+
+            Ok(ProcFile { file })
+        }
+
+        fn new_for_pid(pid: u32, filename: &str) -> Result<Self, ProcfsError> {
+            let mut path = PathBuf::from("/proc");
+            path.push(pid.to_string());
+            path.push(filename);
+
+            let file = File::open(path.as_path())
+                .or_else(|e| Err(ProcfsError::IoError(e.to_string())))?;
+
+            Ok(ProcFile { file })
         }
 
         /// Returns the data parsed from the file
-        pub(crate) fn parse<T>(&mut self) -> Result<T, ProcfsError>
+        fn read<T>(&mut self) -> Result<T, ProcfsError>
             where T: ProcfsData + Sized {
             // rather than re-opening the file at each read, we just seek back the start of the file
             self.file
