@@ -3,6 +3,7 @@ use std::sync::mpsc::{Receiver, Sender};
 
 use crate::probe::{Error, Probe, ProcessMetric};
 use crate::process::PID;
+use crate::values::Value;
 
 /// Contains messages that can be sent to or from a `ProbeThread`
 pub enum ProbeInput {
@@ -12,33 +13,32 @@ pub enum ProbeInput {
     Probe(),
 }
 
-pub enum ProbeOutput {
-    NewFrame(ProbedFrame),
+pub enum ProbeOutput<T> where T: Value {
+    NewFrame(ProbedFrame<T>),
 }
 
 
 /// Contains a list of `ProcessMetric`, one for each probed process
-pub struct ProbedFrame {
-    metrics: Vec<ProcessMetric>,
+pub struct ProbedFrame<T> where T: Value {
+    metrics: Vec<ProcessMetric<T>>,
 }
 
-pub struct ProbeRunner {
+pub struct ProbeRunner<T, P> where T: Value, P: Probe<ValueType=T> {
     monitored_pids: HashSet<PID>,
     // probe has to be dyn as we must be able to interact with probes in a polymorphous manner
-    probe: Box<dyn Probe>,
+    probe: P,
 
     parent_rx: Receiver<ProbeInput>,
-    parent_tx: Sender<ProbeOutput>,
+    parent_tx: Sender<ProbeOutput<T>>,
 }
 
-impl ProbeRunner {
-    pub fn new(probe: Box<dyn Probe>, parent_rx: Receiver<ProbeInput>,
-               parent_tx: Sender<ProbeOutput>) -> Self {
+impl<T, P> ProbeRunner<T, P> where T: Value, P: Probe<ValueType=T> {
+    pub fn new(probe: P, rx: Receiver<ProbeInput>, tx: Sender<ProbeOutput<T>>) -> Self {
         ProbeRunner {
             monitored_pids: HashSet::new(),
             probe,
-            parent_rx,
-            parent_tx,
+            parent_rx: rx,
+            parent_tx: tx,
         }
     }
 
@@ -74,10 +74,10 @@ impl ProbeRunner {
     fn probe(&mut self) -> Result<(), Error> {
         let mut metrics = Vec::new();
 
-        (*self.probe).init_iteration()?;
+        self.probe.init_iteration()?;
 
         for pid in self.monitored_pids.iter() {
-            match (*self.probe).probe(*pid) {
+            match self.probe.probe(*pid) {
                 Ok(process_metric) => {
                     metrics.push(process_metric);
                 }
@@ -94,7 +94,7 @@ impl ProbeRunner {
 mod test_probe_runner {
     use std::sync::mpsc::channel;
 
-    use crate::probe::{Error, Metric, Probe, ProcessMetric};
+    use crate::probe::{Error, Probe, ProcessMetric};
     use crate::probe::thread::{ProbedFrame, ProbeInput, ProbeOutput, ProbeRunner};
     use crate::process::PID;
     use crate::values::BitrateValue;
@@ -117,13 +117,15 @@ mod test_probe_runner {
     }
 
     impl Probe for ProbeFake {
+        type ValueType = BitrateValue;
+
         fn init_iteration(&mut self) -> Result<(), Error> {
             self.call_seq.push(ProbeFakeCall::Init());
 
             Ok(())
         }
 
-        fn probe(&mut self, pid: u32) -> Result<ProcessMetric, Error> {
+        fn probe(&mut self, pid: u32) -> Result<ProcessMetric<BitrateValue>, Error> {
             for call in self.call_seq.iter().rev() {
                 match call {
                     ProbeFakeCall::Init() => break,
@@ -140,12 +142,12 @@ mod test_probe_runner {
 
             self.call_seq.push(ProbeFakeCall::Probe(pid));
 
-            Ok(ProcessMetric { pid, value: Metric::IoRead(BitrateValue::new(10)) })
+            Ok(ProcessMetric { pid, value: BitrateValue::new(10) })
         }
     }
 
-    fn launch_probe_runner_with_msg_sequence(call_sequence: Vec<ProbeInput>) -> ProbedFrame {
-        let probe_box = Box::new(ProbeFake::new());
+    fn launch_probe_runner_with_msg_sequence(call_sequence: Vec<ProbeInput>) -> ProbedFrame<BitrateValue> {
+        let probe_box = ProbeFake::new();
         let (main_tx, probes_rx) = channel();
         let (probes_tx, main_rx) = channel();
 
@@ -185,13 +187,8 @@ mod test_probe_runner {
         probed_frame.metrics.sort_by_key(|m| m.pid);
 
         assert_eq!(probed_frame.metrics,
-                   vec![ProcessMetric {
-                       pid: 123,
-                       value: Metric::IoRead(BitrateValue::new(10)),
-                   }, ProcessMetric {
-                       pid: 124,
-                       value: Metric::IoRead(BitrateValue::new(10)),
-                   }]);
+                   vec![ProcessMetric { pid: 123, value: BitrateValue::new(10) },
+                        ProcessMetric { pid: 124, value: BitrateValue::new(10) }]);
     }
 
     #[test]
@@ -230,9 +227,6 @@ mod test_probe_runner {
         let probed_frame = launch_probe_runner_with_msg_sequence(call_seq);
 
         assert_eq!(probed_frame.metrics,
-                   vec![ProcessMetric {
-                       pid: 123,
-                       value: Metric::IoRead(BitrateValue::new(10)),
-                   }]);
+                   vec![ProcessMetric { pid: 123, value: BitrateValue::new(10) }]);
     }
 }

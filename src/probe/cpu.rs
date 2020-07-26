@@ -1,7 +1,7 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
-use crate::probe::{Error, Metric, Probe, ProcessMetric, procfs};
+use crate::probe::{Error, Probe, ProcessMetric, procfs};
 use crate::probe::procfs::{PidStat, Stat};
 use crate::process::PID;
 use crate::values::PercentValue;
@@ -47,6 +47,8 @@ impl CpuProbe {
 }
 
 impl Probe for CpuProbe {
+    type ValueType = PercentValue;
+
     fn init_iteration(&mut self) -> Result<(), Error> {
         let new_stat: Stat = self.stat_reader
             .read()
@@ -57,7 +59,7 @@ impl Probe for CpuProbe {
         Ok(())
     }
 
-    fn probe(&mut self, pid: PID) -> Result<ProcessMetric, Error> {
+    fn probe(&mut self, pid: PID) -> Result<ProcessMetric<PercentValue>, Error> {
         let proc_reader = self.get_process_reader(pid)?;
 
         let new_pid_stat = proc_reader
@@ -65,7 +67,7 @@ impl Probe for CpuProbe {
             .map_err(|e| Error::ProbingError(e.to_string()))?;
 
         let pct_value = self.calculator.calculate_pid_usage(pid, new_pid_stat)?;
-        Ok(ProcessMetric { pid, value: Metric::CpuUsage(pct_value) })
+        Ok(ProcessMetric { pid, value: pct_value })
     }
 }
 

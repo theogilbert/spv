@@ -35,18 +35,18 @@ impl PercentValue {
     }
 }
 
-impl Display for PercentValue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{:.1}%", self.percent)
-    }
-}
-
 
 impl Value for PercentValue {
     type ValueType = f32;
 
     fn value(&self) -> Self::ValueType {
         self.percent
+    }
+}
+
+impl Display for PercentValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:.1}%", self.percent)
     }
 }
 
@@ -99,12 +99,6 @@ pub struct BitrateValue {
     bitrate: u32
 }
 
-impl Display for BitrateValue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{} b/s", self.bitrate)
-    }
-}
-
 
 impl BitrateValue {
     /// Returns a `BitrateMetric`
@@ -120,6 +114,12 @@ impl Value for BitrateValue {
 
     fn value(&self) -> Self::ValueType {
         self.bitrate
+    }
+}
+
+impl Display for BitrateValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{} b/s", self.bitrate)
     }
 }
 
