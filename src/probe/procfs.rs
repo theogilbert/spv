@@ -110,7 +110,7 @@ mod test_token_parser {
 /// Handles the IO part of procfs parsing
 pub struct ProcfsReader<T> where T: ProcfsData + Sized {
     file: File,
-    phantom: PhantomData<T>,
+    phantom: PhantomData<T>,  // Here to be able to templetize ProcfsReader
 }
 
 impl<T> ProcfsReader<T> where T: ProcfsData + Sized {

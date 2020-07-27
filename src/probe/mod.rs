@@ -1,3 +1,6 @@
+use std::collections::HashSet;
+
+use crate::probe::thread::ProbedFrame;
 use crate::process::PID;
 use crate::values::Value;
 
@@ -15,6 +18,17 @@ pub enum Error {
     MPSCError(String),
 }
 
+
+impl ToString for Error {
+    fn to_string(&self) -> String {
+        match self {
+            Error::IOError(s) => format!("IO error: {}", s.clone()),
+            Error::ProbingError(s) => format!("Probing error: {}", s.clone()),
+            Error::MPSCError(s) => format!("MSPC error: {}", s.clone())
+        }
+    }
+}
+
 /// Contains a `Value` associated to a process
 #[derive(Debug, PartialEq, Clone)]
 pub struct ProcessMetric<T> where T: Value {
@@ -23,17 +37,5 @@ pub struct ProcessMetric<T> where T: Value {
 }
 
 pub trait Probe {
-    type ValueType: Value;
-
-    /// Allow the initialization of the probe for the current iteration
-    /// This method should be called before calling the probe() method for each pid
-    fn init_iteration(&mut self) -> Result<(), Error> {
-        Ok(())
-    }
-
-    /// Probe a specific metric value for a given process
-    /// # Arguments
-    ///  * `pid`: The ID of the process to probe
-    ///
-    fn probe(&mut self, pid: PID) -> Result<ProcessMetric<Self::ValueType>, Error>;
+    fn probe_frame(&mut self, pids: &HashSet<PID>) -> Result<ProbedFrame, Error>;
 }
