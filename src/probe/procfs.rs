@@ -1,7 +1,11 @@
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::marker::PhantomData;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+use crate::process::PID;
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum ProcfsError {
@@ -20,8 +24,95 @@ impl ToString for ProcfsError {
     }
 }
 
-pub trait ProcfsData: Sized {
-    fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError>;
+
+pub trait ReadSystemData<T> where T: SystemData + Sized {
+    fn read(&mut self) -> Result<T, ProcfsError>;
+}
+
+
+pub trait ReadProcessData<T> where T: ProcessData + Sized {
+    fn dump_pid(&mut self, pid: PID);
+    fn read(&mut self, pid: PID) -> Result<T, ProcfsError>;
+}
+
+
+/// Reads data from procfs system files (directly in `/proc`)
+pub struct SystemDataReader<T> where T: SystemData + Sized {
+    reader: ProcfsReader<T>,
+}
+
+impl<T> SystemDataReader<T> where T: SystemData + Sized {
+    pub fn new() -> Result<Self, ProcfsError> {
+        let reader = ProcfsReader::new(T::filepath().as_path())?;
+        Ok(SystemDataReader { reader })
+    }
+}
+
+impl<T> ReadSystemData<T> for SystemDataReader<T> where T: SystemData + Sized {
+    fn read(&mut self) -> Result<T, ProcfsError> {
+        self.reader.read()
+    }
+}
+
+/// Reads data from procfs files bound to a PID (in `/proc/[pid]/`)
+pub struct ProcessDataReader<T> where T: ProcessData + Sized {
+    readers: HashMap<PID, ProcfsReader<T>>,
+}
+
+impl<T> ProcessDataReader<T> where T: ProcessData + Sized {
+    pub fn new() -> Self {
+        ProcessDataReader { readers: HashMap::new() }
+    }
+
+    fn get_process_reader(&mut self, pid: PID) -> Result<&mut ProcfsReader<T>, ProcfsError> {
+        Ok(match self.readers.entry(pid) {
+            Entry::Occupied(o) => o.into_mut(),
+            Entry::Vacant(v) => v.insert({
+                ProcfsReader::new(T::filepath(pid).as_path())?
+            })
+        })
+    }
+}
+
+impl<T> ReadProcessData<T> for ProcessDataReader<T> where T: ProcessData + Sized {
+    fn dump_pid(&mut self, pid: u32) {
+        self.readers.remove(&pid);
+    }
+
+    fn read(&mut self, pid: u32) -> Result<T, ProcfsError> {
+        self.get_process_reader(pid)?
+            .read()
+    }
+}
+
+
+struct ProcfsReader<T> where T: Data + Sized {
+    file: File,
+    phantom: PhantomData<T>,
+}
+
+impl<T> ProcfsReader<T> where T: Data {
+    pub fn new(filepath: &Path) -> Result<Self, ProcfsError> {
+        File::open(filepath)
+            .map_err(|e| ProcfsError::IoError(e.to_string()))
+            .map(|file| Self { file, phantom: PhantomData })
+    }
+
+    pub fn read(&mut self) -> Result<T, ProcfsError> {
+        // rather than re-opening the file at each read, we just seek back the start of the file
+        self.file
+            .seek(SeekFrom::Start(0))
+            .map_err(|e| ProcfsError::IoError(e.to_string()))?;
+
+        // Might be optimized, by not reallocating at each call
+        let mut stat_content = String::new();
+        self.file.read_to_string(&mut stat_content)
+            .map_err(|io_err| ProcfsError::IoError(io_err.to_string()))?;
+
+        let tp = TokenParser::new(&stat_content);
+
+        T::parse(&tp)
+    }
 }
 
 
@@ -107,51 +198,6 @@ mod test_token_parser {
     }
 }
 
-/// Handles the IO part of procfs parsing
-pub struct ProcfsReader<T> where T: ProcfsData + Sized {
-    file: File,
-    phantom: PhantomData<T>,  // Here to be able to templetize ProcfsReader
-}
-
-impl<T> ProcfsReader<T> where T: ProcfsData + Sized {
-    pub fn new(filename: &str) -> Result<Self, ProcfsError> {
-        let mut path = PathBuf::from("/proc");
-        path.push(filename);
-
-        let file = File::open(path.as_path())
-            .map_err(|e| ProcfsError::IoError(e.to_string()))?;
-
-        Ok(ProcfsReader::<T> { file, phantom: PhantomData })
-    }
-
-    pub fn new_for_pid(pid: u32, filename: &str) -> Result<Self, ProcfsError> {
-        let mut path = PathBuf::from("/proc");
-        path.push(pid.to_string());
-        path.push(filename);
-
-        let file = File::open(path.as_path())
-            .map_err(|e| ProcfsError::IoError(e.to_string()))?;
-
-        Ok(ProcfsReader::<T> { file, phantom: PhantomData })
-    }
-
-    /// Returns the data parsed from the file
-    pub fn read(&mut self) -> Result<T, ProcfsError> {
-        // rather than re-opening the file at each read, we just seek back the start of the file
-        self.file
-            .seek(SeekFrom::Start(0))
-            .map_err(|e| ProcfsError::IoError(e.to_string()))?;
-
-        // Might be optimized, by not reallocating at each call
-        let mut stat_content = String::new();
-        self.file.read_to_string(&mut stat_content)
-            .map_err(|io_err| ProcfsError::IoError(io_err.to_string()))?;
-
-        let tp = TokenParser::new(&stat_content);
-
-        T::parse(&tp)
-    }
-}
 
 /// Represents data from `/proc/[PID]/stat`
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
@@ -170,6 +216,19 @@ pub struct PidStat {
     cstime: i32,
 }
 
+
+pub trait Data: Sized {
+    fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError>;
+}
+
+pub trait SystemData: Data {
+    fn filepath() -> PathBuf;
+}
+
+pub trait ProcessData: Data {
+    fn filepath(pid: PID) -> PathBuf;
+}
+
 impl PidStat {
     pub fn new(utime: u32, stime: u32, cutime: i32, cstime: i32) -> Self {
         PidStat { utime, stime, cutime, cstime }
@@ -180,7 +239,7 @@ impl PidStat {
     }
 }
 
-impl ProcfsData for PidStat {
+impl Data for PidStat {
     fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
         Ok(PidStat {
             utime: token_parser.token(0, 12)?,
@@ -188,6 +247,18 @@ impl ProcfsData for PidStat {
             cutime: token_parser.token(0, 14)?,
             cstime: token_parser.token(0, 15)?,
         })
+    }
+}
+
+impl ProcessData for PidStat {
+    fn filepath(pid: u32) -> PathBuf {
+        let mut path = PathBuf::new();
+
+        path.push("/proc");
+        path.push(pid.to_string());
+        path.push("stat");
+
+        path
     }
 }
 
@@ -228,6 +299,12 @@ mod test_pid_stat {
 
         assert_eq!(15, pid_stat.running_time())
     }
+
+    #[test]
+    fn filepath_should_contain_pid() {
+        assert_eq!(PidStat::filepath(456),
+                   PathBuf::from("/proc/456/stat"))
+    }
 }
 
 /// Represents data and additional computed data from `/proc/stat`
@@ -260,7 +337,7 @@ impl Stat {
     }
 }
 
-impl ProcfsData for Stat {
+impl Data for Stat {
     fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
         Ok(Stat {
             user: token_parser.token(0, 1)?,
@@ -270,6 +347,12 @@ impl ProcfsData for Stat {
             guest: token_parser.token(0, 9)?,
             guest_nice: token_parser.token(0, 10)?,
         })
+    }
+}
+
+impl SystemData for Stat {
+    fn filepath() -> PathBuf {
+        ["/proc", "stat"].iter().collect()
     }
 }
 

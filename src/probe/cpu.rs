@@ -1,47 +1,29 @@
 use std::collections::{HashMap, HashSet};
-use std::collections::hash_map::Entry;
 
 use crate::probe::{Error, Probe, ProcessMetric, procfs};
-use crate::probe::procfs::{PidStat, Stat};
+use crate::probe::procfs::{PidStat, ProcessDataReader, ReadProcessData, ReadSystemData, Stat, SystemDataReader};
 use crate::probe::thread::ProbedFrame;
 use crate::process::PID;
 use crate::values::PercentValue;
 
-type PidStatReader = procfs::ProcfsReader<procfs::PidStat>;
-type StatReader = procfs::ProcfsReader<procfs::Stat>;
-
 pub struct CpuProbe {
-    processes_readers: HashMap<PID, PidStatReader>,
-    stat_reader: StatReader,
+    pid_stat_reader: Box<dyn ReadProcessData<PidStat>>,
+    stat_reader: Box<dyn ReadSystemData<Stat>>,
     calculator: UsageCalculator,
 }
 
 impl CpuProbe {
     pub fn new() -> Result<Self, Error> {
-        let mut stat_reader = StatReader::new("stat")
+        let mut stat_reader = SystemDataReader::<Stat>::new()
             .map_err(|e| Error::IOError(e.to_string()))?;
 
         let stat_data = stat_reader.read()
             .map_err(|e| Error::ProbingError(e.to_string()))?;
 
         Ok(CpuProbe {
-            processes_readers: HashMap::new(),
-            stat_reader,
+            pid_stat_reader: Box::new(ProcessDataReader::<PidStat>::new()),
+            stat_reader: Box::new(stat_readepror),
             calculator: UsageCalculator::new(stat_data),
-        })
-    }
-
-    fn init_process_reader(pid: PID) -> Result<PidStatReader, Error> {
-        PidStatReader::new_for_pid(pid, "stat")
-            .map_err(|e| Error::IOError(e.to_string()))
-    }
-
-    fn get_process_reader(&mut self, pid: PID) -> Result<&mut PidStatReader, Error> {
-        Ok(match self.processes_readers.entry(pid) {
-            Entry::Occupied(o) => o.into_mut(),
-            Entry::Vacant(v) => v.insert({
-                Self::init_process_reader(pid)?
-            })
         })
     }
 }
@@ -58,10 +40,8 @@ impl CpuProbe {
     }
 
     fn probe(&mut self, pid: PID) -> Result<ProcessMetric<PercentValue>, Error> {
-        let proc_reader = self.get_process_reader(pid)?;
-
-        let new_pid_stat = proc_reader
-            .read()
+        let new_pid_stat = self.pid_stat_reader
+            .read(pid)
             .map_err(|e| Error::ProbingError(e.to_string()))?;
 
         let pct_value = self.calculator.calculate_pid_usage(pid, new_pid_stat)?;

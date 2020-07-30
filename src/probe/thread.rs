@@ -91,12 +91,6 @@ mod test_probe_runner {
     use crate::process::PID;
     use crate::values::BitrateValue;
 
-    #[derive(Eq, PartialEq, Debug)]
-    enum ProbeFakeCall {
-        Init(),
-        Probe(PID),
-    }
-
     struct ProbeFake {}
 
     impl ProbeFake {
@@ -152,7 +146,7 @@ mod test_probe_runner {
             ProbeInput::Probe()
         ];
 
-        let mut probed_frame = launch_probe_runner_with_msg_sequence(call_seq);
+        let probed_frame = launch_probe_runner_with_msg_sequence(call_seq);
 
         if let ProbedFrame::BitratesFrame(mut metrics) = probed_frame {
             metrics.sort_by_key(|m| m.pid);
