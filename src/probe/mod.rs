@@ -38,6 +38,12 @@ pub struct ProcessMetric<T> where T: Value {
     value: T,
 }
 
+impl<T> ProcessMetric<T> where T: Value {
+    pub fn new(pid: PID, value: T) -> Self {
+        Self { pid, value }
+    }
+}
+
 pub trait Probe {
     fn probe_processes(&mut self, pids: &HashSet<PID>) -> Result<Metrics, Error>;
 }
