@@ -55,7 +55,6 @@ impl<D> ReadSystemData<D> for SystemDataReader<D> where D: SystemData + Sized {
 
 /// Reads data from procfs files bound to a PID (in `/proc/[pid]/`)
 pub struct ProcessDataReader<D> where D: ProcessData + Sized {
-    // TODO we should find a way to remove pid from readers when process dies
     readers: HashMap<PID, ProcfsReader<D>>,
 }
 
@@ -76,8 +75,14 @@ impl<D> ProcessDataReader<D> where D: ProcessData + Sized {
 
 impl<D> ReadProcessData<D> for ProcessDataReader<D> where D: ProcessData + Sized {
     fn read(&mut self, pid: u32) -> Result<D, ProcfsError> {
-        self.get_process_reader(pid)?
-            .read()
+        let data_ret = self.get_process_reader(pid)?
+            .read();
+
+        if data_ret.is_err() {  // if reading files for this PID fails, we stop tracking the file
+            self.readers.remove(&pid);
+        }
+
+        data_ret
     }
 }
 

@@ -40,11 +40,11 @@ impl CpuProbe {
     }
 
     fn probe(&mut self, pid: PID) -> Result<ProcessMetric<PercentValue>, Error> {
-        let new_pid_stat = self.pid_stat_reader
+        let pid_stat = self.pid_stat_reader
             .read(pid)
             .map_err(|e| Error::ProbingError(e.to_string()))?;
 
-        let pct_value = self.calculator.calculate_pid_usage(pid, new_pid_stat)?;
+        let pct_value = self.calculator.calculate_pid_usage(pid, pid_stat)?;
         Ok(ProcessMetric { pid, value: pct_value })
     }
 }
