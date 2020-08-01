@@ -154,11 +154,17 @@ mod test_cpu_probe {
             calculator: UsageCalculator::new(create_stat(0)),
         };
 
-        assert_eq!(probe.probe_frame(&vec![1, 2].into_iter().collect()),
-                   Ok(ProbedFrame::PercentsFrame(vec![
-                       ProcessMetric { pid: 1, value: PercentValue::new(25.).unwrap() },
-                       ProcessMetric { pid: 2, value: PercentValue::new(25.).unwrap() },
-                   ])));
+        let probed_frame = probe.probe_frame(&vec![1, 2].into_iter().collect());
+        if let Ok(ProbedFrame::PercentsFrame(mut metrics)) = probed_frame {
+            metrics.sort_by_key(|pm| pm.pid);
+
+            assert_eq!(metrics, vec![
+                ProcessMetric { pid: 1, value: PercentValue::new(25.).unwrap() },
+                ProcessMetric { pid: 2, value: PercentValue::new(25.).unwrap() },
+            ])
+        } else {
+            panic!("Invalid type of frame");
+        }
     }
 
 
