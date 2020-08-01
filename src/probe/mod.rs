@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 
-use crate::probe::thread::Metrics;
+use crate::probe::dispatch::Metrics;
 use crate::process::PID;
 use crate::values::Value;
 
 mod cpu;
-mod thread;
+mod dispatch;
 mod procfs;
 
 pub type CpuProbe = cpu::CpuProbe;

@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::probe::{Error, Probe, ProcessMetric, procfs};
 use crate::probe::procfs::{PidStat, ProcessDataReader, ReadProcessData, ReadSystemData, Stat, SystemDataReader};
-use crate::probe::thread::Metrics;
+use crate::probe::dispatch::Metrics;
 use crate::process::PID;
 use crate::values::Percent;
 
@@ -69,7 +69,7 @@ mod test_cpu_probe {
     use crate::probe::cpu::common_test_utils::{create_pid_stat, create_stat};
     use crate::probe::cpu::UsageCalculator;
     use crate::probe::procfs::{PidStat, ProcfsError, ReadProcessData, ReadSystemData, Stat};
-    use crate::probe::thread::Metrics;
+    use crate::probe::dispatch::Metrics;
     use crate::process::PID;
     use crate::values::Percent;
 
@@ -93,7 +93,6 @@ mod test_cpu_probe {
             Ok(self.stat.take().unwrap())
         }
     }
-
 
     macro_rules! hashmap (
     { $($key:expr => $value:expr),+ } => {
