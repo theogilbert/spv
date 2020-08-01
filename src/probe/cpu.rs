@@ -2,9 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::probe::{Error, Probe, ProcessMetric, procfs};
 use crate::probe::procfs::{PidStat, ProcessDataReader, ReadProcessData, ReadSystemData, Stat, SystemDataReader};
-use crate::probe::thread::ProbedFrame;
+use crate::probe::thread::Metrics;
 use crate::process::PID;
-use crate::values::PercentValue;
+use crate::values::Percent;
 
 pub struct CpuProbe {
     pid_stat_reader: Box<dyn ReadProcessData<PidStat>>,
@@ -39,7 +39,7 @@ impl CpuProbe {
         Ok(())
     }
 
-    fn probe(&mut self, pid: PID) -> Result<ProcessMetric<PercentValue>, Error> {
+    fn probe(&mut self, pid: PID) -> Result<ProcessMetric<Percent>, Error> {
         let pid_stat = self.pid_stat_reader
             .read(pid)
             .map_err(|e| Error::ProbingError(e.to_string()))?;
@@ -50,14 +50,14 @@ impl CpuProbe {
 }
 
 impl Probe for CpuProbe {
-    fn probe_frame(&mut self, pids: &HashSet<PID>) -> Result<ProbedFrame, Error> {
+    fn probe_processes(&mut self, pids: &HashSet<PID>) -> Result<Metrics, Error> {
         self.init_iteration()?;
 
         let metrics = pids.iter()
             .filter_map(|p| self.probe(*p).ok())
             .collect();
 
-        Ok(ProbedFrame::PercentsFrame(metrics))
+        Ok(Metrics::Percents(metrics))
     }
 }
 
@@ -69,9 +69,9 @@ mod test_cpu_probe {
     use crate::probe::cpu::common_test_utils::{create_pid_stat, create_stat};
     use crate::probe::cpu::UsageCalculator;
     use crate::probe::procfs::{PidStat, ProcfsError, ReadProcessData, ReadSystemData, Stat};
-    use crate::probe::thread::ProbedFrame;
+    use crate::probe::thread::Metrics;
     use crate::process::PID;
-    use crate::values::PercentValue;
+    use crate::values::Percent;
 
     struct MemoryPidStatReader {
         pid_stats_seq: HashMap<PID, Result<PidStat, ProcfsError>>
@@ -107,7 +107,7 @@ mod test_cpu_probe {
      });
 
     #[test]
-    fn test_should_return_empty_frame_when_no_pid() {
+    fn test_should_return_zero_metrics_when_no_pid() {
         let stat_reader = MemoryStatReader { stat: Some(create_stat(200)) };
         let pid_stat_reader = MemoryPidStatReader { pid_stats_seq: HashMap::new() };
 
@@ -117,12 +117,12 @@ mod test_cpu_probe {
             calculator: UsageCalculator::new(create_stat(0)),
         };
 
-        assert_eq!(probe.probe_frame(&HashSet::new()), Ok(ProbedFrame::PercentsFrame(vec![])));
+        assert_eq!(probe.probe_processes(&HashSet::new()), Ok(Metrics::Percents(vec![])));
     }
 
 
     #[test]
-    fn test_should_return_one_frame_when_one_pid() {
+    fn test_should_return_one_metric_when_one_pid() {
         let stat_reader = MemoryStatReader { stat: Some(create_stat(200)) };
         let pid_stat_reader = MemoryPidStatReader {
             pid_stats_seq: hashmap!(1 => Ok(create_pid_stat(100)))
@@ -134,15 +134,15 @@ mod test_cpu_probe {
             calculator: UsageCalculator::new(create_stat(0)),
         };
 
-        assert_eq!(probe.probe_frame(&vec![1].into_iter().collect()),
-                   Ok(ProbedFrame::PercentsFrame(vec![
-                       ProcessMetric { pid: 1, value: PercentValue::new(50.).unwrap() }
+        assert_eq!(probe.probe_processes(&vec![1].into_iter().collect()),
+                   Ok(Metrics::Percents(vec![
+                       ProcessMetric { pid: 1, value: Percent::new(50.).unwrap() }
                    ])));
     }
 
 
     #[test]
-    fn test_should_return_two_frames_when_two_pids() {
+    fn test_should_return_two_metrics_when_two_pids() {
         let stat_reader = MemoryStatReader { stat: Some(create_stat(200)) };
         let pid_stat_reader = MemoryPidStatReader {
             pid_stats_seq: hashmap!(1 => Ok(create_pid_stat(50)), 2 => Ok(create_pid_stat(50)))
@@ -154,16 +154,16 @@ mod test_cpu_probe {
             calculator: UsageCalculator::new(create_stat(0)),
         };
 
-        let probed_frame = probe.probe_frame(&vec![1, 2].into_iter().collect());
-        if let Ok(ProbedFrame::PercentsFrame(mut metrics)) = probed_frame {
+        let metrics_ret = probe.probe_processes(&vec![1, 2].into_iter().collect());
+        if let Ok(Metrics::Percents(mut metrics)) = metrics_ret {
             metrics.sort_by_key(|pm| pm.pid);
 
             assert_eq!(metrics, vec![
-                ProcessMetric { pid: 1, value: PercentValue::new(25.).unwrap() },
-                ProcessMetric { pid: 2, value: PercentValue::new(25.).unwrap() },
+                ProcessMetric { pid: 1, value: Percent::new(25.).unwrap() },
+                ProcessMetric { pid: 2, value: Percent::new(25.).unwrap() },
             ])
         } else {
-            panic!("Invalid type of frame");
+            panic!("Invalid type of metrics");
         }
     }
 
@@ -183,9 +183,9 @@ mod test_cpu_probe {
             calculator: UsageCalculator::new(create_stat(0)),
         };
 
-        assert_eq!(probe.probe_frame(&vec![1, 2].into_iter().collect()),
-                   Ok(ProbedFrame::PercentsFrame(vec![
-                       ProcessMetric { pid: 1, value: PercentValue::new(25.).unwrap() },
+        assert_eq!(probe.probe_processes(&vec![1, 2].into_iter().collect()),
+                   Ok(Metrics::Percents(vec![
+                       ProcessMetric { pid: 1, value: Percent::new(25.).unwrap() },
                    ])));
     }
 }
@@ -214,7 +214,7 @@ impl UsageCalculator {
     }
 
     pub fn calculate_pid_usage(&mut self, pid: PID, pid_stat_data: PidStat)
-                               -> Result<PercentValue, Error> {
+                               -> Result<Percent, Error> {
         let last_iter_runtime = match self.processes_prev_stats.get(&pid) {
             Some(stat_data) => stat_data.running_time(),
             None => 0
@@ -226,7 +226,7 @@ impl UsageCalculator {
         let ratio = pid_runtime_diff as f64 / self.global_runtime_diff;
         let percent = (100. * ratio) as f32;
 
-        PercentValue::new(percent)
+        Percent::new(percent)
             .map_err(|_e| {
                 Error::ProbingError(format!("Invalid CPU usage value for PID {} : {}",
                                             pid, percent))
@@ -240,7 +240,7 @@ mod test_cpu_calculator {
     use crate::probe::cpu::common_test_utils::create_stat;
     use crate::probe::cpu::UsageCalculator;
     use crate::probe::procfs;
-    use crate::values::PercentValue;
+    use crate::values::Percent;
 
     fn create_initialized_calc(elapsed_ticks: u64) -> UsageCalculator {
         let mut calc = UsageCalculator::new(create_stat(100));
@@ -257,7 +257,7 @@ mod test_cpu_calculator {
         let pid_stat = procfs::PidStat::new(0, 0, 0, 0);
 
         assert_eq!(calc.calculate_pid_usage(1, pid_stat).unwrap(),
-                   PercentValue::new(0.).unwrap());
+                   Percent::new(0.).unwrap());
     }
 
     #[test]
@@ -267,7 +267,7 @@ mod test_cpu_calculator {
         let pid_stat = procfs::PidStat::new(100, 20, 2, 1);
 
         assert_eq!(calc.calculate_pid_usage(1, pid_stat).unwrap(),
-                   PercentValue::new(100.).unwrap());
+                   Percent::new(100.).unwrap());
     }
 
     #[test]

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::probe::thread::ProbedFrame;
+use crate::probe::thread::Metrics;
 use crate::process::PID;
 use crate::values::Value;
 
@@ -39,5 +39,5 @@ pub struct ProcessMetric<T> where T: Value {
 }
 
 pub trait Probe {
-    fn probe_frame(&mut self, pids: &HashSet<PID>) -> Result<ProbedFrame, Error>;
+    fn probe_processes(&mut self, pids: &HashSet<PID>) -> Result<Metrics, Error>;
 }

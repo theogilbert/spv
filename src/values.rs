@@ -18,25 +18,25 @@ pub trait Value: Display + PartialOrd {
 
 /// Metric that has a value between 0 and 100
 #[derive(PartialEq, PartialOrd, Debug, Copy, Clone)]
-pub struct PercentValue {
+pub struct Percent {
     percent: f32
 }
 
-impl PercentValue {
+impl Percent {
     /// Returns a `PercentMetric`
     /// # Arguments
     ///  * `percent`: A percentage that must be between 0 and 100
-    pub fn new(percent: f32) -> Result<PercentValue> {
+    pub fn new(percent: f32) -> Result<Percent> {
         if percent < 0. || percent > 100. {
             Err(Error::InvalidPercentValue(percent))
         } else {
-            Ok(PercentValue { percent })
+            Ok(Percent { percent })
         }
     }
 }
 
 
-impl Value for PercentValue {
+impl Value for Percent {
     type ValueType = f32;
 
     fn value(&self) -> Self::ValueType {
@@ -44,7 +44,7 @@ impl Value for PercentValue {
     }
 }
 
-impl Display for PercentValue {
+impl Display for Percent {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{:.1}%", self.percent)
     }
@@ -56,7 +56,7 @@ mod test_percent_value {
 
     #[test]
     fn test_percent_metric_value() {
-        let percent_value = PercentValue::new(60.)
+        let percent_value = Percent::new(60.)
             .expect("Unexpected error when building PercentValue");
 
         assert_eq!(percent_value.value(), 60.);
@@ -64,19 +64,19 @@ mod test_percent_value {
 
     #[test]
     fn test_create_too_great_percent_value() {
-        assert_eq!(PercentValue::new(150.), Err(Error::InvalidPercentValue(150.)));
+        assert_eq!(Percent::new(150.), Err(Error::InvalidPercentValue(150.)));
     }
 
     #[test]
     fn test_create_negative_percent_value() {
-        assert_eq!(PercentValue::new(-1.), Err(Error::InvalidPercentValue(-1.)));
+        assert_eq!(Percent::new(-1.), Err(Error::InvalidPercentValue(-1.)));
     }
 
     #[test]
     fn test_percent_value_cmp() {
-        let lesser_val = PercentValue::new(10.)
+        let lesser_val = Percent::new(10.)
             .expect("Should be valid percent value");
-        let greater_val = PercentValue::new(60.)
+        let greater_val = Percent::new(60.)
             .expect("Should be valid percent value");
 
         assert!(lesser_val < greater_val);
@@ -85,7 +85,7 @@ mod test_percent_value {
 
     #[test]
     fn test_percent_value_fmt() {
-        let pv = PercentValue::new(55.)
+        let pv = Percent::new(55.)
             .expect("Should be a valid percent value");
 
         assert_eq!(format!("{}", pv), "55.0%");
@@ -95,21 +95,21 @@ mod test_percent_value {
 
 /// Metric that has a value in bits / seconds
 #[derive(PartialEq, PartialOrd, Debug, Clone)]
-pub struct BitrateValue {
+pub struct Bitrate {
     bitrate: u32
 }
 
 
-impl BitrateValue {
+impl Bitrate {
     /// Returns a `BitrateMetric`
     /// # Arguments
     ///  * `bitrate` A positive value indicating a bitrate in bits/second
-    pub fn new(bitrate: u32) -> BitrateValue {
-        BitrateValue { bitrate }
+    pub fn new(bitrate: u32) -> Bitrate {
+        Bitrate { bitrate }
     }
 }
 
-impl Value for BitrateValue {
+impl Value for Bitrate {
     type ValueType = u32;
 
     fn value(&self) -> Self::ValueType {
@@ -117,7 +117,7 @@ impl Value for BitrateValue {
     }
 }
 
-impl Display for BitrateValue {
+impl Display for Bitrate {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{} b/s", self.bitrate)
     }
@@ -129,15 +129,15 @@ mod test_bitrate_value {
 
     #[test]
     fn test_bitrate_metric_value() {
-        let bitrate_value = BitrateValue::new(294830958);
+        let bitrate_value = Bitrate::new(294830958);
 
         assert_eq!(bitrate_value.value(), 294830958);
     }
 
     #[test]
     fn test_bitrate_value_cmp() {
-        let lesser_val = BitrateValue::new(123456789);
-        let greater_val = BitrateValue::new(987654321);
+        let lesser_val = Bitrate::new(123456789);
+        let greater_val = Bitrate::new(987654321);
 
         assert!(lesser_val < greater_val);
         assert!(greater_val > lesser_val);
@@ -145,7 +145,7 @@ mod test_bitrate_value {
 
     #[test]
     fn test_bitrate_value_fmt() {
-        let brv = BitrateValue::new(123);
+        let brv = Bitrate::new(123);
 
         assert_eq!(format!("{}", brv), "123 b/s");
     }
