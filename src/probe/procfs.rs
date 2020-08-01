@@ -25,89 +25,134 @@ impl ToString for ProcfsError {
 }
 
 
-pub trait ReadSystemData<T> where T: SystemData + Sized {
-    fn read(&mut self) -> Result<T, ProcfsError>;
+pub trait ReadSystemData<D> where D: SystemData + Sized {
+    fn read(&mut self) -> Result<D, ProcfsError>;
 }
 
 
-pub trait ReadProcessData<T> where T: ProcessData + Sized {
-    fn read(&mut self, pid: PID) -> Result<T, ProcfsError>;
+pub trait ReadProcessData<D> where D: ProcessData + Sized {
+    fn read(&mut self, pid: PID) -> Result<D, ProcfsError>;
 }
 
 
 /// Reads data from procfs system files (directly in `/proc`)
-pub struct SystemDataReader<T> where T: SystemData + Sized {
-    reader: ProcfsReader<T>,
+pub struct SystemDataReader<D> where D: SystemData + Sized {
+    reader: ProcfsReader<D>,
 }
 
-impl<T> SystemDataReader<T> where T: SystemData + Sized {
+impl<D> SystemDataReader<D> where D: SystemData + Sized {
     pub fn new() -> Result<Self, ProcfsError> {
-        let reader = ProcfsReader::new(T::filepath().as_path())?;
+        let reader = ProcfsReader::new(D::filepath().as_path())?;
         Ok(SystemDataReader { reader })
     }
 }
 
-impl<T> ReadSystemData<T> for SystemDataReader<T> where T: SystemData + Sized {
-    fn read(&mut self) -> Result<T, ProcfsError> {
+impl<D> ReadSystemData<D> for SystemDataReader<D> where D: SystemData + Sized {
+    fn read(&mut self) -> Result<D, ProcfsError> {
         self.reader.read()
     }
 }
 
 /// Reads data from procfs files bound to a PID (in `/proc/[pid]/`)
-pub struct ProcessDataReader<T> where T: ProcessData + Sized {
+pub struct ProcessDataReader<D> where D: ProcessData + Sized {
     // TODO we should find a way to remove pid from readers when process dies
-    readers: HashMap<PID, ProcfsReader<T>>,
+    readers: HashMap<PID, ProcfsReader<D>>,
 }
 
-impl<T> ProcessDataReader<T> where T: ProcessData + Sized {
+impl<D> ProcessDataReader<D> where D: ProcessData + Sized {
     pub fn new() -> Self {
         ProcessDataReader { readers: HashMap::new() }
     }
 
-    fn get_process_reader(&mut self, pid: PID) -> Result<&mut ProcfsReader<T>, ProcfsError> {
+    fn get_process_reader(&mut self, pid: PID) -> Result<&mut ProcfsReader<D>, ProcfsError> {
         Ok(match self.readers.entry(pid) {
             Entry::Occupied(o) => o.into_mut(),
             Entry::Vacant(v) => v.insert({
-                ProcfsReader::new(T::filepath(pid).as_path())?
+                ProcfsReader::new(D::filepath(pid).as_path())?
             })
         })
     }
 }
 
-impl<T> ReadProcessData<T> for ProcessDataReader<T> where T: ProcessData + Sized {
-    fn read(&mut self, pid: u32) -> Result<T, ProcfsError> {
+impl<D> ReadProcessData<D> for ProcessDataReader<D> where D: ProcessData + Sized {
+    fn read(&mut self, pid: u32) -> Result<D, ProcfsError> {
         self.get_process_reader(pid)?
             .read()
     }
 }
 
 
-struct ProcfsReader<T> where T: Data + Sized {
-    file: File,
-    phantom: PhantomData<T>,
+struct ProcfsReader<D> where D: Data + Sized {
+    reader: DataReader<File, D>,
 }
 
-impl<T> ProcfsReader<T> where T: Data {
+impl<D> ProcfsReader<D> where D: Data + Sized {
     pub fn new(filepath: &Path) -> Result<Self, ProcfsError> {
         File::open(filepath)
             .map_err(|e| ProcfsError::IoError(e.to_string()))
-            .map(|file| Self { file, phantom: PhantomData })
+            .map(|file| Self { reader: DataReader::new(file) })
     }
 
-    pub fn read(&mut self) -> Result<T, ProcfsError> {
-        // rather than re-opening the file at each read, we just seek back the start of the file
-        self.file
+    pub fn read(&mut self) -> Result<D, ProcfsError> {
+        self.reader.read()
+    }
+}
+
+struct DataReader<R, D> where R: Read + Seek, D: Data + Sized {
+    src: R,
+    phantom: PhantomData<D>,
+}
+
+impl<R, D> DataReader<R, D> where R: Read + Seek, D: Data + Sized {
+    pub fn new(src: R) -> Self {
+        DataReader { src, phantom: PhantomData }
+    }
+
+    pub fn read(&mut self) -> Result<D, ProcfsError> {
+        self.src
             .seek(SeekFrom::Start(0))
             .map_err(|e| ProcfsError::IoError(e.to_string()))?;
 
         // Might be optimized, by not reallocating at each call
         let mut stat_content = String::new();
-        self.file.read_to_string(&mut stat_content)
+        self.src.read_to_string(&mut stat_content)
             .map_err(|io_err| ProcfsError::IoError(io_err.to_string()))?;
 
         let tp = TokenParser::new(&stat_content);
 
-        T::parse(&tp)
+        D::parse(&tp)
+    }
+}
+
+
+#[cfg(test)]
+mod test_data_reader {
+    use std::path::PathBuf;
+    use crate::probe::procfs::{DataReader, TokenParser, ProcfsError, Data};
+    use std::io::Cursor;
+
+    #[derive(PartialEq, Debug)]
+    struct TestSystemData {
+        field_1: u8,
+        field_2: i16,
+    }
+
+    impl Data for TestSystemData {
+        fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
+            Ok(TestSystemData {
+                field_1: token_parser.token(0, 0)?,
+                field_2: token_parser.token(0, 1)?,
+            })
+        }
+    }
+
+    #[test]
+    fn test_load_correctly_data() {
+        let data_src = Cursor::new(b"12 -92 abc");
+
+        let mut data_reader = DataReader::new(data_src);
+
+        assert_eq!(data_reader.read(), Ok(TestSystemData { field_1: 12, field_2: -92 }));
     }
 }
 
