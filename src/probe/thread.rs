@@ -48,8 +48,10 @@ impl ProbeRunner {
         loop {
             match self.parent_rx.recv() {
                 Ok(msg) => {
-                    if !self.handle_message(msg)? {
-                        break;
+                    match self.handle_message(msg) {
+                        Ok(()) => (),
+                        Err(Error::ThreadKilledError) => break,
+                        Err(e) => Err(e)?
                     }
                 }
                 Err(e) => Err(Error::MPSCError(e.to_string()))?
@@ -59,18 +61,15 @@ impl ProbeRunner {
         Ok(())
     }
 
-    // TODO Not a big fan of this whole "return false if msg is kill, else true"
-    fn handle_message(&mut self, msg: ProbeInput) -> Result<bool, Error> {
-        let mut ret_value = true;
-
+    fn handle_message(&mut self, msg: ProbeInput) -> Result<(), Error> {
         match msg {
-            ProbeInput::Kill() => ret_value = false,
+            ProbeInput::Kill() => Err(Error::ThreadKilledError)?,
             ProbeInput::AddProcess(pid) => { self.monitored_pids.insert(pid); }
             ProbeInput::DelProcess(pid) => { self.monitored_pids.remove(&pid); }
             ProbeInput::Probe() => self.probe()?,
         };
 
-        Ok(ret_value)
+        Ok(())
     }
 
     fn probe(&mut self) -> Result<(), Error> {

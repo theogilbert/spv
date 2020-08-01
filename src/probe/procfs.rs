@@ -127,9 +127,9 @@ impl<R, D> DataReader<R, D> where R: Read + Seek, D: Data + Sized {
 
 #[cfg(test)]
 mod test_data_reader {
-    use std::path::PathBuf;
-    use crate::probe::procfs::{DataReader, TokenParser, ProcfsError, Data};
     use std::io::Cursor;
+
+    use crate::probe::procfs::{Data, DataReader, ProcfsError, TokenParser};
 
     #[derive(PartialEq, Debug)]
     struct TestSystemData {

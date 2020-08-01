@@ -16,6 +16,7 @@ pub enum Error {
     IOError(String),
     ProbingError(String),
     MPSCError(String),
+    ThreadKilledError,
 }
 
 
@@ -24,7 +25,8 @@ impl ToString for Error {
         match self {
             Error::IOError(s) => format!("IO error: {}", s.clone()),
             Error::ProbingError(s) => format!("Probing error: {}", s.clone()),
-            Error::MPSCError(s) => format!("MSPC error: {}", s.clone())
+            Error::MPSCError(s) => format!("MSPC error: {}", s.clone()),
+            Error::ThreadKilledError => "The thread has been killed".to_string(),
         }
     }
 }
