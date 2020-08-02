@@ -2,11 +2,12 @@ use std::collections::HashSet;
 
 use crate::probe::dispatch::Metrics;
 use crate::process::PID;
-use crate::values::Value;
+use values::Value;
 
 mod cpu;
 mod dispatch;
 mod procfs;
+pub mod values;
 
 /// Errors related to probing
 #[derive(Debug, Eq, PartialEq, Clone)]

@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::probe::{Error, Probe, ProcessMetric};
 use crate::process::PID;
-use crate::values::{Bitrate, Percent};
+use crate::probe::values::{Bitrate, Percent};
 
 #[derive(PartialEq, Debug)]
 pub enum Metrics {
@@ -68,7 +68,7 @@ impl Frame {
 mod test_frame {
     use crate::probe::dispatch::{Frame, LabelledMetrics, Metrics};
     use crate::probe::ProcessMetric;
-    use crate::values::{Bitrate, Percent};
+    use crate::probe::values::{Bitrate, Percent};
 
     fn get_example_metrics() -> Vec<LabelledMetrics> {
         vec![
@@ -146,7 +146,7 @@ mod test_probe_dispatcher {
 
     use crate::probe::{Error, Probe, ProcessMetric};
     use crate::probe::dispatch::{Frame, LabelledMetrics, Metrics, ProbeDispatcher};
-    use crate::values::Percent;
+    use crate::probe::values::Percent;
 
     struct ProbeFake {
         value: Percent,

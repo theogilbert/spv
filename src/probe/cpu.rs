@@ -4,7 +4,7 @@ use crate::probe::{Error, Probe, ProcessMetric, procfs};
 use crate::probe::dispatch::Metrics;
 use crate::probe::procfs::{PidStat, ReadProcessData, ReadSystemData, Stat};
 use crate::process::PID;
-use crate::values::Percent;
+use crate::probe::values::Percent;
 
 pub struct CpuProbe<P, S> where P: ReadProcessData<PidStat>, S: ReadSystemData<Stat> {
     pid_stat_reader: P,
@@ -65,7 +65,7 @@ mod test_cpu_probe {
     use crate::probe::dispatch::Metrics;
     use crate::probe::procfs::{PidStat, ProcfsError, ReadProcessData, ReadSystemData, Stat};
     use crate::process::PID;
-    use crate::values::Percent;
+    use crate::probe::values::Percent;
     use crate::probe::cpu::CpuProbe;
 
     struct MemoryPidStatReader {
@@ -230,7 +230,7 @@ mod test_cpu_calculator {
     use crate::probe::cpu::common_test_utils::create_stat;
     use crate::probe::cpu::UsageCalculator;
     use crate::probe::procfs;
-    use crate::values::Percent;
+    use crate::probe::values::Percent;
 
     fn create_initialized_calc(elapsed_ticks: u64) -> UsageCalculator {
         let mut calc = UsageCalculator::new(create_stat(100));
