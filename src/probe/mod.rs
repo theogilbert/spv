@@ -1,8 +1,9 @@
 use std::collections::HashSet;
 
+use values::Value;
+
 use crate::probe::dispatch::Metrics;
 use crate::process::PID;
-use values::Value;
 
 mod cpu;
 mod dispatch;
@@ -10,8 +11,9 @@ mod procfs;
 pub mod values;
 
 /// Errors related to probing
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Error {
+    InvalidPercentValue(f32),
     IOError(String),
     ProbingError(String),
     MPSCError(String),
@@ -22,6 +24,7 @@ pub enum Error {
 impl ToString for Error {
     fn to_string(&self) -> String {
         match self {
+            Error::InvalidPercentValue(p) => format!("Invalid percent value: {}", *p),
             Error::IOError(s) => format!("IO error: {}", s.clone()),
             Error::ProbingError(s) => format!("Probing error: {}", s.clone()),
             Error::MPSCError(s) => format!("MSPC error: {}", s.clone()),

@@ -1,11 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::fmt;
 
-/// Errors related to metrics
-#[derive(Debug, PartialEq, Clone)]
-pub enum Error {
-    InvalidPercentValue(f32)
-}
+use crate::probe::Error;
 
 type Result<T> = std::result::Result<T, Error>;
 
