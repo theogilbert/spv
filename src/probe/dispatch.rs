@@ -12,9 +12,47 @@ pub enum Metrics {
 
 #[cfg(test)]
 impl Metrics {
+    fn get_pids_from_map<V>(map: &HashMap<PID, V>) -> HashSet<PID> where V: Value {
+        map.iter()
+            .map(|(pid, _)| *pid)
+            .collect()
+    }
 
-    fn get_pids(&self) -> &[PID] {
-        &[]
+    pub fn pids(&self) -> HashSet<PID> {
+        match self {
+            Self::Percents(map) => Self::get_pids_from_map(map),
+            Self::Bitrates(map) => Self::get_pids_from_map(map),
+        }
+    }
+}
+
+#[cfg(test)]
+mod test_metrics {
+    use crate::probe::dispatch::Metrics;
+    use crate::probe::values::{Bitrate, Percent};
+
+    #[test]
+    fn test_should_get_no_pid_with_empty_metrics() {
+        let metrics = vec![
+            Metrics::Bitrates(hashmap!()),
+            Metrics::Percents(hashmap!()),
+        ];
+
+        metrics.iter().for_each(|m| {
+            assert_eq!(m.pids(), hashset!());
+        });
+    }
+
+    #[test]
+    fn test_should_get_pids_with_non_empty_metrics() {
+        let metrics = vec![
+            Metrics::Bitrates(hashmap!(1 => Bitrate::new(50), 2 => Bitrate::new(75))),
+            Metrics::Percents(hashmap!(1 => Percent::new(50.).unwrap(), 2 => Percent::new(75.).unwrap())),
+        ];
+
+        metrics.iter().for_each(|m| {
+            assert_eq!(m.pids(), hashset!(1, 2));
+        });
     }
 }
 
