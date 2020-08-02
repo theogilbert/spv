@@ -1,22 +1,20 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::probe::{Error, Probe, ProcessMetric};
+use crate::probe::{Error, Probe};
 use crate::probe::values::{Bitrate, Percent, Value};
 use crate::process::PID;
 
 #[derive(PartialEq, Debug)]
 pub enum Metrics {
-    Percents(Vec<ProcessMetric<Percent>>),
-    Bitrates(Vec<ProcessMetric<Bitrate>>),
+    Percents(HashMap<PID, Percent>),
+    Bitrates(HashMap<PID, Bitrate>),
 }
 
 #[cfg(test)]
 impl Metrics {
-    fn sort_by_pid(&mut self) {
-        match self {
-            Metrics::Percents(pms) => pms.sort_by_key(|pm| pm.pid),
-            Metrics::Bitrates(pms) => pms.sort_by_key(|pm| pm.pid),
-        }
+
+    fn get_pids(&self) -> &[PID] {
+        &[]
     }
 }
 
@@ -37,10 +35,8 @@ impl LabelledMetrics {
     ///  * `metrics`: A slice of tuple, each containing the PID and its associated Percent value
     pub fn from_percents<L>(label: L, metrics: &[(PID, PercentType)]) -> Result<Self, Error>
         where L: Into<String> {
-        let process_metrics: Vec<ProcessMetric<_>> = metrics.iter()
-            .map(|(pid, pct_val)| {
-                Ok(ProcessMetric::new(*pid, Percent::new(*pct_val)?))
-            })
+        let process_metrics = metrics.iter()
+            .map(|(pid, pct_val)| Ok((*pid, Percent::new(*pct_val)?)))
             .collect::<Result<_, _>>()?;
 
         Ok(LabelledMetrics {
@@ -58,9 +54,7 @@ impl LabelledMetrics {
         LabelledMetrics {
             label: label.into(),
             metrics: Metrics::Bitrates(metrics.iter()
-                .map(|(pid, pct_val)| {
-                    ProcessMetric::new(*pid, Bitrate::new(*pct_val))
-                })
+                .map(|(pid, pct_val)| (*pid, Bitrate::new(*pct_val)))
                 .collect()),
         }
     }
@@ -97,17 +91,11 @@ impl Frame {
             lm1.label.as_str().cmp(&lm2.label)
         });
     }
-
-    fn sort_metrics_by_pid(&mut self) {
-        self.labelled_metrics.iter_mut()
-            .for_each(|lm| lm.metrics.sort_by_pid());
-    }
 }
 
 #[cfg(test)]
 mod test_frame {
     use crate::probe::dispatch::{Frame, LabelledMetrics, Metrics};
-    use crate::probe::ProcessMetric;
     use crate::probe::values::Percent;
 
     #[test]
@@ -123,17 +111,40 @@ mod test_frame {
 
     #[test]
     fn test_should_return_correct_values() {
-
         let metrics = vec![
             LabelledMetrics::from_percents("metrics_1", &[(123, 50.)]).unwrap(),
             LabelledMetrics::from_percents("metrics_2", &[(123, 100.)]).unwrap(),
         ];
 
-        assert_eq!(Frame::new(metrics).metrics("metrics_1"),
-                   Some(&Metrics::Percents(vec![ProcessMetric {
-                       pid: 123,
-                       value: Percent::new(50.).unwrap(),
-                   }])))
+        let frame = Frame::new(metrics);
+
+        assert_eq!(frame.metrics("metrics_1"),
+                   Some(&Metrics::Percents(hashmap!(123 => Percent::new(50.).unwrap()))));
+
+        assert_eq!(frame.metrics("metrics_2"),
+                   Some(&Metrics::Percents(hashmap!(123 => Percent::new(100.).unwrap()))));
+    }
+
+    #[test]
+    fn test_should_disregard_pids_not_in_all_metrics() {
+        let metrics = vec![
+            LabelledMetrics::from_percents("metrics_1", &[(1, 25.), (123, 50.)]).unwrap(),
+            LabelledMetrics::from_percents("metrics_2", &[(1, 18.5), (124, 100.)]).unwrap(),
+        ];
+
+        assert!(false);  // TODO go back to this test
+
+        // assert_eq!(frame.metrics("metrics_1"),
+        //            Some(&Metrics::Percents(vec![ProcessMetric {
+        //                pid: 123,
+        //                value: Percent::new(50.).unwrap(),
+        //            }])));
+        //
+        // assert_eq!(frame.metrics("metrics_2"),
+        //            Some(&Metrics::Percents(vec![ProcessMetric {
+        //                pid: 123,
+        //                value: Percent::new(100.).unwrap(),
+        //            }])));
     }
 }
 
@@ -182,7 +193,7 @@ impl ProbeDispatcher {
 mod test_probe_dispatcher {
     use std::collections::HashSet;
 
-    use crate::probe::{Error, Probe, ProcessMetric};
+    use crate::probe::{Error, Probe};
     use crate::probe::dispatch::{Frame, LabelledMetrics, Metrics, ProbeDispatcher};
     use crate::probe::values::Percent;
 
@@ -199,7 +210,7 @@ mod test_probe_dispatcher {
     impl Probe for ProbeFake {
         fn probe_processes(&mut self, pids: &HashSet<u32>) -> Result<Metrics, Error> {
             Ok(Metrics::Percents(pids.iter()
-                .map(|p| ProcessMetric::new(*p, self.value))
+                .map(|p| (*p, self.value))
                 .collect()))
         }
     }
@@ -246,7 +257,7 @@ mod test_probe_dispatcher {
         assert_eq!(dispatcher.frame()
                        .expect("No frame received")
                        .metrics("my-probe"),
-                   Some(&Metrics::Percents(vec![])));
+                   Some(&Metrics::Percents(hashmap!())));
     }
 
     #[test]
@@ -277,7 +288,6 @@ mod test_probe_dispatcher {
 
         let mut frame = dispatcher.frame().expect("Frame is none");
         frame.sort_by_label();
-        frame.sort_metrics_by_pid();
 
         assert_eq!(frame,
                    Frame::new(vec![

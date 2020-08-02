@@ -1,7 +1,5 @@
 use std::collections::HashSet;
 
-use values::Value;
-
 use crate::probe::dispatch::Metrics;
 use crate::process::PID;
 
@@ -30,19 +28,6 @@ impl ToString for Error {
             Error::MPSCError(s) => format!("MSPC error: {}", s.clone()),
             Error::ThreadKilledError => "The thread has been killed".to_string(),
         }
-    }
-}
-
-/// Contains a `Value` associated to a process
-#[derive(Debug, PartialEq, Clone)]
-pub struct ProcessMetric<T> where T: Value {
-    pid: PID,
-    value: T,
-}
-
-impl<T> ProcessMetric<T> where T: Value {
-    pub fn new(pid: PID, value: T) -> Self {
-        Self { pid, value }
     }
 }
 

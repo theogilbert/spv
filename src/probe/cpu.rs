@@ -1,10 +1,10 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::probe::{Error, Probe, ProcessMetric, procfs};
+use crate::probe::{Error, Probe, procfs};
 use crate::probe::dispatch::Metrics;
 use crate::probe::procfs::{PidStat, ReadProcessData, ReadSystemData, Stat};
-use crate::process::PID;
 use crate::probe::values::Percent;
+use crate::process::PID;
 
 pub struct CpuProbe<P, S> where P: ReadProcessData<PidStat>, S: ReadSystemData<Stat> {
     pid_stat_reader: P,
@@ -34,13 +34,12 @@ impl<P, S> CpuProbe<P, S> where P: ReadProcessData<PidStat>, S: ReadSystemData<S
         Ok(())
     }
 
-    fn probe(&mut self, pid: PID) -> Result<ProcessMetric<Percent>, Error> {
+    fn probe(&mut self, pid: PID) -> Result<Percent, Error> {
         let pid_stat = self.pid_stat_reader
             .read(pid)
             .map_err(|e| Error::ProbingError(e.to_string()))?;
 
-        let pct_value = self.calculator.calculate_pid_usage(pid, pid_stat)?;
-        Ok(ProcessMetric { pid, value: pct_value })
+        self.calculator.calculate_pid_usage(pid, pid_stat)
     }
 }
 
@@ -49,7 +48,11 @@ impl<P, S> Probe for CpuProbe<P, S> where P: ReadProcessData<PidStat>, S: ReadSy
         self.init_iteration()?;
 
         let metrics = pids.iter()
-            .filter_map(|p| self.probe(*p).ok())
+            .filter_map(|pid| {
+                self.probe(*pid)
+                    .ok()
+                    .and_then(|pct| Some((*pid, pct)))
+            })
             .collect();
 
         Ok(Metrics::Percents(metrics))
@@ -60,13 +63,13 @@ impl<P, S> Probe for CpuProbe<P, S> where P: ReadProcessData<PidStat>, S: ReadSy
 mod test_cpu_probe {
     use std::collections::{HashMap, HashSet};
 
-    use crate::probe::{Probe, ProcessMetric};
     use crate::probe::cpu::common_test_utils::{create_pid_stat, create_stat};
-    use crate::probe::dispatch::Metrics;
-    use crate::probe::procfs::{PidStat, ProcfsError, ReadProcessData, ReadSystemData, Stat};
-    use crate::process::PID;
-    use crate::probe::values::Percent;
     use crate::probe::cpu::CpuProbe;
+    use crate::probe::dispatch::Metrics;
+    use crate::probe::Probe;
+    use crate::probe::procfs::{PidStat, ProcfsError, ReadProcessData, ReadSystemData, Stat};
+    use crate::probe::values::Percent;
+    use crate::process::PID;
 
     struct MemoryPidStatReader {
         pid_stats_seq: HashMap<PID, Result<PidStat, ProcfsError>>
@@ -89,17 +92,6 @@ mod test_cpu_probe {
         }
     }
 
-    macro_rules! hashmap (
-    { $($key:expr => $value:expr),+ } => {
-        {
-            let mut m = ::std::collections::HashMap::new();
-            $(
-                m.insert($key, $value);
-            )+
-            m
-        }
-     });
-
     #[test]
     fn test_should_return_zero_metrics_when_no_pid() {
         let stat_reader = MemoryStatReader {
@@ -110,7 +102,7 @@ mod test_cpu_probe {
         let mut probe = CpuProbe::new(stat_reader, pid_stat_reader)
             .expect("Could not create probe");
 
-        assert_eq!(probe.probe_processes(&HashSet::new()), Ok(Metrics::Percents(vec![])));
+        assert_eq!(probe.probe_processes(&HashSet::new()), Ok(Metrics::Percents(hashmap!())));
     }
 
 
@@ -127,9 +119,7 @@ mod test_cpu_probe {
             .expect("Could not create probe");
 
         assert_eq!(probe.probe_processes(&vec![1].into_iter().collect()),
-                   Ok(Metrics::Percents(vec![
-                       ProcessMetric { pid: 1, value: Percent::new(50.).unwrap() }
-                   ])));
+                   Ok(Metrics::Percents(hashmap!(1 => Percent::new(50.).unwrap()))));
     }
 
 
@@ -145,17 +135,10 @@ mod test_cpu_probe {
         let mut probe = CpuProbe::new(stat_reader, pid_stat_reader)
             .expect("Could not create probe");
 
-        let metrics_ret = probe.probe_processes(&vec![1, 2].into_iter().collect());
-        if let Ok(Metrics::Percents(mut metrics)) = metrics_ret {
-            metrics.sort_by_key(|pm| pm.pid);
-
-            assert_eq!(metrics, vec![
-                ProcessMetric { pid: 1, value: Percent::new(25.).unwrap() },
-                ProcessMetric { pid: 2, value: Percent::new(25.).unwrap() },
-            ])
-        } else {
-            panic!("Invalid type of metrics");
-        }
+        let metrics = probe.probe_processes(&hashset!(1, 2)).unwrap();
+        assert_eq!(metrics,
+                   Metrics::Percents(hashmap!(1 => Percent::new(25.).unwrap(),
+                   2 => Percent::new(25.).unwrap())));
     }
 
 
@@ -174,9 +157,7 @@ mod test_cpu_probe {
             .expect("Could not create probe");
 
         assert_eq!(probe.probe_processes(&vec![1, 2].into_iter().collect()),
-                   Ok(Metrics::Percents(vec![
-                       ProcessMetric { pid: 1, value: Percent::new(25.).unwrap() },
-                   ])));
+                   Ok(Metrics::Percents(hashmap!(1 => Percent::new(25.).unwrap()))));
     }
 }
 
