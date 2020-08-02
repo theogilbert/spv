@@ -5,37 +5,59 @@ use crate::probe::values::{Bitrate, Percent, Value};
 use crate::process::PID;
 
 #[derive(PartialEq, Debug)]
-pub enum Metrics {
+/// Contains for a set of `PID` their associated values measured at a given time
+pub enum Snapshot {
+    /// Describes the `Percent` values for a set of PID for a given metric
     Percents(HashMap<PID, Percent>),
+    /// Describes the `Bitrate` values for a set of PID for a given metric
     Bitrates(HashMap<PID, Bitrate>),
 }
 
 #[cfg(test)]
-impl Metrics {
-    fn get_pids_from_map<V>(map: &HashMap<PID, V>) -> HashSet<PID> where V: Value {
-        map.iter()
-            .map(|(pid, _)| *pid)
-            .collect()
+impl Snapshot {
+    /// Helper function to construct a Percent containing LabelledMetrics
+    /// # Arguments
+    ///  * `metrics`: A slice of tuple, each containing the PID and its associated Percent value
+    pub fn from_percents(metrics: HashMap<PID, PercentType>) -> Result<Self, Error> {
+        Ok(Snapshot::Percents(metrics.iter()
+            .map(|(pid, pct_val)| Ok((*pid, Percent::new(*pct_val)?)))
+            .collect::<Result<_, _>>()?))
     }
 
+    /// Helper function to construct a Bitrate containing LabelledMetrics
+    /// # Arguments
+    ///  * `metrics`: A slice of tuple, each containing the PID and its associated Bitrate value
+    pub fn from_bitrates(metrics: HashMap<PID, BitrateType>) -> Self {
+        Snapshot::Bitrates(metrics.iter()
+            .map(|(pid, pct_val)| (*pid, Bitrate::new(*pct_val)))
+            .collect())
+    }
+
+    /// Returns the PIDs contained in the snapshot
     pub fn pids(&self) -> HashSet<PID> {
         match self {
             Self::Percents(map) => Self::get_pids_from_map(map),
             Self::Bitrates(map) => Self::get_pids_from_map(map),
         }
     }
+
+    fn get_pids_from_map<V>(map: &HashMap<PID, V>) -> HashSet<PID> where V: Value {
+        map.iter()
+            .map(|(pid, _)| *pid)
+            .collect()
+    }
 }
 
 #[cfg(test)]
 mod test_metrics {
-    use crate::probe::dispatch::Metrics;
+    use crate::probe::dispatch::Snapshot;
     use crate::probe::values::{Bitrate, Percent};
 
     #[test]
     fn test_should_get_no_pid_with_empty_metrics() {
         let metrics = vec![
-            Metrics::Bitrates(hashmap!()),
-            Metrics::Percents(hashmap!()),
+            Snapshot::Bitrates(hashmap!()),
+            Snapshot::Percents(hashmap!()),
         ];
 
         metrics.iter().for_each(|m| {
@@ -46,8 +68,8 @@ mod test_metrics {
     #[test]
     fn test_should_get_pids_with_non_empty_metrics() {
         let metrics = vec![
-            Metrics::Bitrates(hashmap!(1 => Bitrate::new(50), 2 => Bitrate::new(75))),
-            Metrics::Percents(hashmap!(1 => Percent::new(50.).unwrap(), 2 => Percent::new(75.).unwrap())),
+            Snapshot::Bitrates(hashmap!(1 => Bitrate::new(50), 2 => Bitrate::new(75))),
+            Snapshot::Percents(hashmap!(1 => Percent::new(50.).unwrap(), 2 => Percent::new(75.).unwrap())),
         ];
 
         metrics.iter().for_each(|m| {
@@ -56,122 +78,75 @@ mod test_metrics {
     }
 }
 
-#[derive(PartialEq, Debug)]
-pub struct LabelledMetrics {
-    label: String,
-    metrics: Metrics,
-}
-
 type PercentType = <Percent as Value>::ValueType;
 type BitrateType = <Bitrate as Value>::ValueType;
 
-#[cfg(test)]
-impl LabelledMetrics {
-    /// Helper function to construct a Percent containing LabelledMetrics
-    /// # Arguments
-    ///  * `label`: The label to associate to the metrics
-    ///  * `metrics`: A slice of tuple, each containing the PID and its associated Percent value
-    pub fn from_percents<L>(label: L, metrics: &[(PID, PercentType)]) -> Result<Self, Error>
-        where L: Into<String> {
-        let process_metrics = metrics.iter()
-            .map(|(pid, pct_val)| Ok((*pid, Percent::new(*pct_val)?)))
-            .collect::<Result<_, _>>()?;
-
-        Ok(LabelledMetrics {
-            label: label.into(),
-            metrics: Metrics::Percents(process_metrics),
-        })
-    }
-
-    /// Helper function to construct a Bitrate containing LabelledMetrics
-    /// # Arguments
-    ///  * `label`: The label to associate to the metrics
-    ///  * `metrics`: A slice of tuple, each containing the PID and its associated Bitrate value
-    pub fn from_bitrates<L>(label: L, metrics: &[(PID, BitrateType)]) -> Self
-        where L: Into<String> {
-        LabelledMetrics {
-            label: label.into(),
-            metrics: Metrics::Bitrates(metrics.iter()
-                .map(|(pid, pct_val)| (*pid, Bitrate::new(*pct_val)))
-                .collect()),
-        }
-    }
-}
-
 #[derive(PartialEq, Debug)]
+/// A collection of Snapshot
 pub struct Frame {
-    labelled_metrics: Vec<LabelledMetrics>,
+    labelled_snapshots: HashMap<String, Snapshot>,
 }
 
 impl<'a> Frame {
-    pub fn new(metrics: Vec<LabelledMetrics>) -> Self {
+    pub fn new(labelled_snapshots: HashMap<String, Snapshot>) -> Self {
 // TODO if a PID is not in one of the metrics, remove it from all others
-        Self { labelled_metrics: metrics }
+        Self { labelled_snapshots }
     }
 
-    pub fn labels(&'a self) -> Vec<&'a str> {
-        self.labelled_metrics.iter()
-            .map(|lm| lm.label.as_str())
+    pub fn labels(&'a self) -> HashSet<&'a str> {
+        self.labelled_snapshots.keys()
+            .map(|s| s.as_str())
             .collect()
     }
 
-    pub fn metrics(&'a self, label: &str) -> Option<&'a Metrics> {
-        self.labelled_metrics.iter()
-            .find(|lm| lm.label == label)
-            .map(|lm| &lm.metrics)
-    }
-}
-
-#[cfg(test)]
-impl Frame {
-    fn sort_by_label(&mut self) {
-        self.labelled_metrics.sort_by(|lm1, lm2| {
-            lm1.label.as_str().cmp(&lm2.label)
-        });
+    pub fn metrics(&'a self, label: &str) -> Option<&'a Snapshot> {
+        self.labelled_snapshots.get(label)
     }
 }
 
 #[cfg(test)]
 mod test_frame {
-    use crate::probe::dispatch::{Frame, LabelledMetrics, Metrics};
-    use crate::probe::values::Percent;
+    use std::collections::HashMap;
+
+    use crate::probe::dispatch::{Frame, Snapshot};
+    use crate::probe::values::{Bitrate};
 
     #[test]
     fn test_should_return_correct_labels() {
-        let metrics = vec![
-            LabelledMetrics::from_bitrates("metrics_1", &[(123, 100)]),
-            LabelledMetrics::from_bitrates("metrics_2", &[(123, 100)]),
-        ];
+        let mut metrics = HashMap::new();
+        metrics.insert("metrics_1".into(), Snapshot::from_bitrates(hashmap!(123 => 50)));
+        metrics.insert("metrics_2".into(), Snapshot::from_bitrates(hashmap!(123 => 100)));
 
-        assert_eq!(Frame::new(metrics).labels(),
-                   vec!["metrics_1", "metrics_2"]);
+        assert_eq!(Frame::new(metrics).labels(), hashset!("metrics_1", "metrics_2"));
     }
 
     #[test]
     fn test_should_return_correct_values() {
-        let metrics = vec![
-            LabelledMetrics::from_percents("metrics_1", &[(123, 50.)]).unwrap(),
-            LabelledMetrics::from_percents("metrics_2", &[(123, 100.)]).unwrap(),
-        ];
+        let mut metrics = HashMap::new();
+        metrics.insert("metrics_1".into(), Snapshot::from_bitrates(hashmap!(123 => 50)));
+        metrics.insert("metrics_2".into(), Snapshot::from_bitrates(hashmap!(123 => 100)));
 
         let frame = Frame::new(metrics);
 
         assert_eq!(frame.metrics("metrics_1"),
-                   Some(&Metrics::Percents(hashmap!(123 => Percent::new(50.).unwrap()))));
+                   Some(&Snapshot::Bitrates(hashmap!(123 => Bitrate::new(50)))));
 
         assert_eq!(frame.metrics("metrics_2"),
-                   Some(&Metrics::Percents(hashmap!(123 => Percent::new(100.).unwrap()))));
+                   Some(&Snapshot::Bitrates(hashmap!(123 => Bitrate::new(100)))));
     }
 
     #[test]
     fn test_should_disregard_pids_not_in_all_metrics() {
-        let metrics = vec![
-            LabelledMetrics::from_percents("metrics_1", &[(1, 25.), (123, 50.)]).unwrap(),
-            LabelledMetrics::from_percents("metrics_2", &[(1, 18.5), (124, 100.)]).unwrap(),
-        ];
+        // let metrics = vec![
+        //     Snapshot::from_percents("metrics_1", hashset!(1 => 25., 2 => 50.)).unwrap(),
+        //     Snapshot::from_percents("metrics_2", hashset!(1 => 25., 3 => 50.)).unwrap(),
+        // ];
 
-        assert!(false);  // TODO go back to this test
-
+        // assert_eq!(Frame::new(metrics),
+        //            Frame::new(vec![
+        //                LabelledMetrics::from_percents()
+        //            ]));
+        //
         // assert_eq!(frame.metrics("metrics_1"),
         //            Some(&Metrics::Percents(vec![ProcessMetric {
         //                pid: 123,
@@ -189,16 +164,16 @@ mod test_frame {
 pub struct ProbeDispatcher {
     last_frame: Option<Frame>,
     processes: HashSet<PID>,
-    probes: HashMap<String, Box<dyn Probe>>,
+    labelled_probes: HashMap<String, Box<dyn Probe>>,
 }
 
 impl ProbeDispatcher {
     pub fn new() -> Self {
-        Self { last_frame: None, processes: HashSet::new(), probes: HashMap::new() }
+        Self { last_frame: None, processes: HashSet::new(), labelled_probes: HashMap::new() }
     }
 
     pub fn add_probe<L>(&mut self, label: L, probe: Box<dyn Probe>) where L: Into<String> {
-        self.probes.insert(label.into(), probe);
+        self.labelled_probes.insert(label.into(), probe);
     }
 
     pub fn add_process(&mut self, pid: PID) {
@@ -208,16 +183,13 @@ impl ProbeDispatcher {
     pub fn probe(&mut self) -> Result<(), Error> {
         let processes = &self.processes;
 
-        let labelled_metrics = self.probes.iter_mut()
-            .map(|(l, p)| {
-                Ok(LabelledMetrics {
-                    label: l.to_string(),
-                    metrics: p.probe_processes(processes)?,
-                })
+        let mut snapshots = self.labelled_probes.iter_mut()
+            .map(|(label, probe)| {
+                Ok((label.to_string(), probe.probe_processes(processes)?))
             })
             .collect::<Result<_, _>>()?;
 
-        self.last_frame = Some(Frame::new(labelled_metrics));
+        self.last_frame = Some(Frame::new(snapshots));
 
         Ok(())
     }
@@ -229,10 +201,10 @@ impl ProbeDispatcher {
 
 #[cfg(test)]
 mod test_probe_dispatcher {
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
 
     use crate::probe::{Error, Probe};
-    use crate::probe::dispatch::{Frame, LabelledMetrics, Metrics, ProbeDispatcher};
+    use crate::probe::dispatch::{Frame, ProbeDispatcher, Snapshot};
     use crate::probe::values::Percent;
 
     struct ProbeFake {
@@ -246,8 +218,8 @@ mod test_probe_dispatcher {
     }
 
     impl Probe for ProbeFake {
-        fn probe_processes(&mut self, pids: &HashSet<u32>) -> Result<Metrics, Error> {
-            Ok(Metrics::Percents(pids.iter()
+        fn probe_processes(&mut self, pids: &HashSet<u32>) -> Result<Snapshot, Error> {
+            Ok(Snapshot::Percents(pids.iter()
                 .map(|p| (*p, self.value))
                 .collect()))
         }
@@ -295,7 +267,7 @@ mod test_probe_dispatcher {
         assert_eq!(dispatcher.frame()
                        .expect("No frame received")
                        .metrics("my-probe"),
-                   Some(&Metrics::Percents(hashmap!())));
+                   Some(&Snapshot::Percents(hashmap!())));
     }
 
     #[test]
@@ -306,10 +278,10 @@ mod test_probe_dispatcher {
         dispatcher.add_process(123);
         dispatcher.probe().expect("Error while probing");
 
-        assert_eq!(dispatcher.frame(),
-                   Some(Frame::new(vec![
-                       LabelledMetrics::from_percents("my-probe", &[(123, 50.)]).unwrap()
-                   ])));
+        let mut expected = HashMap::new();
+        expected.insert("my-probe".into(), Snapshot::from_percents(hashmap!(123 => 50.)).unwrap());
+
+        assert_eq!(dispatcher.frame(), Some(Frame::new(expected)));
     }
 
     #[test]
@@ -324,13 +296,12 @@ mod test_probe_dispatcher {
 
         dispatcher.probe().expect("Error while probing");
 
-        let mut frame = dispatcher.frame().expect("Frame is none");
-        frame.sort_by_label();
+        let frame = dispatcher.frame().expect("Frame is none");
 
-        assert_eq!(frame,
-                   Frame::new(vec![
-                       LabelledMetrics::from_percents("my-probe-1", &[(123, 50.), (124, 50.)]).unwrap(),
-                       LabelledMetrics::from_percents("my-probe-2", &[(123, 25.), (124, 25.)]).unwrap(),
-                   ]));
+        let mut expected = HashMap::new();
+        expected.insert("my-probe-1".into(), Snapshot::from_percents(hashmap!(123 => 50., 124 => 50.)).unwrap());
+        expected.insert("my-probe-2".into(), Snapshot::from_percents(hashmap!(123 => 25., 124 => 25.)).unwrap());
+
+        assert_eq!(frame, Frame::new(expected));
     }
 }

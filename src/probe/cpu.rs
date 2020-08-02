@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::probe::{Error, Probe, procfs};
-use crate::probe::dispatch::Metrics;
+use crate::probe::dispatch::Snapshot;
 use crate::probe::procfs::{PidStat, ReadProcessData, ReadSystemData, Stat};
 use crate::probe::values::Percent;
 use crate::process::PID;
@@ -44,7 +44,7 @@ impl<P, S> CpuProbe<P, S> where P: ReadProcessData<PidStat>, S: ReadSystemData<S
 }
 
 impl<P, S> Probe for CpuProbe<P, S> where P: ReadProcessData<PidStat>, S: ReadSystemData<Stat> {
-    fn probe_processes(&mut self, pids: &HashSet<PID>) -> Result<Metrics, Error> {
+    fn probe_processes(&mut self, pids: &HashSet<PID>) -> Result<Snapshot, Error> {
         self.init_iteration()?;
 
         let metrics = pids.iter()
@@ -55,7 +55,7 @@ impl<P, S> Probe for CpuProbe<P, S> where P: ReadProcessData<PidStat>, S: ReadSy
             })
             .collect();
 
-        Ok(Metrics::Percents(metrics))
+        Ok(Snapshot::Percents(metrics))
     }
 }
 
@@ -65,7 +65,7 @@ mod test_cpu_probe {
 
     use crate::probe::cpu::common_test_utils::{create_pid_stat, create_stat};
     use crate::probe::cpu::CpuProbe;
-    use crate::probe::dispatch::Metrics;
+    use crate::probe::dispatch::Snapshot;
     use crate::probe::Probe;
     use crate::probe::procfs::{PidStat, ProcfsError, ReadProcessData, ReadSystemData, Stat};
     use crate::probe::values::Percent;
@@ -102,7 +102,7 @@ mod test_cpu_probe {
         let mut probe = CpuProbe::new(stat_reader, pid_stat_reader)
             .expect("Could not create probe");
 
-        assert_eq!(probe.probe_processes(&HashSet::new()), Ok(Metrics::Percents(hashmap!())));
+        assert_eq!(probe.probe_processes(&HashSet::new()), Ok(Snapshot::Percents(hashmap!())));
     }
 
 
@@ -119,7 +119,7 @@ mod test_cpu_probe {
             .expect("Could not create probe");
 
         assert_eq!(probe.probe_processes(&vec![1].into_iter().collect()),
-                   Ok(Metrics::Percents(hashmap!(1 => Percent::new(50.).unwrap()))));
+                   Ok(Snapshot::Percents(hashmap!(1 => Percent::new(50.).unwrap()))));
     }
 
 
@@ -137,7 +137,7 @@ mod test_cpu_probe {
 
         let metrics = probe.probe_processes(&hashset!(1, 2)).unwrap();
         assert_eq!(metrics,
-                   Metrics::Percents(hashmap!(1 => Percent::new(25.).unwrap(),
+                   Snapshot::Percents(hashmap!(1 => Percent::new(25.).unwrap(),
                    2 => Percent::new(25.).unwrap())));
     }
 
@@ -157,7 +157,7 @@ mod test_cpu_probe {
             .expect("Could not create probe");
 
         assert_eq!(probe.probe_processes(&vec![1, 2].into_iter().collect()),
-                   Ok(Metrics::Percents(hashmap!(1 => Percent::new(25.).unwrap()))));
+                   Ok(Snapshot::Percents(hashmap!(1 => Percent::new(25.).unwrap()))));
     }
 }
 
