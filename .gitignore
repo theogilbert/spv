@@ -1,3 +1,7 @@
 /target
 Cargo.lock
 *.txt
+$CACHE_FILE$
+.gitignore
+*.xml
+*.iml
