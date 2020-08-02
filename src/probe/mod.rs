@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::probe::dispatch::Snapshot;
+use crate::probe::dispatch::Metrics;
 use crate::process::PID;
 
 mod cpu;
@@ -32,5 +32,5 @@ impl ToString for Error {
 }
 
 pub trait Probe {
-    fn probe_processes(&mut self, pids: &HashSet<PID>) -> Result<Snapshot, Error>;
+    fn probe_processes(&mut self, pids: &HashSet<PID>) -> Result<Metrics, Error>;
 }
