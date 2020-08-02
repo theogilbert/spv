@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::probe::{Error, Probe, ProcessMetric};
+use crate::probe::values::{Bitrate, Percent, Value};
 use crate::process::PID;
-use crate::probe::values::{Bitrate, Percent};
 
 #[derive(PartialEq, Debug)]
 pub enum Metrics {
@@ -26,6 +26,46 @@ pub struct LabelledMetrics {
     metrics: Metrics,
 }
 
+type PercentType = <Percent as Value>::ValueType;
+type BitrateType = <Bitrate as Value>::ValueType;
+
+#[cfg(test)]
+impl LabelledMetrics {
+    /// Helper function to construct a Percent containing LabelledMetrics
+    /// # Arguments
+    ///  * `label`: The label to associate to the metrics
+    ///  * `metrics`: A slice of tuple, each containing the PID and its associated Percent value
+    pub fn from_percents<L>(label: L, metrics: &[(PID, PercentType)]) -> Result<Self, Error>
+        where L: Into<String> {
+        let process_metrics: Vec<ProcessMetric<_>> = metrics.iter()
+            .map(|(pid, pct_val)| {
+                Ok(ProcessMetric::new(*pid, Percent::new(*pct_val)?))
+            })
+            .collect::<Result<_, _>>()?;
+
+        Ok(LabelledMetrics {
+            label: label.into(),
+            metrics: Metrics::Percents(process_metrics),
+        })
+    }
+
+    /// Helper function to construct a Bitrate containing LabelledMetrics
+    /// # Arguments
+    ///  * `label`: The label to associate to the metrics
+    ///  * `metrics`: A slice of tuple, each containing the PID and its associated Bitrate value
+    pub fn from_bitrates<L>(label: L, metrics: &[(PID, BitrateType)]) -> Self
+        where L: Into<String> {
+        LabelledMetrics {
+            label: label.into(),
+            metrics: Metrics::Bitrates(metrics.iter()
+                .map(|(pid, pct_val)| {
+                    ProcessMetric::new(*pid, Bitrate::new(*pct_val))
+                })
+                .collect()),
+        }
+    }
+}
+
 #[derive(PartialEq, Debug)]
 pub struct Frame {
     labelled_metrics: Vec<LabelledMetrics>,
@@ -33,7 +73,7 @@ pub struct Frame {
 
 impl<'a> Frame {
     pub fn new(metrics: Vec<LabelledMetrics>) -> Self {
-        // TODO if a PID is not in one of the metrics, remove it from all others
+// TODO if a PID is not in one of the metrics, remove it from all others
         Self { labelled_metrics: metrics }
     }
 
@@ -68,30 +108,28 @@ impl Frame {
 mod test_frame {
     use crate::probe::dispatch::{Frame, LabelledMetrics, Metrics};
     use crate::probe::ProcessMetric;
-    use crate::probe::values::{Bitrate, Percent};
-
-    fn get_example_metrics() -> Vec<LabelledMetrics> {
-        vec![
-            LabelledMetrics {
-                label: "metrics_1".to_string(),
-                metrics: Metrics::Percents(vec![ProcessMetric { pid: 123, value: Percent::new(50.).unwrap() }]),
-            },
-            LabelledMetrics {
-                label: "metrics_2".to_string(),
-                metrics: Metrics::Bitrates(vec![ProcessMetric { pid: 123, value: Bitrate::new(50) }]),
-            },
-        ]
-    }
+    use crate::probe::values::Percent;
 
     #[test]
     fn test_should_return_correct_labels() {
-        assert_eq!(Frame::new(get_example_metrics()).labels(),
+        let metrics = vec![
+            LabelledMetrics::from_bitrates("metrics_1", &[(123, 100)]),
+            LabelledMetrics::from_bitrates("metrics_2", &[(123, 100)]),
+        ];
+
+        assert_eq!(Frame::new(metrics).labels(),
                    vec!["metrics_1", "metrics_2"]);
     }
 
     #[test]
     fn test_should_return_correct_values() {
-        assert_eq!(Frame::new(get_example_metrics()).metrics("metrics_1"),
+
+        let metrics = vec![
+            LabelledMetrics::from_percents("metrics_1", &[(123, 50.)]).unwrap(),
+            LabelledMetrics::from_percents("metrics_2", &[(123, 100.)]).unwrap(),
+        ];
+
+        assert_eq!(Frame::new(metrics).metrics("metrics_1"),
                    Some(&Metrics::Percents(vec![ProcessMetric {
                        pid: 123,
                        value: Percent::new(50.).unwrap(),
@@ -221,13 +259,7 @@ mod test_probe_dispatcher {
 
         assert_eq!(dispatcher.frame(),
                    Some(Frame::new(vec![
-                       LabelledMetrics {
-                           label: "my-probe".to_string(),
-                           metrics: Metrics::Percents(vec![
-                               ProcessMetric::new(123,
-                                                  Percent::new(50.).unwrap())
-                           ]),
-                       }
+                       LabelledMetrics::from_percents("my-probe", &[(123, 50.)]).unwrap()
                    ])));
     }
 
@@ -249,24 +281,8 @@ mod test_probe_dispatcher {
 
         assert_eq!(frame,
                    Frame::new(vec![
-                       LabelledMetrics {
-                           label: "my-probe-1".to_string(),
-                           metrics: Metrics::Percents(vec![
-                               ProcessMetric::new(123,
-                                                  Percent::new(50.).unwrap()),
-                               ProcessMetric::new(124,
-                                                  Percent::new(50.).unwrap())
-                           ]),
-                       },
-                       LabelledMetrics {
-                           label: "my-probe-2".to_string(),
-                           metrics: Metrics::Percents(vec![
-                               ProcessMetric::new(123,
-                                                  Percent::new(25.).unwrap()),
-                               ProcessMetric::new(124,
-                                                  Percent::new(25.).unwrap())
-                           ]),
-                       },
+                       LabelledMetrics::from_percents("my-probe-1", &[(123, 50.), (124, 50.)]).unwrap(),
+                       LabelledMetrics::from_percents("my-probe-2", &[(123, 25.), (124, 25.)]).unwrap(),
                    ]));
     }
 }
