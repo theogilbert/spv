@@ -8,8 +8,6 @@ mod cpu;
 mod dispatch;
 mod procfs;
 
-pub type CpuProbe = cpu::CpuProbe;
-
 /// Errors related to probing
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Error {
