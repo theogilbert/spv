@@ -224,7 +224,6 @@ mod test_frame {
 /// Orchestrates multiple probes to produce a `Frame` instance on demand
 pub struct ProbeDispatcher {
     last_frame: Option<Frame>,
-    processes: HashSet<PID>,
     labelled_probes: HashMap<String, Box<dyn Probe>>,
 }
 
@@ -232,7 +231,7 @@ impl ProbeDispatcher {
     /// Returns a new instance of ProbeDispatcher. By default, this instance contains no probe
     /// and tracks no process
     pub fn new() -> Self {
-        Self { last_frame: None, processes: HashSet::new(), labelled_probes: HashMap::new() }
+        Self { last_frame: None, labelled_probes: HashMap::new() }
     }
 
     /// Adds a new probe to measure `Metrics` with.
@@ -243,28 +242,12 @@ impl ProbeDispatcher {
         self.labelled_probes.insert(label.into(), probe);
     }
 
-    /// Adds a new process to track
-    /// # Arguments
-    ///  * `pid`: The `PID` of the process to track
-    pub fn add_process(&mut self, pid: PID) {
-        self.processes.insert(pid);
-    }
-
-    /// Stops tracking a process
-    /// # Arguments
-    ///  * `pid`: The `PID` of the process to stop tracking
-    pub fn drop_process(&mut self, pid: PID) {
-        self.processes.remove(&pid);
-    }
-
     /// Using all probes, measures metrics for all tracked processes
     /// Returns an Error if a probe operation failed
-    pub fn probe(&mut self) -> Result<(), Error> {
-        let processes = &self.processes;
-
+    pub fn probe(&mut self, pids: &HashSet<PID>) -> Result<(), Error> {
         let metrics = self.labelled_probes.iter_mut()
             .map(|(label, probe)| {
-                Ok((label.to_string(), probe.probe_processes(processes)?))
+                Ok((label.to_string(), probe.probe_processes(pids)?))
             })
             .collect::<Result<_, _>>()?;
 
@@ -314,10 +297,10 @@ mod test_probe_dispatcher {
     }
 
     #[test]
-    fn test_should_collect_empty_frame_when_no_probe_or_process_added() {
+    fn test_should_collect_empty_frame_when_no_probe_added_and_no_process_tracked() {
         let mut dispatcher = ProbeDispatcher::new();
 
-        dispatcher.probe().expect("Error while probing");
+        dispatcher.probe(&hashset!()).expect("Error while probing");
 
         assert!(dispatcher.frame()
             .expect("No frame received")
@@ -329,8 +312,7 @@ mod test_probe_dispatcher {
     fn test_should_collect_empty_frame_when_no_probe_added() {
         let mut dispatcher = ProbeDispatcher::new();
 
-        dispatcher.add_process(123);
-        dispatcher.probe().expect("Error while probing");
+        dispatcher.probe(&hashset!(123)).expect("Error while probing");
 
         assert!(dispatcher.frame()
             .expect("No frame received")
@@ -339,27 +321,11 @@ mod test_probe_dispatcher {
     }
 
     #[test]
-    fn test_should_collect_empty_metrics_when_no_process_added() {
+    fn test_should_collect_empty_metrics_when_no_process_tracked() {
         let mut dispatcher = ProbeDispatcher::new();
 
         dispatcher.add_probe("my-probe", Box::new(ProbeFake::new(50.)));
-        dispatcher.probe().expect("Error while probing");
-
-        assert_eq!(dispatcher.frame()
-                       .expect("No frame received")
-                       .metrics("my-probe"),
-                   Some(&Metrics::Percents(hashmap!())));
-    }
-
-    #[test]
-    fn test_should_collect_empty_metrics_when_only_process_has_been_removed() {
-        let mut dispatcher = ProbeDispatcher::new();
-
-        dispatcher.add_process(123);
-        dispatcher.drop_process(123);
-
-        dispatcher.add_probe("my-probe", Box::new(ProbeFake::new(50.)));
-        dispatcher.probe().expect("Error while probing");
+        dispatcher.probe(&hashset!()).expect("Error while probing");
 
         assert_eq!(dispatcher.frame()
                        .expect("No frame received")
@@ -372,8 +338,7 @@ mod test_probe_dispatcher {
         let mut dispatcher = ProbeDispatcher::new();
 
         dispatcher.add_probe("my-probe", Box::new(ProbeFake::new(50.)));
-        dispatcher.add_process(123);
-        dispatcher.probe().expect("Error while probing");
+        dispatcher.probe(&hashset!(123)).expect("Error while probing");
 
         let mut expected = HashMap::new();
         expected.insert("my-probe".into(),
@@ -389,10 +354,7 @@ mod test_probe_dispatcher {
         dispatcher.add_probe("my-probe-1", Box::new(ProbeFake::new(50.)));
         dispatcher.add_probe("my-probe-2", Box::new(ProbeFake::new(25.)));
 
-        dispatcher.add_process(123);
-        dispatcher.add_process(124);
-
-        dispatcher.probe().expect("Error while probing");
+        dispatcher.probe(&hashset!(123, 124)).expect("Error while probing");
 
         let frame = dispatcher.frame().expect("Frame is none");
 
