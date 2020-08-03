@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
-use crate::probe::dispatch::Metrics;
+pub use crate::probe::dispatch::{Frame, Metrics, ProbeDispatcher};
+use crate::probe::procfs::{PidStat, ProcessDataReader, Stat, SystemDataReader};
 use crate::process::PID;
 
 mod cpu;
@@ -31,6 +32,13 @@ impl ToString for Error {
     }
 }
 
+/// A trait for the ability to measure metrics of processes given their `PIDs`
 pub trait Probe {
+    /// Returns a `Metrics` instance containing the measured metrics for the given `PIDs`
+    ///
+    /// This method might not return a metric value for all given processes, for instance if
+    /// probing one process produces an error.
+    /// # Arguments
+    ///  * `pids`: A set of `PIDs` to monitor
     fn probe_processes(&mut self, pids: &HashSet<PID>) -> Result<Metrics, Error>;
 }

@@ -5,7 +5,7 @@ use crate::probe::values::{Bitrate, Percent, Value};
 use crate::process::PID;
 
 #[derive(PartialEq, Debug)]
-/// Contains for a set of `PID` their associated values measured at a given time
+/// Contains a set of `PID` and its associated `Value` measured at a given time
 pub enum Metrics {
     /// Describes the `Percent` values for a set of PID for a given metric
     Percents(HashMap<PID, Percent>),
@@ -115,11 +115,12 @@ pub struct Frame {
 
 impl<'a> Frame {
     /// Returns a new Frame instance containing the given labelled metrics
-    /// # Arguments
-    ///  * `labelled_metrics`: A map associated to each `Metrics` instance a label
     ///
     /// The given metrics will be normalized. This means that if any `Metrics` contains a `PID` not
     /// present in any other `Metrics`, this `PID` will be discarded.
+    ///
+    /// # Arguments
+    ///  * `labelled_metrics`: A map associated to each `Metrics` instance a label
     pub fn new(labelled_metrics: HashMap<String, Metrics>) -> Self {
         Self { labelled_metrics: Self::normalize_metrics(labelled_metrics) }
     }
@@ -234,7 +235,7 @@ impl ProbeDispatcher {
         Self { last_frame: None, processes: HashSet::new(), labelled_probes: HashMap::new() }
     }
 
-    /// Adds a new probe to measure `Metrics` with
+    /// Adds a new probe to measure `Metrics` with.
     /// # Arguments
     ///  * `label`: The label to associate to the `Metrics` produced by the probe
     ///  * `probe`: A boxed Probe instance, used to collect `Metrics` of processes
@@ -244,14 +245,20 @@ impl ProbeDispatcher {
 
     /// Adds a new process to track
     /// # Arguments
+    ///  * `pid`: The `PID` of the process to track
     pub fn add_process(&mut self, pid: PID) {
         self.processes.insert(pid);
     }
 
+    /// Stops tracking a process
+    /// # Arguments
+    ///  * `pid`: The `PID` of the process to stop tracking
     pub fn drop_process(&mut self, pid: PID) {
         self.processes.remove(&pid);
     }
 
+    /// Using all probes, measures metrics for all tracked processes
+    /// Returns an Error if a probe operation failed
     pub fn probe(&mut self) -> Result<(), Error> {
         let processes = &self.processes;
 
@@ -266,6 +273,8 @@ impl ProbeDispatcher {
         Ok(())
     }
 
+    /// Consumes and returns the last `Frame` measure by `probe()`, or `None` if no frame has been
+    /// probed since the last `frame()` call
     pub fn frame(&mut self) -> Option<Frame> {
         self.last_frame.take()
     }
