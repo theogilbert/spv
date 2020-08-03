@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 
 pub use crate::probe::dispatch::{Frame, Metrics, ProbeDispatcher};
-use crate::probe::procfs::{PidStat, ProcessDataReader, Stat, SystemDataReader};
 use crate::process::PID;
 
 mod cpu;
