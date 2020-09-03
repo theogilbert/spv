@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::probe::{Error, Probe};
 use crate::probe::values::{Bitrate, Percent, Value};
-use crate::process::PID;
+use crate::probe::process::PID;
 
 #[derive(PartialEq, Debug)]
 /// Contains a set of `PID` and its associated `Value` measured at a given time
@@ -34,6 +34,8 @@ impl Metrics {
     }
 }
 
+
+// TODO implement a sorted_by_metric() -> Vec::<PID> method
 impl Metrics {
     /// Returns the PIDs which has an associated metric
     pub fn pids(&self) -> HashSet<PID> {
@@ -113,7 +115,7 @@ pub struct Frame {
     labelled_metrics: HashMap<String, Metrics>,
 }
 
-impl<'a> Frame {
+impl Frame {
     /// Returns a new Frame instance containing the given labelled metrics
     ///
     /// The given metrics will be normalized. This means that if any `Metrics` contains a `PID` not
@@ -144,7 +146,7 @@ impl<'a> Frame {
     }
 
     /// Returns the labels of the metrics from this frame
-    pub fn labels(&'a self) -> HashSet<&'a str> {
+    pub fn labels(&self) -> HashSet<&str> {
         self.labelled_metrics.keys()
             .map(|s| s.as_str())
             .collect()
@@ -154,7 +156,7 @@ impl<'a> Frame {
     /// A `Metrics` instances contains a metric for a set of processes
     /// # Arguments
     ///  * `label`: The name associated to the `Metrics`
-    pub fn metrics(&'a self, label: &str) -> Option<&'a Metrics> {
+    pub fn metrics(&self, label: &str) -> Option<&Metrics> {
         self.labelled_metrics.get(label)
     }
 }

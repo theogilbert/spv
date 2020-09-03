@@ -4,7 +4,7 @@ use crate::probe::{Error, Probe, procfs};
 use crate::probe::dispatch::Metrics;
 use crate::probe::procfs::{PidStat, ProcessDataReader, ReadProcessData, ReadSystemData, Stat, SystemDataReader};
 use crate::probe::values::Percent;
-use crate::process::PID;
+use crate::probe::process::PID;
 
 /// Probe implementation to measure the CPU usage (in percent) of processes///
 pub struct CpuProbe {
@@ -78,7 +78,7 @@ mod test_cpu_probe {
     use crate::probe::Probe;
     use crate::probe::procfs::{PidStat, ProcfsError, ReadProcessData, ReadSystemData, Stat};
     use crate::probe::values::Percent;
-    use crate::process::PID;
+    use crate::probe::process::PID;
 
     struct MemoryPidStatReader {
         pid_stats_seq: HashMap<PID, Result<PidStat, ProcfsError>>

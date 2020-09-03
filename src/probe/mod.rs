@@ -1,12 +1,13 @@
 use std::collections::HashSet;
 
-pub use crate::probe::dispatch::{Frame, Metrics, ProbeDispatcher};
-use crate::process::PID;
+use process::PID;
 
+pub use crate::probe::dispatch::{Frame, Metrics, ProbeDispatcher};
 mod cpu;
 mod dispatch;
 mod procfs;
 pub mod values;
+pub mod process;
 
 /// Errors related to probing
 #[derive(Debug, PartialEq, Clone)]

@@ -5,7 +5,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
-use crate::process::PID;
+use crate::probe::process::PID;
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum ProcfsError {
