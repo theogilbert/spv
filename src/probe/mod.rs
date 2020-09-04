@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use process::PID;
 
-pub use crate::probe::dispatch::{Frame, Metrics, ProbeDispatcher};
+pub use crate::probe::dispatch::{MetricSet, Metrics, ProbeDispatcher};
 mod cpu;
 mod dispatch;
 mod procfs;
@@ -15,8 +15,6 @@ pub enum Error {
     InvalidPercentValue(f32),
     IOError(String),
     ProbingError(String),
-    MPSCError(String),
-    ThreadKilledError,
 }
 
 
@@ -26,8 +24,6 @@ impl ToString for Error {
             Error::InvalidPercentValue(p) => format!("Invalid percent value: {}", *p),
             Error::IOError(s) => format!("IO error: {}", s.clone()),
             Error::ProbingError(s) => format!("Probing error: {}", s.clone()),
-            Error::MPSCError(s) => format!("MSPC error: {}", s.clone()),
-            Error::ThreadKilledError => "The thread has been killed".to_string(),
         }
     }
 }
