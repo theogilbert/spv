@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::probe::{Error, Probe};
-use crate::probe::values::{Bitrate, Percent, Value};
 use crate::probe::process::PID;
+use crate::probe::values::{Bitrate, Percent, Value};
 
 #[derive(PartialEq, Debug)]
 /// Contains a set of `PID` and its associated `Value` measured at a given time
@@ -111,12 +111,12 @@ type BitrateType = <Bitrate as Value>::ValueType;
 
 #[derive(PartialEq, Debug)]
 /// A collection of `Metrics`
-pub struct Frame {
+pub struct MetricSet {
     labelled_metrics: HashMap<String, Metrics>,
 }
 
-impl Frame {
-    /// Returns a new Frame instance containing the given labelled metrics
+impl MetricSet {
+    /// Returns a new MetricSet instance containing the given labelled metrics
     ///
     /// The given metrics will be normalized. This means that if any `Metrics` contains a `PID` not
     /// present in any other `Metrics`, this `PID` will be discarded.
@@ -145,7 +145,7 @@ impl Frame {
         labelled_metrics
     }
 
-    /// Returns the labels of the metrics from this frame
+    /// Returns the labels of the metrics from this metric_set
     pub fn labels(&self) -> HashSet<&str> {
         self.labelled_metrics.keys()
             .map(|s| s.as_str())
@@ -162,10 +162,10 @@ impl Frame {
 }
 
 #[cfg(test)]
-mod test_frame {
+mod test_metric_set {
     use std::collections::HashMap;
 
-    use crate::probe::dispatch::{Frame, Metrics};
+    use crate::probe::dispatch::{MetricSet, Metrics};
     use crate::probe::values::Bitrate;
 
     #[test]
@@ -174,7 +174,7 @@ mod test_frame {
         metrics.insert("metrics_1".into(), Metrics::from_bitrates(hashmap!(123 => 50)));
         metrics.insert("metrics_2".into(), Metrics::from_bitrates(hashmap!(123 => 100)));
 
-        assert_eq!(Frame::new(metrics).labels(), hashset!("metrics_1", "metrics_2"));
+        assert_eq!(MetricSet::new(metrics).labels(), hashset!("metrics_1", "metrics_2"));
     }
 
     #[test]
@@ -183,12 +183,12 @@ mod test_frame {
         metrics.insert("metrics_1".into(), Metrics::from_bitrates(hashmap!(123 => 50)));
         metrics.insert("metrics_2".into(), Metrics::from_bitrates(hashmap!(123 => 100)));
 
-        let frame = Frame::new(metrics);
+        let metric_set = MetricSet::new(metrics);
 
-        assert_eq!(frame.metrics("metrics_1"),
+        assert_eq!(metric_set.metrics("metrics_1"),
                    Some(&Metrics::Bitrates(hashmap!(123 => Bitrate::new(50)))));
 
-        assert_eq!(frame.metrics("metrics_2"),
+        assert_eq!(metric_set.metrics("metrics_2"),
                    Some(&Metrics::Bitrates(hashmap!(123 => Bitrate::new(100)))));
     }
 
@@ -197,9 +197,9 @@ mod test_frame {
         let mut metrics = HashMap::new();
         metrics.insert("metrics".into(), Metrics::from_bitrates(hashmap!(123 => 50)));
 
-        let frame = Frame::new(metrics);
+        let metric_set = MetricSet::new(metrics);
 
-        assert_eq!(frame.metrics("metrics_invalid"), None);
+        assert_eq!(metric_set.metrics("metrics_invalid"), None);
     }
 
     #[test]
@@ -212,20 +212,19 @@ mod test_frame {
         metrics.insert("metrics_3".into(),
                        Metrics::from_percents(hashmap!(2 => 30., 3 => 60.)).unwrap());
 
-        let frame = Frame::new(metrics);
+        let metric_set = MetricSet::new(metrics);
 
-        assert_eq!(frame.metrics("metrics_1"),
+        assert_eq!(metric_set.metrics("metrics_1"),
                    Some(&Metrics::from_percents(hashmap!(2 => 50.)).unwrap()));
-        assert_eq!(frame.metrics("metrics_2"),
+        assert_eq!(metric_set.metrics("metrics_2"),
                    Some(&Metrics::from_percents(hashmap!(2 => 55.)).unwrap()));
-        assert_eq!(frame.metrics("metrics_3"),
+        assert_eq!(metric_set.metrics("metrics_3"),
                    Some(&Metrics::from_percents(hashmap!(2 => 30.)).unwrap()));
     }
 }
 
-/// Orchestrates multiple probes to produce a `Frame` instance on demand
+/// Orchestrates multiple probes to produce a `MetricSet` instance on demand
 pub struct ProbeDispatcher {
-    last_frame: Option<Frame>,
     labelled_probes: HashMap<String, Box<dyn Probe>>,
 }
 
@@ -233,7 +232,7 @@ impl ProbeDispatcher {
     /// Returns a new instance of ProbeDispatcher. By default, this instance contains no probe
     /// and tracks no process
     pub fn new() -> Self {
-        Self { last_frame: None, labelled_probes: HashMap::new() }
+        Self { labelled_probes: HashMap::new() }
     }
 
     /// Adds a new probe to measure `Metrics` with.
@@ -246,22 +245,14 @@ impl ProbeDispatcher {
 
     /// Using all probes, measures metrics for all tracked processes
     /// Returns an Error if a probe operation failed
-    pub fn probe(&mut self, pids: &HashSet<PID>) -> Result<(), Error> {
+    pub fn probe(&mut self, pids: &HashSet<PID>) -> Result<MetricSet, Error> {
         let metrics = self.labelled_probes.iter_mut()
             .map(|(label, probe)| {
                 Ok((label.to_string(), probe.probe_processes(pids)?))
             })
             .collect::<Result<_, _>>()?;
 
-        self.last_frame = Some(Frame::new(metrics));
-
-        Ok(())
-    }
-
-    /// Consumes and returns the last `Frame` measure by `probe()`, or `None` if no frame has been
-    /// probed since the last `frame()` call
-    pub fn frame(&mut self) -> Option<Frame> {
-        self.last_frame.take()
+        Ok(MetricSet::new(metrics))
     }
 }
 
@@ -270,7 +261,7 @@ mod test_probe_dispatcher {
     use std::collections::{HashMap, HashSet};
 
     use crate::probe::{Error, Probe};
-    use crate::probe::dispatch::{Frame, Metrics, ProbeDispatcher};
+    use crate::probe::dispatch::{MetricSet, Metrics, ProbeDispatcher};
     use crate::probe::values::Percent;
 
     struct ProbeFake {
@@ -292,34 +283,23 @@ mod test_probe_dispatcher {
     }
 
     #[test]
-    fn test_should_collect_nothing_when_probe_not_called() {
+    fn test_should_collect_empty_metric_set_when_no_probe_added_and_no_process_tracked() {
         let mut dispatcher = ProbeDispatcher::new();
 
-        assert_eq!(dispatcher.frame(), None);
+        let metric_set = dispatcher.probe(&hashset!())
+            .expect("Error while probing");
+
+        assert!(metric_set.labels().is_empty());
     }
 
     #[test]
-    fn test_should_collect_empty_frame_when_no_probe_added_and_no_process_tracked() {
+    fn test_should_collect_empty_metric_set_when_no_probe_added() {
         let mut dispatcher = ProbeDispatcher::new();
 
-        dispatcher.probe(&hashset!()).expect("Error while probing");
+        let metric_set = dispatcher.probe(&hashset!(123))
+            .expect("Error while probing");
 
-        assert!(dispatcher.frame()
-            .expect("No frame received")
-            .labels()
-            .is_empty());
-    }
-
-    #[test]
-    fn test_should_collect_empty_frame_when_no_probe_added() {
-        let mut dispatcher = ProbeDispatcher::new();
-
-        dispatcher.probe(&hashset!(123)).expect("Error while probing");
-
-        assert!(dispatcher.frame()
-            .expect("No frame received")
-            .labels()
-            .is_empty());
+        assert!(metric_set.labels().is_empty());
     }
 
     #[test]
@@ -327,38 +307,38 @@ mod test_probe_dispatcher {
         let mut dispatcher = ProbeDispatcher::new();
 
         dispatcher.add_probe("my-probe", Box::new(ProbeFake::new(50.)));
-        dispatcher.probe(&hashset!()).expect("Error while probing");
+        let metric_set = dispatcher.probe(&hashset!())
+            .expect("Error while probing");
 
-        assert_eq!(dispatcher.frame()
-                       .expect("No frame received")
-                       .metrics("my-probe"),
+        assert_eq!(metric_set.metrics("my-probe"),
                    Some(&Metrics::Percents(hashmap!())));
     }
 
     #[test]
-    fn test_should_collect_one_frame_when_one_probe_added() {
+    fn test_should_collect_one_metric_set_when_one_probe_added() {
         let mut dispatcher = ProbeDispatcher::new();
 
         dispatcher.add_probe("my-probe", Box::new(ProbeFake::new(50.)));
-        dispatcher.probe(&hashset!(123)).expect("Error while probing");
+        let metric_set = dispatcher.probe(&hashset!(123))
+            .expect("Error while probing");
 
         let mut expected = HashMap::new();
         expected.insert("my-probe".into(),
                         Metrics::from_percents(hashmap!(123 => 50.)).unwrap());
 
-        assert_eq!(dispatcher.frame(), Some(Frame::new(expected)));
+        assert_eq!(metric_set, Some(MetricSet::new(expected)));
     }
 
     #[test]
-    fn test_should_collect_correct_frame_with_two_probes_and_two_processes() {
+    fn test_should_collect_correct_metric_set_with_two_probes_and_two_processes() {
         let mut dispatcher = ProbeDispatcher::new();
 
         dispatcher.add_probe("my-probe-1", Box::new(ProbeFake::new(50.)));
         dispatcher.add_probe("my-probe-2", Box::new(ProbeFake::new(25.)));
 
-        dispatcher.probe(&hashset!(123, 124)).expect("Error while probing");
+        let metric_set = dispatcher.probe(&hashset!(123, 124))
+            .expect("Error while probing");
 
-        let frame = dispatcher.frame().expect("Frame is none");
 
         let mut expected = HashMap::new();
         expected.insert("my-probe-1".into(),
@@ -366,6 +346,6 @@ mod test_probe_dispatcher {
         expected.insert("my-probe-2".into(),
                         Metrics::from_percents(hashmap!(123 => 25., 124 => 25.)).unwrap());
 
-        assert_eq!(frame, Frame::new(expected));
+        assert_eq!(metric_set, MetricSet::new(expected));
     }
 }
