@@ -9,8 +9,12 @@ use tui::style::{Color, Modifier, Style};
 use tui::Terminal;
 use tui::widgets::{Block, Borders, List, ListItem, ListState, StatefulWidget, Widget};
 
-use crate::probe::Frame;
+use crate::probe::MetricSet;
 use crate::probe::process::{PID, ProcessMetadata};
+
+pub enum Error {
+    InputError(String)
+}
 
 pub struct FrameRenderer {
     terminal: Terminal<TermionBackend<RawTerminal<Stdout>>>,
@@ -25,7 +29,10 @@ impl FrameRenderer {
         Ok(FrameRenderer { terminal })
     }
 
-    pub fn render(&mut self, frame: Frame) {
+    pub fn render(&mut self, frame: MetricSet) {
         println!("Rendering frame..");
     }
 }
+
+
+pub mod input;
