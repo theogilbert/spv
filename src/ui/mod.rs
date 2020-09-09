@@ -2,37 +2,37 @@ use std::io;
 use std::io::Stdout;
 
 use termion::raw::{IntoRawMode, RawTerminal};
+use tui::{Frame, Terminal};
 use tui::backend::TermionBackend;
 use tui::buffer::Buffer;
-use tui::layout::Rect;
+use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
-use tui::Terminal;
-use tui::widgets::{Block, Borders, List, ListItem, ListState, StatefulWidget, Widget};
+use tui::text::Spans;
+use tui::widgets::{Block, Borders, BorderType, List, ListItem, ListState, StatefulWidget, Tabs, Widget};
 
+use crate::app::TuiBackend;
 use crate::probe::MetricSet;
 use crate::probe::process::{PID, ProcessMetadata};
+use crate::ui::layout::UiLayout;
+use crate::ui::tabs::MetricTabs;
 
-pub enum Error {
-    InputError(String)
-}
+pub mod layout;
+pub mod tabs;
 
 pub struct FrameRenderer {
-    terminal: Terminal<TermionBackend<RawTerminal<Stdout>>>,
+    tabs: MetricTabs,
 }
 
 impl FrameRenderer {
-    pub fn new() -> Result<FrameRenderer, io::Error> {
-        let stdout = io::stdout().into_raw_mode()?;
-        let backend = TermionBackend::new(stdout);
-        let terminal = Terminal::new(backend)?;
-
-        Ok(FrameRenderer { terminal })
+    pub fn new() -> Self {
+        Self {
+            tabs: MetricTabs::new(vec!["CPU Usage".to_string()])
+        }
     }
 
-    pub fn render(&mut self, frame: MetricSet) {
-        println!("Rendering frame..");
+    pub fn render(&mut self, frame: &mut Frame<TuiBackend>) {
+        let layout = UiLayout::new(frame);
+
+        frame.render_widget(self.tabs.refreshed_tabs(), layout.tabs_chunk());
     }
 }
-
-
-pub mod input;
