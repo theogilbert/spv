@@ -23,21 +23,37 @@ impl InputListener {
             let key = key_ret.map_err(|e| Error::InputError(e.to_string()))?;
 
             match key {
-                Key::Ctrl(c) => {
-                    if c == 'c' || c == 'd' {
-                        self.send(Trigger::Exit);
-                        break;
-                    }
-                }
+                Key::Ctrl(c) => self.on_ctrl_key_pressed(c),
+                Key::Char(c) => self.on_key_pressed(c),
                 _ => ()
             }
 
             if self.exit {
-                break
+                break;
             }
         }
 
         Ok(())
+    }
+
+    fn on_ctrl_key_pressed(&mut self, key: char) {
+        match key {
+            'c' => self.send_exit(),
+            'd' => self.send_exit(),
+            _ => ()
+        }
+    }
+
+    fn on_key_pressed(&mut self, key: char) {
+        match key {
+            'q' => self.send_exit(),
+            _ => ()
+        }
+    }
+
+    fn send_exit(&mut self) {
+        self.send(Trigger::Exit);
+        self.exit = true;
     }
 
     fn send(&mut self, trigger: Trigger) {
