@@ -34,10 +34,10 @@ impl TriggersEmitter {
             let mut pulse = Pulse::new(impulse_period);
 
             loop {
-                pulse.pulse();
                 if let Err(_) = sender.send(Trigger::Impulse) {
                     break
                 }
+                pulse.pulse();
             }
         });
     }
