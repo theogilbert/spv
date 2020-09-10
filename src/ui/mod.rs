@@ -14,19 +14,24 @@ use crate::app::TuiBackend;
 use crate::probe::MetricSet;
 use crate::probe::process::{PID, ProcessMetadata};
 use crate::ui::layout::UiLayout;
+use crate::ui::processes::ProcessList;
 use crate::ui::tabs::MetricTabs;
 
-pub mod layout;
-pub mod tabs;
+// Tabs, ProcessList etc... should not leak. FrameRenderer will have next_tab() etc... methods
+mod layout;
+mod tabs;
+mod processes;
 
 pub struct FrameRenderer {
     tabs: MetricTabs,
+    processes: ProcessList,
 }
 
 impl FrameRenderer {
     pub fn new() -> Self {
         Self {
-            tabs: MetricTabs::new(vec!["CPU Usage".to_string()])
+            tabs: MetricTabs::new(vec!["CPU Usage".to_string()]),
+            processes: ProcessList::new(),
         }
     }
 
@@ -34,5 +39,9 @@ impl FrameRenderer {
         let layout = UiLayout::new(frame);
 
         frame.render_widget(self.tabs.refreshed_tabs(), layout.tabs_chunk());
+
+        let (processes_widget, mut processes_state) = self.processes.refreshed_list(&[]);
+
+        frame.render_stateful_widget(processes_widget, layout.processes_chunk(), &mut processes_state);
     }
 }
