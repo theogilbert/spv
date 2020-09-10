@@ -1,6 +1,6 @@
 use tui::widgets::{List, ListItem, ListState, Block, Borders};
 
-use crate::probe::process::{PID, ProcessMetadata};
+use crate::probe::process::ProcessMetadata;
 use tui::style::{Style, Modifier, Color};
 
 
@@ -13,7 +13,7 @@ impl ProcessList {
     }
 
     pub fn refreshed_list<'a>(&self, processes: &'a [ProcessMetadata]) -> (List<'a>, ListState) {
-        let mut state = ListState::default();
+        let state = ListState::default();
 
         let labels: Vec<ListItem> = processes.iter()
             .map(|pm| ListItem::new(pm.command()))

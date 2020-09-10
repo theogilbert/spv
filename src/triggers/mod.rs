@@ -24,7 +24,7 @@ impl TriggersEmitter {
 
     pub fn launch_async(sender: Sender<Trigger>, impulse_period: Duration) {
         let impulse_sender = sender.clone();
-        let input_sender = sender.clone();
+        let input_sender = sender;
 
         Self::pop_impulse_thread(impulse_sender, impulse_period);
         Self::pop_input_thread(input_sender);
@@ -35,7 +35,7 @@ impl TriggersEmitter {
             let mut pulse = Pulse::new(impulse_period);
 
             loop {
-                if let Err(_) = sender.send(Trigger::Impulse) {
+                if sender.send(Trigger::Impulse).is_err() {
                     break
                 }
                 pulse.pulse();
@@ -45,8 +45,9 @@ impl TriggersEmitter {
 
     fn pop_input_thread(sender: Sender<Trigger>) {
         thread::spawn(move || {
-            let mut listener = InputListener::new(sender);
-            listener.listen().ok();  // if an error occurs, we simply exit the thread..
+            InputListener::new(sender)
+                .listen()
+                .ok();  // if an error occurs, we simply exit the thread..
         });
     }
 }

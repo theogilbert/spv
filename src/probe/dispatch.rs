@@ -13,6 +13,10 @@ pub enum Metrics {
     Bitrates(HashMap<PID, Bitrate>),
 }
 
+
+type PercentType = <Percent as Value>::ValueType;
+type BitrateType = <Bitrate as Value>::ValueType;
+
 #[cfg(test)]
 impl Metrics {
     /// Helper function to construct a Percent containing LabelledMetrics
@@ -106,9 +110,6 @@ mod test_metrics {
     }
 }
 
-type PercentType = <Percent as Value>::ValueType;
-type BitrateType = <Bitrate as Value>::ValueType;
-
 #[derive(PartialEq, Debug)]
 /// A collection of `Metrics`
 pub struct MetricSet {
@@ -165,7 +166,7 @@ impl MetricSet {
 mod test_metric_set {
     use std::collections::HashMap;
 
-    use crate::probe::dispatch::{MetricSet, Metrics};
+    use crate::probe::dispatch::{Metrics, MetricSet};
     use crate::probe::values::Bitrate;
 
     #[test]
@@ -228,13 +229,15 @@ pub struct ProbeDispatcher {
     labelled_probes: HashMap<String, Box<dyn Probe>>,
 }
 
-impl ProbeDispatcher {
+impl Default for ProbeDispatcher {
     /// Returns a new instance of ProbeDispatcher. By default, this instance contains no probe
     /// and tracks no process
-    pub fn new() -> Self {
+    fn default() -> Self {
         Self { labelled_probes: HashMap::new() }
     }
+}
 
+impl ProbeDispatcher {
     /// Adds a new probe to measure `Metrics` with.
     /// # Arguments
     ///  * `label`: The label to associate to the `Metrics` produced by the probe
@@ -261,7 +264,7 @@ mod test_probe_dispatcher {
     use std::collections::{HashMap, HashSet};
 
     use crate::probe::{Error, Probe};
-    use crate::probe::dispatch::{MetricSet, Metrics, ProbeDispatcher};
+    use crate::probe::dispatch::{Metrics, MetricSet, ProbeDispatcher};
     use crate::probe::values::Percent;
 
     struct ProbeFake {

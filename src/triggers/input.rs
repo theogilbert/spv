@@ -57,7 +57,7 @@ impl InputListener {
     }
 
     fn send(&mut self, trigger: Trigger) {
-        if let Err(_) = self.sender.send(trigger) {
+        if self.sender.send(trigger).is_err() {
             self.exit = true;
         }
     }

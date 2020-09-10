@@ -11,37 +11,28 @@ use crate::ui::FrameRenderer;
 
 pub type TuiBackend = TermionBackend<RawTerminal<Stdout>>;
 
+#[derive(Debug)]
 pub enum Error {
     MpscError(String),
     IOError(String),
 }
 
-pub struct SpvContext;
-
-
-impl SpvContext {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
 
 pub struct SpvApplication {
     receiver: Receiver<Trigger>,
-    context: SpvContext,
 }
 
 
 impl SpvApplication {
-    pub fn new(receiver: Receiver<Trigger>, context: SpvContext) -> Self {
-        Self { receiver, context }
+    pub fn new(receiver: Receiver<Trigger>) -> Self {
+        Self { receiver }
     }
 
     pub fn run(self) -> Result<(), Error> {
-        Self::nice_screen_clear();
+        Self::nice_screen_clear().ok();
 
         let mut terminal = SpvApplication::init_terminal()?;
-        let mut renderer = FrameRenderer::new();
+        let mut renderer = FrameRenderer::default();
 
         loop {
             let trigger = self.receiver.recv()
@@ -56,12 +47,13 @@ impl SpvApplication {
                     // How to pass all required info to renderer ?
                     //  - it accesses it itself as it has references to MetricsArchive and ProcessSnapshot
                     //  - the informations are passed as parameters to render
-                    terminal.draw(|f| renderer.render(f));
+                    terminal.draw(|f| renderer.render(f))
+                        .map_err(|e| Error::IOError(e.to_string()))?;
                 }
             }
         }
 
-        terminal.clear();
+        terminal.clear().ok();
 
         Ok(())
     }

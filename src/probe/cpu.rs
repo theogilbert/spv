@@ -60,7 +60,7 @@ impl Probe for CpuProbe {
             .filter_map(|pid| {
                 self.probe(*pid)
                     .ok()
-                    .and_then(|pct| Some((*pid, pct)))
+                    .map(|pct| (*pid, pct))
             })
             .collect();
 

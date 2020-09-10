@@ -1,10 +1,6 @@
-use tui::buffer::Buffer;
-use tui::layout::Rect;
 use tui::style::{Color, Style};
 use tui::text::Spans;
-use tui::widgets::{Tabs, Widget};
-use tui::Frame;
-use crate::app::TuiBackend;
+use tui::widgets::Tabs;
 
 pub struct MetricTabs {
     selected_index: usize,
