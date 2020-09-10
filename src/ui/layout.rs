@@ -14,9 +14,9 @@ impl UiLayout {
             .direction(Direction::Vertical)
             .constraints(
                 [
-                    Constraint::Length(1),
-                    Constraint::Percentage(100),
-                    Constraint::Length(1),
+                    Constraint::Length(1),  // tabs constraint
+                    Constraint::Percentage(100),  // center region constraint
+                    Constraint::Length(1), // metadata constraint
                 ].as_ref()
             )
             .split(frame.size());
@@ -25,8 +25,8 @@ impl UiLayout {
             .direction(Direction::Horizontal)
             .constraints(
                 [
-                    Constraint::Length(10),
-                    Constraint::Percentage(100),
+                    Constraint::Length(20),  // Processes constraint
+                    Constraint::Percentage(100),  // graph constraint
                 ].as_ref()
             )
             .split(*main_chunks.get(1).unwrap());
