@@ -15,7 +15,7 @@ impl UiLayout {
             .constraints(
                 [
                     Constraint::Length(1),  // tabs constraint
-                    Constraint::Percentage(100),  // center region constraint
+                    Constraint::Min(1),  // center region constraint
                     Constraint::Length(1), // metadata constraint
                 ].as_ref()
             )
@@ -26,7 +26,7 @@ impl UiLayout {
             .constraints(
                 [
                     Constraint::Length(20),  // Processes constraint
-                    Constraint::Percentage(100),  // graph constraint
+                    Constraint::Min(1),  // graph constraint
                 ].as_ref()
             )
             .split(*main_chunks.get(1).unwrap());
@@ -42,7 +42,7 @@ impl UiLayout {
         self.center_chunks[0]
     }
 
-    pub fn graph_chunk(&self) -> Rect {
+    pub fn chart_chunk(&self) -> Rect {
         self.center_chunks[1]
     }
 
