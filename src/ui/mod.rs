@@ -15,14 +15,14 @@ mod processes;
 mod chart;
 mod metadata;
 
-pub struct FrameRenderer {
+pub struct SpvUI {
     tabs: MetricTabs,
     processes: ProcessList,
     chart: MetricsChart,
     metadata_bar: MetadataBar,
 }
 
-impl Default for FrameRenderer {
+impl Default for SpvUI {
     fn default() -> Self {
         Self {
             tabs: MetricTabs::new(vec!["CPU Usage".to_string()]),
@@ -33,15 +33,19 @@ impl Default for FrameRenderer {
     }
 }
 
-impl FrameRenderer {
+impl SpvUI {
     pub fn render(&mut self, frame: &mut Frame<TuiBackend>) {
         let layout = UiLayout::new(frame);
 
         self.metadata_bar.set_selected_process(ProcessMetadata::new(1234, "ping"));
 
         self.tabs.render(frame, layout.tabs_chunk());
-        self.processes.render(frame, layout.processes_chunk(), &[]);
+        self.processes.render(frame, layout.processes_chunk());
         self.chart.render(frame, layout.chart_chunk());
         self.metadata_bar.render(frame, layout.metadata_chunk());
+    }
+
+    pub fn set_processes(&mut self, processes: Vec<ProcessMetadata>) {
+        self.processes.set_processes(processes);
     }
 }

@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use crate::core::Error;
+use crate::probes::process::ProcfsScanner;
 
 /// On Linux 64 bits, the maximum value for a PID is 4194304, hence u32
 pub type PID = u32;
@@ -35,6 +36,28 @@ impl ProcessMetadata {
     }
 }
 
+
+/// Lists the running processes
+pub struct ProcessView {
+    scanner: Box<dyn ProcessScanner>
+}
+
+impl Default for ProcessView {
+    fn default() -> Self {
+        Self {
+            scanner: Box::new(ProcfsScanner::new())
+        }
+    }
+}
+
+impl ProcessView {
+    pub fn processes(&self) -> Vec<ProcessMetadata> {
+        vec![ProcessMetadata::new(1, "initd"),
+             ProcessMetadata::new(2, "ping"),
+             ProcessMetadata::new(3, "spv"),
+        ]
+    }
+}
 
 /// Trait with methods to retrieve basic information about running processes
 pub trait ProcessScanner {

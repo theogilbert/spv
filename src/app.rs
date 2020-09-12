@@ -7,7 +7,8 @@ use tui::backend::TermionBackend;
 use tui::Terminal;
 
 use crate::triggers::Trigger;
-use crate::ui::FrameRenderer;
+use crate::ui::SpvUI;
+use crate::core::process_view::ProcessView;
 
 pub type TuiBackend = TermionBackend<RawTerminal<Stdout>>;
 
@@ -32,7 +33,10 @@ impl SpvApplication {
         Self::nice_screen_clear().ok();
 
         let mut terminal = SpvApplication::init_terminal()?;
-        let mut renderer = FrameRenderer::default();
+        let mut renderer = SpvUI::default();
+
+        let process_view = ProcessView::default();
+        renderer.set_processes(process_view.processes());
 
         loop {
             let trigger = self.receiver.recv()
