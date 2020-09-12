@@ -1,7 +1,10 @@
+use tui::{Frame, symbols};
+use tui::layout::Rect;
 use tui::style::{Color, Style};
-use tui::symbols;
-use tui::widgets::{Axis, Block, Borders, Chart, Dataset, GraphType};
 use tui::text::Span;
+use tui::widgets::{Axis, Block, Borders, Chart, Dataset, GraphType};
+
+use crate::app::TuiBackend;
 
 pub struct MetricsChart;
 
@@ -11,24 +14,27 @@ impl Default for MetricsChart {
     }
 }
 
+// TODO specify resolution in seconds (e.g. resolution=1 means 1 second <-> 1 character)
 impl MetricsChart {
-    pub fn generate_data(&self) -> Vec<(f64, f64)> {
+    fn generate_data(&self) -> Vec<(f64, f64)> {
         (0..1000)
             .map(|i| (i as f64) * 0.01)
             .map(|i| (i, i.cos()))
             .collect()
     }
 
-    pub fn refreshed_chart<'a>(&self, cmd: &'a str, data: &'a [(f64, f64)]) -> Chart<'a> {
+    pub fn render(&self, frame: &mut Frame<TuiBackend>, chunk: Rect) {
+        let data = self.generate_data();
+
         let dataset = vec![
             Dataset::default()
-                .name(cmd)
+                .name("ping")
                 .marker(symbols::Marker::Braille)
                 .graph_type(GraphType::Line)
-                .data(data),
+                .data(&data),
         ];
 
-        Chart::new(dataset)
+        let chart = Chart::new(dataset)
             .block(Block::default()
                 .borders(Borders::TOP | Borders::RIGHT | Borders::BOTTOM))
             .x_axis(Axis::default()
@@ -40,6 +46,9 @@ impl MetricsChart {
                 .title("%")
                 .style(Style::default().fg(Color::White))
                 .bounds([-2., 2.]) // 0 to max(dataset.y)
-                .labels(["-2.0", "0.0", "2.0"].iter().cloned().map(Span::from).collect()))
+                .labels(["-2.0", "0.0", "2.0"].iter().cloned().map(Span::from).collect()));
+
+        frame.render_widget(chart, chunk);
     }
+
 }

@@ -1,19 +1,20 @@
-use tui::widgets::{List, ListItem, ListState, Block, Borders};
+use tui::Frame;
+use tui::layout::Rect;
+use tui::style::{Color, Modifier, Style};
+use tui::widgets::{Block, Borders, List, ListItem, ListState};
 
+use crate::app::TuiBackend;
 use crate::probe::process::ProcessMetadata;
-use tui::style::{Style, Modifier, Color};
 
-
-pub struct ProcessList{
-}
+pub struct ProcessList {}
 
 impl ProcessList {
     pub fn new() -> Self {
         Self {}
     }
 
-    pub fn refreshed_list<'a>(&self, processes: &'a [ProcessMetadata]) -> (List<'a>, ListState) {
-        let state = ListState::default();
+    pub fn render<'a>(&self, frame: &mut Frame<TuiBackend>, chunk: Rect, processes: &'a [ProcessMetadata]) {
+        let mut state = ListState::default();
 
         let labels: Vec<ListItem> = processes.iter()
             .map(|pm| ListItem::new(pm.command()))
@@ -24,6 +25,6 @@ impl ProcessList {
             .style(Style::default().fg(Color::White))
             .highlight_style(Style::default().add_modifier(Modifier::ITALIC));
 
-        (list, state)
+        frame.render_stateful_widget(list, chunk, &mut state);
     }
 }

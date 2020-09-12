@@ -1,8 +1,11 @@
+use tui::Frame;
+use tui::layout::Rect;
+use tui::style::{Color, Style};
 use tui::text::Span;
 use tui::widgets::Paragraph;
 
+use crate::app::TuiBackend;
 use crate::probe::process::ProcessMetadata;
-use tui::style::{Style, Color};
 
 pub struct MetadataBar;
 
@@ -13,8 +16,11 @@ impl Default for MetadataBar {
 }
 
 impl MetadataBar {
-    pub fn refreshed_metadata<'a>(&self) -> Paragraph {
-        Paragraph::new(Span::raw("34951 z3tyop ping www.google.fr"))
-            .style(Style::default().fg(Color::White))
+    pub fn render(&self, frame: &mut Frame<TuiBackend>, chunk: Rect) {
+        let text = "34951 z3tyop ping www.google.fr";
+        let paragraph = Paragraph::new(Span::raw(text))
+            .style(Style::default().fg(Color::White));
+
+        frame.render_widget(paragraph, chunk);
     }
 }

@@ -36,16 +36,9 @@ impl FrameRenderer {
     pub fn render(&mut self, frame: &mut Frame<TuiBackend>) {
         let layout = UiLayout::new(frame);
 
-        frame.render_widget(self.tabs.refreshed_tabs(), layout.tabs_chunk());
-
-        let (processes_widget, mut processes_state) = self.processes.refreshed_list(&[]);
-
-        frame.render_stateful_widget(processes_widget, layout.processes_chunk(), &mut processes_state);
-
-
-        frame.render_widget(self.chart.refreshed_chart("ping", &self.chart.generate_data()),
-                            layout.chart_chunk());
-
-        frame.render_widget(self.metadata_bar.refreshed_metadata(), layout.metadata_chunk());
+        self.tabs.render(frame, layout.tabs_chunk());
+        self.processes.render(frame, layout.processes_chunk(), &[]);
+        self.chart.render(frame, layout.chart_chunk());
+        self.metadata_bar.render(frame, layout.metadata_chunk());
     }
 }
