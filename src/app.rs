@@ -46,11 +46,27 @@ impl SpvApplication {
 
             match trigger {
                 Trigger::Exit => break,
-                Trigger::Impulse => self.on_impulse()?
+                Trigger::Impulse => self.on_impulse()?,
+                Trigger::NextProcess => {
+                    self.ui.next_process();
+                    self.draw_ui();
+                }
+                Trigger::PreviousProcess => {
+                    self.ui.previous_process();
+                    self.draw_ui();
+                }
             }
         }
 
         self.terminal.clear().ok();
+
+        Ok(())
+    }
+
+    fn draw_ui(&mut self) -> Result<(), Error>{
+        let ui = &mut self.ui;
+        self.terminal.draw(|f| ui.render(f))
+            .map_err(|e| Error::IOError(e.to_string()))?;
 
         Ok(())
     }
@@ -65,9 +81,7 @@ impl SpvApplication {
 
         self.ui.set_processes(self.process_view.processes());
 
-        let ui = &mut self.ui;
-        self.terminal.draw(|f| ui.render(f))
-            .map_err(|e| Error::IOError(e.to_string()))?;
+        self.draw_ui()?;
 
         Ok(())
     }

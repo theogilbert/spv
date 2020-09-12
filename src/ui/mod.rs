@@ -26,7 +26,7 @@ impl Default for SpvUI {
     fn default() -> Self {
         Self {
             tabs: MetricTabs::new(vec!["CPU Usage".to_string()]),
-            processes: ProcessList::new(),
+            processes: ProcessList::default(),
             chart: MetricsChart::default(),
             metadata_bar: MetadataBar::default(),
         }
@@ -37,8 +37,6 @@ impl SpvUI {
     pub fn render(&mut self, frame: &mut Frame<TuiBackend>) {
         let layout = UiLayout::new(frame);
 
-        self.metadata_bar.set_selected_process(ProcessMetadata::new(1234, "ping"));
-
         self.tabs.render(frame, layout.tabs_chunk());
         self.processes.render(frame, layout.processes_chunk());
         self.chart.render(frame, layout.chart_chunk());
@@ -47,5 +45,16 @@ impl SpvUI {
 
     pub fn set_processes(&mut self, processes: Vec<ProcessMetadata>) {
         self.processes.set_processes(processes);
+        self.metadata_bar.set_selected_process(self.processes.selected());
+    }
+
+    pub fn next_process(&mut self) {
+        self.processes.next();
+        self.metadata_bar.set_selected_process(self.processes.selected());
+    }
+
+    pub fn previous_process(&mut self) {
+        self.processes.previous();
+        self.metadata_bar.set_selected_process(self.processes.selected());
     }
 }

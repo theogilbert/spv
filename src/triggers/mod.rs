@@ -15,6 +15,8 @@ pub enum Error {
 pub enum Trigger {
     Exit,
     Impulse,
+    NextProcess,
+    PreviousProcess,
 }
 
 pub struct TriggersEmitter;

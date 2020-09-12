@@ -8,30 +8,32 @@ use crate::app::TuiBackend;
 use crate::core::process_view::ProcessMetadata;
 
 pub struct MetadataBar {
-    current_process: Option<ProcessMetadata>,
+    current_text: String,
 }
 
 impl Default for MetadataBar {
     fn default() -> Self {
         Self {
-            current_process: None
+            current_text: Self::build_text(None)
         }
     }
 }
 
 impl MetadataBar {
-    fn build_paragraph(&self) -> Paragraph {
-        let text = match self.current_process.as_ref() {
+    fn build_text(process: Option<&ProcessMetadata>) -> String {
+        match process.as_ref() {
             None => "No process is currently selected".to_string(),
             Some(pm) => format!("{} - {}", pm.pid(), pm.command()),
-        };
+        }
+    }
 
-        Paragraph::new(Span::raw(text))
+    fn build_paragraph(&self) -> Paragraph {
+        Paragraph::new(Span::raw(self.current_text.as_str()))
             .style(Style::default().fg(Color::White))
     }
 
-    pub fn set_selected_process(&mut self, process_data: ProcessMetadata) {
-        self.current_process = Some(process_data);
+    pub fn set_selected_process(&mut self, process_data: Option<&ProcessMetadata>) {
+        self.current_text = Self::build_text(process_data);
     }
 
     pub fn render(&self, frame: &mut Frame<TuiBackend>, chunk: Rect) {
