@@ -6,9 +6,9 @@ use termion::raw::{IntoRawMode, RawTerminal};
 use tui::backend::TermionBackend;
 use tui::Terminal;
 
+use crate::core::process_view::ProcessView;
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
-use crate::core::process_view::ProcessView;
 
 pub type TuiBackend = TermionBackend<RawTerminal<Stdout>>;
 
@@ -21,22 +21,24 @@ pub enum Error {
 
 pub struct SpvApplication {
     receiver: Receiver<Trigger>,
+    terminal: Terminal<TuiBackend>,
+    process_view: ProcessView,
+    ui: SpvUI,
 }
 
 
 impl SpvApplication {
-    pub fn new(receiver: Receiver<Trigger>) -> Self {
-        Self { receiver }
+    pub fn new(receiver: Receiver<Trigger>) -> Result<Self, Error> {
+        Ok(Self {
+            receiver,
+            terminal: SpvApplication::init_terminal()?,
+            process_view: ProcessView::default(),
+            ui: SpvUI::default(),
+        })
     }
 
-    pub fn run(self) -> Result<(), Error> {
+    pub fn run(mut self) -> Result<(), Error> {
         Self::nice_screen_clear().ok();
-
-        let mut terminal = SpvApplication::init_terminal()?;
-        let mut renderer = SpvUI::default();
-
-        let process_view = ProcessView::default();
-        renderer.set_processes(process_view.processes());
 
         loop {
             let trigger = self.receiver.recv()
@@ -44,20 +46,28 @@ impl SpvApplication {
 
             match trigger {
                 Trigger::Exit => break,
-                Trigger::Impulse => {
-                    // 1. Get processes
-                    // 2. Probe metrics for all processes
-                    // 3. Render
-                    // How to pass all required info to renderer ?
-                    //  - it accesses it itself as it has references to MetricsArchive and ProcessSnapshot
-                    //  - the informations are passed as parameters to render
-                    terminal.draw(|f| renderer.render(f))
-                        .map_err(|e| Error::IOError(e.to_string()))?;
-                }
+                Trigger::Impulse => self.on_impulse()?
             }
         }
 
-        terminal.clear().ok();
+        self.terminal.clear().ok();
+
+        Ok(())
+    }
+
+    fn on_impulse(&mut self) -> Result<(), Error> {
+        // 1. Get processes
+        // 2. Probe metrics for all processes
+        // 3. Render
+        // How to pass all required info to renderer ?
+        //  - it accesses it itself as it has references to MetricsArchive and ProcessSnapshot
+        //  - the informations are passed as parameters to render
+
+        self.ui.set_processes(self.process_view.processes());
+
+        let ui = &mut self.ui;
+        self.terminal.draw(|f| ui.render(f))
+            .map_err(|e| Error::IOError(e.to_string()))?;
 
         Ok(())
     }
