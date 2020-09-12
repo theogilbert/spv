@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
-use process::PID;
+pub use crate::probes::dispatch::{MetricSet, Metrics, ProbeDispatcher};
+use crate::core::process_view::PID;
 
-pub use crate::probe::dispatch::{MetricSet, Metrics, ProbeDispatcher};
 mod cpu;
 mod dispatch;
 mod procfs;

@@ -3,8 +3,8 @@ use std::fs::{DirEntry, File, read_dir};
 use std::io::Read;
 use std::path::PathBuf;
 
-/// On Linux 64 bits, the theoretical maximum value for a PID is 4194304, hence u32
-pub type PID = u32;
+use crate::core::Error as CoreError;
+use crate::core::process_view::{PID, ProcessMetadata, ProcessScanner};
 
 /// Errors internal to the process module
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -15,51 +15,18 @@ pub enum Error {
     InvalidPID,
 }
 
+impl Into<CoreError> for Error {
+    fn into(self) -> CoreError {
+        match self {
+            Error::InvalidPID => CoreError::ReadMetadataError("Invalid PID".to_string()),
+            Error::NotProcessDir => CoreError::ReadMetadataError("Invalid proc dir".to_string()),
+            Error::ProcessParsingError(s) => CoreError::ReadMetadataError(s),
+            Error::ProcessScanningFailure(s) => CoreError::ScanProcessesError(s),
+        }
+    }
+}
+
 pub type Result<T> = std::result::Result<T, Error>;
-
-/// Basic metadata of a process (PID, command, etc...)
-#[derive(Eq, PartialEq, Debug, Clone)]
-pub struct ProcessMetadata {
-    pid: PID,
-    command: String,
-}
-
-/// Describes a process
-impl ProcessMetadata {
-    /// Returns a new instance of a ProcessMetadata
-    fn new<T>(pid: PID, command: T) -> ProcessMetadata
-        where T: Into<String> {
-        ProcessMetadata { pid, command: command.into() }
-    }
-
-    /// Returns the process identifier assigned to the process by the OS
-    ///
-    /// Whilst a PID can be recycled, two running processes can not share the same PID
-    pub fn pid(&self) -> PID {
-        self.pid
-    }
-
-    /// Returns the command used to execute the given process
-    ///
-    /// This method does not return the arguments passed to the command
-    pub fn command(&self) -> &str {
-        self.command.as_str()
-    }
-}
-
-
-/// Trait with methods to retrieve basic information about running processes
-pub trait ProcessScanner {
-    /// Returns a list containing the PIDs of all currently running processes
-    fn scan(&self) -> Result<HashSet<PID>>;
-
-    /// Returns The ProcessMetadata of the currently running process with the given PID
-    ///
-    /// # Arguments
-    ///
-    /// * `pid`: The process identifier of the currently running process
-    fn metadata(&self, pid: PID) -> Result<ProcessMetadata>;
-}
 
 /// Implementation of ProcessScanner that uses the `/proc` Linux virtual directory as source
 #[derive(Default)]
@@ -93,9 +60,9 @@ impl ProcfsScanner {
 
 impl ProcessScanner for ProcfsScanner {
     /// Returns the PIDs of currently running processes
-    fn scan(&self) -> Result<HashSet<PID>> {
+    fn scan(&self) -> std::result::Result<HashSet<PID>, CoreError> {
         let dir_iter = read_dir(self.proc_dir.as_path())
-            .map_err(|e| Error::ProcessScanningFailure(e.to_string()))?;
+            .map_err(|e| Error::ProcessScanningFailure(e.to_string()).into())?;
 
         let pids = dir_iter
             // only retrieve dir entry which are not err
@@ -118,23 +85,23 @@ impl ProcessScanner for ProcfsScanner {
     ///
     /// # Arguments
     ///  * `pid`: The identifier of the process for which to retrieve metadata
-    fn metadata(&self, pid: PID) -> Result<ProcessMetadata> {
+    fn fetch_metadata(&self, pid: PID) -> std::result::Result<ProcessMetadata, CoreError> {
         let mut command = String::new();
         let comm_file_path = self.proc_dir
             .join(pid.to_string())
             .join("comm");
 
         let mut file = File::open(comm_file_path)
-            .map_err(|_| Error::InvalidPID)?;
+            .map_err(|_| Error::InvalidPID.into())?;
 
         file.read_to_string(&mut command)
-            .map_err(|io_err| Error::ProcessParsingError(io_err.to_string()))?;
+            .map_err(|io_err| Error::ProcessParsingError(io_err.to_string()).into())?;
 
         if command.ends_with('\n') {  // Remove trailing newline
             command.pop();
         }
 
-        Ok(ProcessMetadata { pid, command })
+        Ok(ProcessMetadata::new(pid, command))
     }
 }
 
@@ -273,10 +240,8 @@ mod test_pid_scanner {
         let process_metadata = proc_scanner.metadata(123)
             .expect("Could not get processes metadata");
 
-        assert_eq!(process_metadata, ProcessMetadata {
-            pid: 123,
-            command: String::from("test_cmd"),
-        });
+        assert_eq!(process_metadata,
+                   ProcessMetadata::new(123, "test_cmd".to_string()));
     }
 
     #[test]
@@ -299,10 +264,8 @@ mod test_pid_scanner {
         let process_metadata = proc_scanner.metadata(123)
             .expect("Could not get processes metadata");
 
-        assert_eq!(process_metadata, ProcessMetadata {
-            pid: 123,
-            command: String::from("test_cmd"),
-        });
+        assert_eq!(process_metadata,
+                   ProcessMetadata::new(123, "test_cmd".to_string()));
     }
 
     #[test]

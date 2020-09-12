@@ -4,7 +4,7 @@ use tui::style::{Color, Modifier, Style};
 use tui::widgets::{Block, Borders, List, ListItem, ListState};
 
 use crate::app::TuiBackend;
-use crate::probe::process::ProcessMetadata;
+use crate::core::process_view::ProcessMetadata;
 
 pub struct ProcessList {}
 

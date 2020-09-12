@@ -4,8 +4,7 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
-
-use crate::probe::process::PID;
+use crate::core::process_view::PID;
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum ProcfsError {
@@ -134,7 +133,7 @@ impl<R, D> DataReader<R, D> where R: Read + Seek, D: Data + Sized {
 mod test_data_reader {
     use std::io::Cursor;
 
-    use crate::probe::procfs::{Data, DataReader, ProcfsError, TokenParser};
+    use crate::probes::procfs::{Data, DataReader, ProcfsError, TokenParser};
 
     #[derive(PartialEq, Debug)]
     struct TestSystemData {

@@ -5,7 +5,6 @@ use tui::text::Span;
 use tui::widgets::Paragraph;
 
 use crate::app::TuiBackend;
-use crate::probe::process::ProcessMetadata;
 
 pub struct MetadataBar;
 

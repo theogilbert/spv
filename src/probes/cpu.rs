@@ -1,10 +1,10 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::probe::{Error, Probe, procfs};
-use crate::probe::dispatch::Metrics;
-use crate::probe::procfs::{PidStat, ProcessDataReader, ReadProcessData, ReadSystemData, Stat, SystemDataReader};
-use crate::probe::values::Percent;
-use crate::probe::process::PID;
+use crate::probes::{Error, Probe, procfs};
+use crate::probes::dispatch::Metrics;
+use crate::probes::procfs::{PidStat, ProcessDataReader, ReadProcessData, ReadSystemData, Stat, SystemDataReader};
+use crate::probes::values::Percent;
+use crate::core::process_view::PID;
 
 /// Probe implementation to measure the CPU usage (in percent) of processes///
 pub struct CpuProbe {
@@ -72,13 +72,13 @@ impl Probe for CpuProbe {
 mod test_cpu_probe {
     use std::collections::{HashMap, HashSet};
 
-    use crate::probe::cpu::common_test_utils::{create_pid_stat, create_stat};
-    use crate::probe::cpu::CpuProbe;
-    use crate::probe::dispatch::Metrics;
-    use crate::probe::Probe;
-    use crate::probe::procfs::{PidStat, ProcfsError, ReadProcessData, ReadSystemData, Stat};
-    use crate::probe::values::Percent;
-    use crate::probe::process::PID;
+    use crate::probes::cpu::common_test_utils::{create_pid_stat, create_stat};
+    use crate::probes::cpu::CpuProbe;
+    use crate::probes::dispatch::Metrics;
+    use crate::probes::Probe;
+    use crate::probes::procfs::{PidStat, ProcfsError, ReadProcessData, ReadSystemData, Stat};
+    use crate::probes::values::Percent;
+    use crate::core::process_view::PID;
 
     struct MemoryPidStatReader {
         pid_stats_seq: HashMap<PID, Result<PidStat, ProcfsError>>
@@ -110,7 +110,7 @@ mod test_cpu_probe {
 
         let mut probe = CpuProbe::from_readers(Box::new(stat_reader),
                                                Box::new(pid_stat_reader))
-            .expect("Could not create probe");
+            .expect("Could not create probes");
 
         assert_eq!(probe.probe_processes(&HashSet::new()), Ok(Metrics::Percents(hashmap!())));
     }
@@ -127,7 +127,7 @@ mod test_cpu_probe {
 
         let mut probe = CpuProbe::from_readers(Box::new(stat_reader),
                                                Box::new(pid_stat_reader))
-            .expect("Could not create probe");
+            .expect("Could not create probes");
 
         assert_eq!(probe.probe_processes(&vec![1].into_iter().collect()),
                    Ok(Metrics::Percents(hashmap!(1 => Percent::new(50.).unwrap()))));
@@ -145,7 +145,7 @@ mod test_cpu_probe {
 
         let mut probe = CpuProbe::from_readers(Box::new(stat_reader),
                                                Box::new(pid_stat_reader))
-            .expect("Could not create probe");
+            .expect("Could not create probes");
 
         let metrics = probe.probe_processes(&hashset!(1, 2)).unwrap();
         assert_eq!(metrics,
@@ -168,7 +168,7 @@ mod test_cpu_probe {
 
         let mut probe = CpuProbe::from_readers(Box::new(stat_reader),
                                                Box::new(pid_stat_reader))
-            .expect("Could not create probe");
+            .expect("Could not create probes");
 
         assert_eq!(probe.probe_processes(&vec![1, 2].into_iter().collect()),
                    Ok(Metrics::Percents(hashmap!(1 => Percent::new(25.).unwrap()))));
@@ -222,10 +222,10 @@ impl UsageCalculator {
 
 #[cfg(test)]
 mod test_cpu_calculator {
-    use crate::probe::cpu::common_test_utils::create_stat;
-    use crate::probe::cpu::UsageCalculator;
-    use crate::probe::procfs;
-    use crate::probe::values::Percent;
+    use crate::probes::cpu::common_test_utils::create_stat;
+    use crate::probes::cpu::UsageCalculator;
+    use crate::probes::procfs;
+    use crate::probes::values::Percent;
 
     fn create_initialized_calc(elapsed_ticks: u64) -> UsageCalculator {
         let mut calc = UsageCalculator::new(create_stat(100));
@@ -268,7 +268,7 @@ mod test_cpu_calculator {
 
 #[cfg(test)]
 mod common_test_utils {
-    use crate::probe::procfs::{PidStat, Stat};
+    use crate::probes::procfs::{PidStat, Stat};
 
     pub fn create_stat(running_time: u64) -> Stat {
         let individual_ticks = running_time / 6;

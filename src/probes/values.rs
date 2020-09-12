@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::fmt;
 
-use crate::probe::Error;
+use crate::probes::Error;
 
 type Result<T> = std::result::Result<T, Error>;
 
