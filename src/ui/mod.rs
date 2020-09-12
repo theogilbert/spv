@@ -6,6 +6,7 @@ use crate::ui::layout::UiLayout;
 use crate::ui::metadata::MetadataBar;
 use crate::ui::processes::ProcessList;
 use crate::ui::tabs::MetricTabs;
+use crate::core::process_view::ProcessMetadata;
 
 // Tabs, ProcessList etc... should not leak. FrameRenderer will have next_tab() etc... methods
 mod layout;
@@ -35,6 +36,8 @@ impl Default for FrameRenderer {
 impl FrameRenderer {
     pub fn render(&mut self, frame: &mut Frame<TuiBackend>) {
         let layout = UiLayout::new(frame);
+
+        self.metadata_bar.set_selected_process(ProcessMetadata::new(1234, "ping"));
 
         self.tabs.render(frame, layout.tabs_chunk());
         self.processes.render(frame, layout.processes_chunk(), &[]);
