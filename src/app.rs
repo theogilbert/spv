@@ -16,6 +16,7 @@ pub type TuiBackend = TermionBackend<RawTerminal<Stdout>>;
 pub enum Error {
     MpscError(String),
     IOError(String),
+    ProcessScanError(String),
 }
 
 
@@ -63,7 +64,7 @@ impl SpvApplication {
         Ok(())
     }
 
-    fn draw_ui(&mut self) -> Result<(), Error>{
+    fn draw_ui(&mut self) -> Result<(), Error> {
         let ui = &mut self.ui;
         self.terminal.draw(|f| ui.render(f))
             .map_err(|e| Error::IOError(e.to_string()))?;
@@ -78,8 +79,10 @@ impl SpvApplication {
         // How to pass all required info to renderer ?
         //  - it accesses it itself as it has references to MetricsArchive and ProcessSnapshot
         //  - the informations are passed as parameters to render
+        let processes = self.process_view.processes()
+            .map_err(|e| Error::ProcessScanError(e.to_string()))?;
 
-        self.ui.set_processes(self.process_view.processes());
+        self.ui.set_processes(processes);
 
         self.draw_ui()?;
 

@@ -51,11 +51,12 @@ impl Default for ProcessView {
 }
 
 impl ProcessView {
-    pub fn processes(&self) -> Vec<ProcessMetadata> {
-        vec![ProcessMetadata::new(1, "initd"),
-             ProcessMetadata::new(2, "ping"),
-             ProcessMetadata::new(3, "spv"),
-        ]
+    pub fn processes(&self) -> Result<Vec<ProcessMetadata>, Error> {
+        let pids = self.scanner.scan()?;
+
+        pids.iter()
+            .filter_map(|pid| Some(self.scanner.fetch_metadata(*pid)))
+            .collect()
     }
 }
 
