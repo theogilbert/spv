@@ -25,7 +25,7 @@ impl UiLayout {
             .direction(Direction::Horizontal)
             .constraints(
                 [
-                    Constraint::Length(20),  // Processes constraint
+                    Constraint::Length(30),  // Processes constraint
                     Constraint::Min(1),  // graph constraint
                 ].as_ref()
             )

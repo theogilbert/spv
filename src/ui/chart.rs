@@ -36,12 +36,11 @@ impl MetricsChart {
 
         let chart = Chart::new(dataset)
             .block(Block::default()
-                .borders(Borders::TOP | Borders::RIGHT | Borders::BOTTOM))
+                .borders(Borders::ALL))
             .x_axis(Axis::default()
-                .title("seconds")
                 .style(Style::default().fg(Color::White))
                 .bounds([0.0, 10.])// min(dataset.x) to max(dataset.x)
-                .labels(["0.0", "5.0", "10.0"].iter().cloned().map(Span::from).collect()))
+                .labels([""].iter().cloned().map(Span::from).collect()))
             .y_axis(Axis::default()
                 .title("%")
                 .style(Style::default().fg(Color::White))
@@ -50,5 +49,4 @@ impl MetricsChart {
 
         frame.render_widget(chart, chunk);
     }
-
 }

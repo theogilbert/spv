@@ -9,6 +9,7 @@ use tui::Terminal;
 use crate::core::process_view::ProcessView;
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
+use crate::core::metrics::Archive;
 
 pub type TuiBackend = TermionBackend<RawTerminal<Stdout>>;
 
@@ -38,6 +39,7 @@ pub struct SpvApplication {
     receiver: Receiver<Trigger>,
     terminal: Terminal<TuiBackend>,
     process_view: ProcessView,
+    metrics: Archive,
     ui: SpvUI,
 }
 
@@ -48,6 +50,7 @@ impl SpvApplication {
             receiver,
             terminal: SpvApplication::init_terminal()?,
             process_view: context.unpack(),
+            metrics: Archive::new(vec!["CPU Usage".to_string()]),
             ui: SpvUI::default(),
         })
     }
@@ -80,7 +83,8 @@ impl SpvApplication {
 
     fn draw_ui(&mut self) -> Result<(), Error> {
         let ui = &mut self.ui;
-        self.terminal.draw(|f| ui.render(f))
+        let metrics = &self.metrics;
+        self.terminal.draw(|f| ui.render(f, metrics))
             .map_err(|e| Error::IOError(e.to_string()))?;
 
         Ok(())

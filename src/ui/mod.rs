@@ -1,12 +1,13 @@
 use tui::Frame;
 
 use crate::app::TuiBackend;
+use crate::core::metrics::Archive;
+use crate::core::process_view::ProcessMetadata;
 use crate::ui::chart::MetricsChart;
 use crate::ui::layout::UiLayout;
 use crate::ui::metadata::MetadataBar;
 use crate::ui::processes::ProcessList;
 use crate::ui::tabs::MetricTabs;
-use crate::core::process_view::ProcessMetadata;
 
 // Tabs, ProcessList etc... should not leak. FrameRenderer will have next_tab() etc... methods
 mod layout;
@@ -34,11 +35,11 @@ impl Default for SpvUI {
 }
 
 impl SpvUI {
-    pub fn render(&mut self, frame: &mut Frame<TuiBackend>) {
+    pub fn render(&mut self, frame: &mut Frame<TuiBackend>, metrics: &Archive) {
         let layout = UiLayout::new(frame);
 
         self.tabs.render(frame, layout.tabs_chunk());
-        self.processes.render(frame, layout.processes_chunk());
+        self.processes.render(frame, layout.processes_chunk(), metrics, self.tabs.current());
         self.chart.render(frame, layout.chart_chunk());
         self.metadata_bar.render(frame, layout.metadata_chunk());
     }

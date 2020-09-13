@@ -30,4 +30,9 @@ impl MetricTabs {
 
         frame.render_widget(tabs, chunk);
     }
+
+    pub fn current(&self) -> &str {
+        self.tabs.get(self.selected_index)
+            .unwrap()
+    }
 }

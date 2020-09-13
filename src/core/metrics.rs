@@ -27,6 +27,15 @@ impl Metric {
     }
 }
 
+impl ToString for Metric {
+    fn to_string(&self) -> String {
+        match self {
+            Metric::Percent(pct) => pct.to_string(),
+            Metric::Bitrate(br) => br.to_string(),
+        }
+    }
+}
+
 /// A trait for the ability to measure metrics of processes given their `PIDs`
 pub trait Probe {
     /// Returns a map associating a `Metric` instance to each PID
@@ -69,8 +78,8 @@ impl Archive {
 
 #[cfg(test)]
 mod test_archive {
-    use crate::core::metrics::{Archive, Metric};
     use crate::core::Error;
+    use crate::core::metrics::{Archive, Metric};
 
     #[test]
     fn test_current_should_be_last_pushed() {

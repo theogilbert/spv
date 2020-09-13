@@ -1,15 +1,17 @@
 use tui::Frame;
-use tui::layout::Rect;
+use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::widgets::{Block, Borders, List, ListItem, ListState};
 
 use crate::app::TuiBackend;
+use crate::core::metrics::Archive;
 use crate::core::process_view::{PID, ProcessMetadata};
 
 pub struct ProcessList {
     processes: Vec<ProcessMetadata>,
     selected_pid: Option<PID>,
     state: ListState,
+    metrics_col_len: u16,
 }
 
 impl Default for ProcessList {
@@ -18,23 +20,71 @@ impl Default for ProcessList {
             processes: vec![],
             selected_pid: None,
             state: ListState::default(),
+            metrics_col_len: 10
         }
     }
 }
 
 impl ProcessList {
-    pub fn render<'a>(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect) {
+    pub fn render<'a>(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect, metrics: &Archive,
+                      label: &str) {
+        let columns_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(
+                [
+                    Constraint::Min(1),  // processes names
+                    Constraint::Length(self.metrics_col_len),  // processes metrics
+                ].as_ref()
+            )
+            .split(chunk);
+
+        self.render_name_column(frame, columns_chunks[0]);
+        self.render_metric_column(frame, columns_chunks[1], metrics, label);
+    }
+
+    fn render_name_column(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect) {
         let items: Vec<ListItem> = self.processes.iter()
             .map(|pm| ListItem::new(pm.command()))
             .collect();
 
-        let list = List::new(items)
-            .block(Block::default().borders(Borders::ALL))
-            .style(Style::default().fg(Color::White))
-            .highlight_style(Style::default().add_modifier(Modifier::BOLD))
+        let list = Self::build_list(items)
+            .block(Block::default().borders(Borders::LEFT | Borders::TOP | Borders::BOTTOM))
             .highlight_symbol(">> ");
 
         frame.render_stateful_widget(list, chunk, &mut self.state);
+    }
+
+    fn render_metric_column(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect, metrics: &Archive, label: &str) {
+        let metrics_values: Vec<String> = self.processes.iter()
+            .map(|pm| {  // build String from metric value
+                metrics.current(label, pm.pid())
+                    .and_then(|m| Some(m.to_string()))
+                    .unwrap_or("N/A".to_string())
+            })
+            .map(|s| self.align_metric_right(s))
+            .collect();
+
+        let items: Vec<ListItem> = metrics_values.iter()
+            .map(|s| ListItem::new(s.as_str()))
+            .collect();
+
+        let list = Self::build_list(items)
+            .block(Block::default().borders(Borders::TOP | Borders::BOTTOM));
+
+        frame.render_stateful_widget(list, chunk, &mut self.state);
+    }
+
+    fn align_metric_right(&self, text: String) -> String {
+        let indent = (self.metrics_col_len as usize).checked_sub(text.len())
+            .unwrap_or(1)
+            .max(1);
+        format!("{:indent$}{}", "", text, indent=indent)
+    }
+
+    fn build_list(items: Vec<ListItem>) -> List {
+        List::new(items)
+            .style(Style::default().fg(Color::White))
+            .highlight_style(Style::default().add_modifier(Modifier::BOLD))
     }
 
     pub fn set_processes(&mut self, processes: Vec<ProcessMetadata>) {
@@ -91,5 +141,26 @@ impl ProcessList {
             None => None,
             Some(pid) => self.processes.iter().find(|pm| pm.pid() == pid)
         }
+    }
+}
+
+
+#[cfg(test)]
+mod test_align_right {
+    use crate::ui::processes::ProcessList;
+
+    #[test]
+    fn test_should_add_leading_spaces_in_front_of_short_text() {
+        let mut pl = ProcessList::default();
+
+        assert_eq!(pl.align_metric_right("99.1%".to_string()), "     99.1%");
+    }
+
+    #[test]
+    fn test_should_contain_one_extra_space_in_front_of_long_text() {
+        // default col len is 10
+        let mut pl = ProcessList::default();
+
+        assert_eq!(pl.align_metric_right("012345678910".to_string()), " 012345678910");
     }
 }
