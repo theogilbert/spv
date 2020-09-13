@@ -212,8 +212,6 @@ mod test_pid_scanner {
         // when we scan processes
         let pids = proc_scanner.scan();
 
-        println!("Scanning result: {:?}", pids);
-
         // reset permission to allow dir removal
         set_dir_permissions(test_proc_dir.path(), 0o755).expect("Could not set dir permissions");
 
