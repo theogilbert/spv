@@ -1,7 +1,7 @@
 #[macro_use]
 mod macros;
-mod probes;
+pub mod probes;
 mod ui;
-mod core;
+pub mod core;
 pub mod triggers;
 pub mod app;

@@ -19,6 +19,20 @@ pub enum Error {
     ProcessScanError(String),
 }
 
+pub struct SpvContext {
+    process_view: ProcessView
+}
+
+impl SpvContext {
+    pub fn new(process_view: ProcessView) -> Self {
+        Self { process_view }
+    }
+
+    pub fn unpack(self) -> ProcessView {
+        self.process_view
+    }
+}
+
 
 pub struct SpvApplication {
     receiver: Receiver<Trigger>,
@@ -29,11 +43,11 @@ pub struct SpvApplication {
 
 
 impl SpvApplication {
-    pub fn new(receiver: Receiver<Trigger>) -> Result<Self, Error> {
+    pub fn new(receiver: Receiver<Trigger>, context: SpvContext) -> Result<Self, Error> {
         Ok(Self {
             receiver,
             terminal: SpvApplication::init_terminal()?,
-            process_view: ProcessView::default(),
+            process_view: context.unpack(),
             ui: SpvUI::default(),
         })
     }
