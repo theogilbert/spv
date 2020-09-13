@@ -1,8 +1,14 @@
 pub mod process_view;
+pub mod metrics;
+pub mod values;
 
+#[derive(Debug, PartialEq, Clone)]
 pub enum Error {
     ScanProcessesError(String),
     ReadMetadataError(String),
+    InvalidPercentValue(f32),
+    IOError(String),
+    ProbingError(String),
 }
 
 impl ToString for Error {
@@ -14,6 +20,9 @@ impl ToString for Error {
             Error::ReadMetadataError(s) => {
                 format!("Error while reading processe data: {}", s)
             }
+            Error::InvalidPercentValue(p) => format!("Invalid percent value: {}", *p),
+            Error::IOError(s) => format!("IO error: {}", s.clone()),
+            Error::ProbingError(s) => format!("Probing error: {}", s.clone()),
         }
     }
 }

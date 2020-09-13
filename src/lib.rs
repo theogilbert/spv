@@ -1,6 +1,6 @@
 #[macro_use]
 mod macros;
-pub mod probes;
+pub mod procfs;
 mod ui;
 pub mod core;
 pub mod triggers;

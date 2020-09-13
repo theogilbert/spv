@@ -4,8 +4,7 @@ use std::time::Duration;
 use spv::app::{SpvApplication, SpvContext};
 use spv::triggers::TriggersEmitter;
 use spv::core::process_view::ProcessView;
-use spv::probes::process::ProcfsScanner;
-use spv::app::Error::ProcessScanError;
+use spv::procfs::process::ProcfsScanner;
 
 fn main() {
     let (tx, rx) = channel();

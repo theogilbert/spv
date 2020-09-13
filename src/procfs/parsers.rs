@@ -133,7 +133,7 @@ impl<R, D> DataReader<R, D> where R: Read + Seek, D: Data + Sized {
 mod test_data_reader {
     use std::io::Cursor;
 
-    use crate::probes::procfs::{Data, DataReader, ProcfsError, TokenParser};
+    use crate::procfs::parsers::{Data, DataReader, ProcfsError, TokenParser};
 
     #[derive(PartialEq, Debug)]
     struct TestSystemData {

@@ -140,6 +140,8 @@ mod test_pid_scanner {
 
     use tempfile::{NamedTempFile, tempdir};
 
+    use crate::core::Error as CoreError;
+
     use super::*;
 
     fn create_tempdir<T: Into<PathBuf>>(name: &str, dir: T) -> std::io::Result<()> {
@@ -235,7 +237,7 @@ mod test_pid_scanner {
             proc_dir: test_proc_dir.path().to_path_buf()
         };
 
-        let process_metadata = proc_scanner.metadata(123)
+        let process_metadata = proc_scanner.fetch_metadata(123)
             .expect("Could not get processes metadata");
 
         assert_eq!(process_metadata,
@@ -259,7 +261,7 @@ mod test_pid_scanner {
             proc_dir: test_proc_dir.path().to_path_buf()
         };
 
-        let process_metadata = proc_scanner.metadata(123)
+        let process_metadata = proc_scanner.fetch_metadata(123)
             .expect("Could not get processes metadata");
 
         assert_eq!(process_metadata,
@@ -274,8 +276,9 @@ mod test_pid_scanner {
             proc_dir: test_proc_dir.path().to_path_buf()
         };
 
-        let process_metadata_ret = proc_scanner.metadata(123);
+        let process_metadata_ret = proc_scanner.fetch_metadata(123);
 
-        assert_eq!(process_metadata_ret, Err(Error::InvalidPID));
+        assert_eq!(process_metadata_ret,
+                   Err(CoreError::ReadMetadataError("Invalid PID".to_string())));
     }
 }
