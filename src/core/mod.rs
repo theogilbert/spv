@@ -7,6 +7,7 @@ pub enum Error {
     ScanProcessesError(String),
     ReadMetadataError(String),
     InvalidPercentValue(f32),
+    InvalidLabel,
     IOError(String),
     ProbingError(String),
 }
@@ -23,6 +24,7 @@ impl ToString for Error {
             Error::InvalidPercentValue(p) => format!("Invalid percent value: {}", *p),
             Error::IOError(s) => format!("IO error: {}", s.clone()),
             Error::ProbingError(s) => format!("Probing error: {}", s.clone()),
+            Error::InvalidLabel => format!("Invalid label"),
         }
     }
 }
