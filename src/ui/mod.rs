@@ -58,4 +58,8 @@ impl SpvUI {
         self.processes.previous();
         self.metadata_bar.set_selected_process(self.processes.selected());
     }
+
+    pub fn current_tab(&self) -> &str {
+        self.tabs.current()
+    }
 }

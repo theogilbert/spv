@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry;
 
@@ -15,7 +16,7 @@ pub enum Metric {
 type PercentType = <Percent as Value>::ValueType;
 type BitrateType = <Bitrate as Value>::ValueType;
 
-#[cfg(test)]
+// #[cfg(test)]
 impl Metric {
     pub fn from_percent(pct: PercentType) -> Result<Metric, Error> {
         Percent::new(pct)
@@ -24,6 +25,25 @@ impl Metric {
 
     pub fn from_bitrate(bitrate: BitrateType) -> Metric {
         Metric::Bitrate(Bitrate::new(bitrate))
+    }
+}
+
+impl PartialOrd for Metric {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            (Metric::Percent(pct), Metric::Bitrate(br)) => {
+                panic!("Comparing incompatible metrics")
+            },
+            (Metric::Bitrate(br), Metric::Percent(pct)) => {
+                panic!("Comparing incompatible metrics")
+            },
+            (Metric::Percent(pct_self), Metric::Percent(pct_other)) => {
+                pct_self.partial_cmp(pct_other)
+            },
+            (Metric::Bitrate(br_self), Metric::Bitrate(br_other)) => {
+                br_self.partial_cmp(br_other)
+            }
+        }
     }
 }
 

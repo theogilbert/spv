@@ -20,11 +20,12 @@ impl Default for ProcessList {
             processes: vec![],
             selected_pid: None,
             state: ListState::default(),
-            metrics_col_len: 10
+            metrics_col_len: 6
         }
     }
 }
 
+// TODO add first row Process name - [%/bps]
 impl ProcessList {
     pub fn render<'a>(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect, metrics: &Archive,
                       label: &str) {

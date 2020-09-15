@@ -1,6 +1,8 @@
+use std::cmp::Ordering;
 use std::collections::HashSet;
 
 use crate::core::Error;
+use crate::core::metrics::{Archive, Metric};
 
 /// On Linux 64 bits, the maximum value for a PID is 4194304, hence u32
 pub type PID = u32;
@@ -52,6 +54,25 @@ impl ProcessView {
         pids.iter()
             .filter_map(|pid| Some(self.scanner.fetch_metadata(*pid)))
             .collect()
+    }
+
+    pub fn sorted_processes(&self, archive: &Archive, label: &str) -> Result<Vec<ProcessMetadata>, Error> {
+        let mut processes = self.processes()?;
+
+        processes.sort_by(|pm_a, pm_b| {
+            match (Self::last_process_metric(pm_a, archive, label),
+                   Self::last_process_metric(pm_b, archive, label)) {
+                (None, _) => Ordering::Greater,
+                (_, None) => Ordering::Less,
+                (Some(m_a), Some(m_b)) => m_a.partial_cmp(m_b).unwrap_or(Ordering::Greater).reverse(),
+            }
+        });
+
+        Ok(processes)
+    }
+
+    fn last_process_metric<'a>(process: &ProcessMetadata, archive: &'a Archive, label: &str) -> Option<&'a Metric> {
+        archive.current(label, process.pid())
     }
 }
 

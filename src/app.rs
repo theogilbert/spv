@@ -6,10 +6,11 @@ use termion::raw::{IntoRawMode, RawTerminal};
 use tui::backend::TermionBackend;
 use tui::Terminal;
 
+use crate::core::metrics::{Archive, Metric};
 use crate::core::process_view::ProcessView;
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
-use crate::core::metrics::Archive;
+use std::cmp::Ordering;
 
 pub type TuiBackend = TermionBackend<RawTerminal<Stdout>>;
 
@@ -97,8 +98,18 @@ impl SpvApplication {
         // How to pass all required info to renderer ?
         //  - it accesses it itself as it has references to MetricsArchive and ProcessSnapshot
         //  - the informations are passed as parameters to render
-        let processes = self.process_view.processes()
+        let mut processes = self.process_view
+            .sorted_processes(&self.metrics, self.ui.current_tab())
             .map_err(|e| Error::ProcessScanError(e.to_string()))?;
+
+        let max_pid = processes.iter()
+            .map(|pm| pm.pid())
+            .max()
+            .unwrap_or(1);
+
+        processes.iter().for_each(|p| {
+            self.metrics.push("CPU Usage", p.pid(), Metric::from_percent(100. * (p.pid() as f32) / (max_pid as f32)).unwrap());
+        });
 
         self.ui.set_processes(processes);
 

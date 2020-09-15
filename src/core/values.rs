@@ -31,18 +31,18 @@ impl Percent {
     }
 }
 
+impl Display for Percent {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:.1}", self.percent)
+    }
+}
+
 
 impl Value for Percent {
     type ValueType = f32;
 
     fn value(&self) -> Self::ValueType {
         self.percent
-    }
-}
-
-impl Display for Percent {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{:.1}%", self.percent)
     }
 }
 
@@ -115,7 +115,7 @@ impl Value for Bitrate {
 
 impl Display for Bitrate {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{} b/s", self.bitrate)
+        write!(f, "{}", self.bitrate)
     }
 }
 
