@@ -33,13 +33,13 @@ impl PartialOrd for Metric {
         match (self, other) {
             (Metric::Percent(pct), Metric::Bitrate(br)) => {
                 panic!("Comparing incompatible metrics")
-            },
+            }
             (Metric::Bitrate(br), Metric::Percent(pct)) => {
                 panic!("Comparing incompatible metrics")
-            },
+            }
             (Metric::Percent(pct_self), Metric::Percent(pct_other)) => {
                 pct_self.partial_cmp(pct_other)
-            },
+            }
             (Metric::Bitrate(br_self), Metric::Bitrate(br_other)) => {
                 br_self.partial_cmp(br_other)
             }
@@ -67,83 +67,178 @@ pub trait Probe {
     fn probe_processes(&mut self, pids: &HashSet<PID>) -> Result<HashMap<PID, Metric>, Error>;
 }
 
-pub struct Archive {
-    metrics: HashMap<String, ProcessMetrics>
+
+pub struct ArchiveBuilder {
+    archive: Archive
 }
 
-impl Archive {
-    pub fn new(labels: Vec<String>) -> Self {
-        let metrics = labels.into_iter()
-            .map(|l| (l, ProcessMetrics::default()))
-            .collect();
-
-        Self { metrics }
+impl ArchiveBuilder {
+    pub fn new() -> Self {
+        let archive = Archive { metrics: HashMap::new() };
+        ArchiveBuilder { archive }
     }
 
-    pub fn push(&mut self, label: &str, pid: PID, metric: Metric) -> Result<(), Error> {
-        match self.metrics.get_mut(label) {
-            Some(pm) => {
-                pm.push(pid, metric);
-                Ok(())
-            }
-            None => Err(Error::InvalidLabel)
+    pub fn new_metric(mut self, label: String, default: Metric) -> Result<Self, Error> {
+        match self.archive.metrics.insert(label, ProcessMetrics::new(default)) {
+            Some(_) => Err(Error::DuplicateLabel),
+            None => Ok(self)
         }
     }
 
-    pub fn current(&self, label: &str, pid: PID) -> Option<&Metric> {
+    pub fn build(self) -> Archive {
+        self.archive
+    }
+}
+
+
+#[cfg(test)]
+mod test_archive_builder {
+    use crate::core::Error;
+    use crate::core::metrics::ArchiveBuilder;
+    use crate::core::metrics::Metric;
+
+    #[test]
+    fn test_should_return_error_on_duplicate_label() {
+        let err_ret = ArchiveBuilder::new()
+            .new_metric("label".to_string(), Metric::from_bitrate(123))
+            .unwrap()
+            .new_metric("label".to_string(), Metric::from_bitrate(123));
+
+        match err_ret {
+            Ok(_) => panic!("Should have failed"),
+            Err(Error::DuplicateLabel) => (),
+            Err(_) => panic!("Should have been duplicate error"),
+        };
+    }
+}
+
+
+/// Represents all collected metrics for all processes
+pub struct Archive {
+    metrics: HashMap<String, ProcessMetrics>,
+}
+
+impl Archive {
+    /// Pushes a new `Metric` to the archive
+    /// If the label is invalid, `Error::InvalidLabel` will be returned
+    /// If the metric variant is incompatible with the label, `Error::InvalidMetricVariant` will be
+    ///  returned
+    ///
+    /// # Arguments
+    ///  * `label` The name of the label of the metric
+    ///  * `pid` The ID of the process from which comes the `Metric`
+    ///  * `metric` The new metric to associate to the given process and label
+    ///                 Only one variant of `Metric` is allowed per label
+    ///
+    pub fn push(&mut self, label: &str, pid: PID, metric: Metric) -> Result<(), Error> {
+        let pm = match self.metrics.get_mut(label) {
+            Some(pm) => Ok(pm),
+            None => Err(Error::InvalidLabel)
+        }?;
+
+        Ok(match (pm.last(pid), metric) {
+            (&Metric::Percent(_), Metric::Percent(pct)) => pm.push(pid, Metric::Percent(pct)),
+            (&Metric::Bitrate(_), Metric::Bitrate(br)) => pm.push(pid, Metric::Bitrate(br)),
+            (_, _) => Err(Error::InvalidMetricVariant)?
+        })
+    }
+
+    pub fn current(&self, label: &str, pid: PID) -> Result<&Metric, Error> {
         self.metrics.get(label)
-            .and_then(|pm| pm.last(pid))
+            .ok_or(Error::InvalidLabel)
+            .and_then(|pm| Ok(pm.last(pid)))
     }
 }
 
 #[cfg(test)]
 mod test_archive {
     use crate::core::Error;
-    use crate::core::metrics::{Archive, Metric};
+    use crate::core::metrics::{Archive, ArchiveBuilder, Metric};
 
     #[test]
     fn test_current_should_be_last_pushed() {
-        let mut archive = Archive::new(vec!["label".to_string()]);
+        let mut archive = ArchiveBuilder::new()
+            .new_metric("label".to_string(), Metric::from_bitrate(1))
+            .unwrap()
+            .build();
 
         archive.push("label", 123, Metric::from_bitrate(123))
             .unwrap();
         archive.push("label", 123, Metric::from_bitrate(456))
             .unwrap();
 
-        assert_eq!(archive.current("label", 123),
-                   Some(&Metric::from_bitrate(456)));
+        assert_eq!(archive.current("label", 123).unwrap(),
+                   &Metric::from_bitrate(456));
     }
 
     #[test]
-    fn test_current_should_be_none_when_no_push() {
-        let mut archive = Archive::new(vec!["label".to_string()]);
+    fn test_current_should_be_default_when_no_push() {
+        let mut archive = ArchiveBuilder::new()
+            .new_metric("label".to_string(), Metric::from_percent(45.1).unwrap())
+            .unwrap()
+            .build();
 
-        assert_eq!(archive.current("label", 123), None);
+        assert_eq!(archive.current("label", 123).unwrap(),
+                   &Metric::from_percent(45.1).unwrap());
+    }
+
+    #[test]
+    fn test_push_should_fail_when_first_variant_is_invalid() {
+        let mut archive = ArchiveBuilder::new()
+            .new_metric("label".to_string(), Metric::from_percent(45.1).unwrap())
+            .unwrap()
+            .build();
+
+        assert_eq!(archive.push("label", 123,
+                                Metric::from_bitrate(123)),
+                   Err(Error::InvalidMetricVariant));
+    }
+
+    #[test]
+    fn test_push_should_fail_when_additional_variant_is_invalid() {
+        let mut archive = ArchiveBuilder::new()
+            .new_metric("label".to_string(), Metric::from_percent(45.1).unwrap())
+            .unwrap()
+            .build();
+
+        archive.push("label", 123, Metric::from_percent(45.1).unwrap())
+            .unwrap();
+
+        assert_eq!(archive.push("label", 123,
+                                Metric::from_bitrate(123)),
+                   Err(Error::InvalidMetricVariant));
     }
 
     #[test]
     fn test_push_should_fail_when_label_is_invalid() {
-        let mut archive = Archive::new(vec!["label".to_string()]);
+        let mut archive = ArchiveBuilder::new()
+            .build();
 
-        let ret = archive.push("invalid-label", 123,
-                               Metric::from_bitrate(123));
+        assert_eq!(archive.push("invalid-label", 123,
+                                Metric::from_bitrate(123)),
+                   Err(Error::InvalidLabel));
+    }
 
-        assert_eq!(ret, Err(Error::InvalidLabel));
+    #[test]
+    fn test_current_should_fail_when_label_is_invalid() {
+        let mut archive = ArchiveBuilder::new()
+            .build();
+
+        assert_eq!(archive.current("invalid-label", 123),
+                   Err(Error::InvalidLabel));
     }
 }
-
 
 struct ProcessMetrics {
-    series: HashMap<PID, Vec<Metric>>
-}
-
-impl Default for ProcessMetrics {
-    fn default() -> Self {
-        Self { series: hashmap!() }
-    }
+    default: Metric,
+    series: HashMap<PID, Vec<Metric>>,
 }
 
 impl ProcessMetrics {
+    fn new(default: Metric) -> Self {
+        Self { default, series: hashmap!() }
+    }
+
     fn push(&mut self, pid: PID, metric: Metric) {
         let process_series = match self.series.entry(pid) {
             Entry::Occupied(o) => o.into_mut(),
@@ -153,8 +248,9 @@ impl ProcessMetrics {
         process_series.push(metric);
     }
 
-    fn last(&self, pid: PID) -> Option<&Metric> {
+    fn last(&self, pid: PID) -> &Metric {
         self.series.get(&pid)
             .and_then(|v| v.last())
+            .unwrap_or(&self.default)
     }
 }

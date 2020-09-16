@@ -9,7 +9,7 @@ use spv::procfs::process::ProcfsScanner;
 fn main() {
     let (tx, rx) = channel();
 
-    TriggersEmitter::launch_async(tx, Duration::from_secs(1));
+    TriggersEmitter::launch_async(tx, Duration::from_secs(3));
 
     let app_context = build_spv_context();
     let app_ret = SpvApplication::new(rx, app_context);

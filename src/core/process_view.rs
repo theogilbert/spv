@@ -60,18 +60,21 @@ impl ProcessView {
         let mut processes = self.processes()?;
 
         processes.sort_by(|pm_a, pm_b| {
-            match (Self::last_process_metric(pm_a, archive, label),
-                   Self::last_process_metric(pm_b, archive, label)) {
-                (None, _) => Ordering::Greater,
-                (_, None) => Ordering::Less,
-                (Some(m_a), Some(m_b)) => m_a.partial_cmp(m_b).unwrap_or(Ordering::Greater).reverse(),
-            }
+            let metric_b = Self::current_metric(pm_b, archive, label)
+                .expect("Error getting current metric");
+
+            let metric_a = Self::current_metric(pm_a, archive, label)
+                .expect("Error getting current metric");
+
+            metric_a.partial_cmp(metric_b)
+                .unwrap_or(Ordering::Greater)
+                .reverse()
         });
 
         Ok(processes)
     }
 
-    fn last_process_metric<'a>(process: &ProcessMetadata, archive: &'a Archive, label: &str) -> Option<&'a Metric> {
+    fn current_metric<'a>(process: &ProcessMetadata, archive: &'a Archive, label: &str) -> Result<&'a Metric, Error> {
         archive.current(label, process.pid())
     }
 }

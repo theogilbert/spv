@@ -81,10 +81,10 @@ mod test_percent_value {
 
     #[test]
     fn test_percent_value_fmt() {
-        let pv = Percent::new(55.)
+        let pv = Percent::new(55.04)
             .expect("Should be a valid percent value");
 
-        assert_eq!(format!("{}", pv), "55.0%");
+        assert_eq!(format!("{}", pv), "55.0");
     }
 }
 
@@ -143,6 +143,6 @@ mod test_bitrate_value {
     fn test_bitrate_value_fmt() {
         let brv = Bitrate::new(123);
 
-        assert_eq!(format!("{}", brv), "123 b/s");
+        assert_eq!(format!("{}", brv), "123");
     }
 }

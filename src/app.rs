@@ -6,11 +6,11 @@ use termion::raw::{IntoRawMode, RawTerminal};
 use tui::backend::TermionBackend;
 use tui::Terminal;
 
-use crate::core::metrics::{Archive, Metric};
+use crate::core::metrics::{Archive, ArchiveBuilder, Metric, Probe};
 use crate::core::process_view::ProcessView;
+use crate::procfs::cpu::CpuProbe;
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
-use std::cmp::Ordering;
 
 pub type TuiBackend = TermionBackend<RawTerminal<Stdout>>;
 
@@ -42,17 +42,25 @@ pub struct SpvApplication {
     process_view: ProcessView,
     metrics: Archive,
     ui: SpvUI,
+    probe: CpuProbe,
 }
 
 
 impl SpvApplication {
     pub fn new(receiver: Receiver<Trigger>, context: SpvContext) -> Result<Self, Error> {
+        let archive = ArchiveBuilder::new()
+            .new_metric("CPU Usage".to_string(),
+                        Metric::from_percent(0.).unwrap())
+            .unwrap()
+            .build();
+
         Ok(Self {
             receiver,
             terminal: SpvApplication::init_terminal()?,
             process_view: context.unpack(),
-            metrics: Archive::new(vec!["CPU Usage".to_string()]),
+            metrics: archive,
             ui: SpvUI::default(),
+            probe: CpuProbe::new().expect("... TODO get rid of this POC"),
         })
     }
 
@@ -98,18 +106,20 @@ impl SpvApplication {
         // How to pass all required info to renderer ?
         //  - it accesses it itself as it has references to MetricsArchive and ProcessSnapshot
         //  - the informations are passed as parameters to render
-        let mut processes = self.process_view
+        let processes = self.process_view
             .sorted_processes(&self.metrics, self.ui.current_tab())
             .map_err(|e| Error::ProcessScanError(e.to_string()))?;
 
-        let max_pid = processes.iter()
-            .map(|pm| pm.pid())
-            .max()
-            .unwrap_or(1);
+        let pids = processes.iter()
+            .map(|pm| pm.pid()).collect();
 
-        processes.iter().for_each(|p| {
-            self.metrics.push("CPU Usage", p.pid(), Metric::from_percent(100. * (p.pid() as f32) / (max_pid as f32)).unwrap());
-        });
+        let metrics = self.probe.probe_processes(&pids).expect("TODO get rid of this poc..");
+
+        metrics.into_iter()
+            .for_each(|(pid, metric)| {
+                self.metrics.push(self.ui.current_tab(), pid, metric)
+                    .expect("todo get rid of this poc..")
+            });
 
         self.ui.set_processes(processes);
 

@@ -59,8 +59,8 @@ impl ProcessList {
         let metrics_values: Vec<String> = self.processes.iter()
             .map(|pm| {  // build String from metric value
                 metrics.current(label, pm.pid())
-                    .and_then(|m| Some(m.to_string()))
-                    .unwrap_or("N/A".to_string())
+                    .expect("Error getting current metric")
+                    .to_string()
             })
             .map(|s| self.align_metric_right(s))
             .collect();
@@ -153,14 +153,15 @@ mod test_align_right {
     #[test]
     fn test_should_add_leading_spaces_in_front_of_short_text() {
         let mut pl = ProcessList::default();
+        pl.metrics_col_len = 10;
 
         assert_eq!(pl.align_metric_right("99.1%".to_string()), "     99.1%");
     }
 
     #[test]
     fn test_should_contain_one_extra_space_in_front_of_long_text() {
-        // default col len is 10
         let mut pl = ProcessList::default();
+        pl.metrics_col_len = 10;
 
         assert_eq!(pl.align_metric_right("012345678910".to_string()), " 012345678910");
     }
