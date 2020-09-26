@@ -66,6 +66,7 @@ impl SpvApplication {
 
     pub fn run(mut self) -> Result<(), Error> {
         Self::nice_screen_clear().ok();
+        self.update_metrics();
 
         loop {
             let trigger = self.receiver.recv()
@@ -100,6 +101,14 @@ impl SpvApplication {
     }
 
     fn on_impulse(&mut self) -> Result<(), Error> {
+        self.update_metrics()?;
+
+        self.draw_ui()?;
+
+        Ok(())
+    }
+
+    fn update_metrics(&mut self) -> Result<(), Error> {
         // 1. Get processes
         // 2. Probe metrics for all processes
         // 3. Render
@@ -122,8 +131,6 @@ impl SpvApplication {
             });
 
         self.ui.set_processes(processes);
-
-        self.draw_ui()?;
 
         Ok(())
     }
