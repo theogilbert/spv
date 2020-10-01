@@ -1,12 +1,20 @@
+use std::fs::OpenOptions;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
+use simplelog::{WriteLogger, Config};
+use log::error;
+
 use spv::app::{SpvApplication, SpvContext};
-use spv::triggers::TriggersEmitter;
 use spv::core::process_view::ProcessView;
 use spv::procfs::process::ProcfsScanner;
+use spv::triggers::TriggersEmitter;
+use std::env;
+use log::LevelFilter;
 
 fn main() {
+    init_logging();
+
     let (tx, rx) = channel();
 
     TriggersEmitter::launch_async(tx, Duration::from_secs(3));
@@ -15,13 +23,24 @@ fn main() {
     let app_ret = SpvApplication::new(rx, app_context);
 
     match app_ret {
-        Err(e) => println!("Error: {:?}", e),
+        Err(e) => error!("{:?}", e),
         Ok(app) => {
             if let Err(e) = app.run() {
-                println!("Error: {:?}", e);
+                error!("{:?}", e);
             }
         }
     };
+}
+
+fn init_logging() {
+    let log_file = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .create(true)
+        .open("spv.log")
+        .expect("Could not open log file");
+
+    WriteLogger::init(LevelFilter::Debug, Config::default(), log_file);
 }
 
 

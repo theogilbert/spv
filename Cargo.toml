@@ -9,6 +9,8 @@ license = "Apache-2.0"
 [dependencies]
 tui = "0.10.0"
 termion = "1.5.5"
+log = { version = " 0.4.11", features=["max_level_debug", "release_max_level_warn"] }
+simplelog = "0.8.0"
 
 [dev-dependencies]
 tempfile = "3.1.0"
