@@ -20,7 +20,7 @@ impl Default for ProcessList {
             processes: vec![],
             selected_pid: None,
             state: ListState::default(),
-            metrics_col_len: 6
+            metrics_col_len: 6,
         }
     }
 }
@@ -76,10 +76,10 @@ impl ProcessList {
     }
 
     fn align_metric_right(&self, text: String) -> String {
-        let indent = (self.metrics_col_len as usize).checked_sub(text.len())
+        let indent = (self.metrics_col_len as usize).checked_sub(text.len() + 1)
             .unwrap_or(1)
             .max(1);
-        format!("{:indent$}{}", "", text, indent=indent)
+        format!("{:indent$}{} ", "", text, indent = indent)
     }
 
     fn build_list(items: Vec<ListItem>) -> List {
@@ -148,21 +148,37 @@ impl ProcessList {
 
 #[cfg(test)]
 mod test_align_right {
+    use rstest::*;
+
     use crate::ui::processes::ProcessList;
 
-    #[test]
-    fn test_should_add_leading_spaces_in_front_of_short_text() {
+    #[fixture]
+    fn process_list() -> ProcessList {
         let mut pl = ProcessList::default();
         pl.metrics_col_len = 10;
-
-        assert_eq!(pl.align_metric_right("99.1%".to_string()), "     99.1%");
+        pl
     }
 
-    #[test]
-    fn test_should_contain_one_extra_space_in_front_of_long_text() {
-        let mut pl = ProcessList::default();
-        pl.metrics_col_len = 10;
+    #[rstest(input,
+    case("a"),
+    case("ab"),
+    case("abc"),
+    case("abcd"),
+    case("abcde"),
+    case("abcdef"),
+    case("abcdefg"),
+    case("abcdefgh"),
+    )]
+    fn test_should_align_right_with_padding(process_list: ProcessList, input: &str) {
+        let aligned = process_list.align_metric_right(input.to_string());
 
-        assert_eq!(pl.align_metric_right("012345678910".to_string()), " 012345678910");
+        assert!(aligned.ends_with(&format!("{} ", input)));
+        assert_eq!(aligned.len(), process_list.metrics_col_len as usize)
+    }
+
+    #[rstest]
+    fn test_should_contain_one_extra_space_in_front_of_long_text(process_list: ProcessList) {
+        let aligned = process_list.align_metric_right("012345678910".to_string());
+        assert_eq!(aligned, " 012345678910 ");
     }
 }
