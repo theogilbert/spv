@@ -92,21 +92,27 @@ impl ProcessList {
     }
 
     pub fn set_processes(&mut self, processes: Vec<ProcessMetadata>) {
-        self.processes = processes;
-
-        if self.processes.is_empty() {
-            self.select(None);
+        let index_opt = if self.processes.is_empty() {
+            None
         } else {
-            let mut selected_idx = 0;
+            Some(Self::retrieve_previously_selected_index(&processes, self.selected_pid))
+        };
 
-            if let Some(selected_pid) = self.selected_pid {
-                selected_idx = self.processes.iter()
-                    .position(|pm| pm.pid() == selected_pid)
-                    .unwrap_or(0); // If PID does not exist anymore, select first process
-            }
+        self.processes = processes;
+        self.select(index_opt);
+    }
 
-            self.select(Some(selected_idx));
+    fn retrieve_previously_selected_index(processes: &Vec<ProcessMetadata>,
+                                          selected_pid: Option<PID>) -> usize {
+        let mut selected_idx = 0;
+
+        if let Some(selected_pid) = selected_pid {
+            selected_idx = processes.iter()
+                .position(|pm| pm.pid() == selected_pid)
+                .unwrap_or(0); // If PID does not exist anymore, select first process
         }
+
+        selected_idx
     }
 
     fn select(&mut self, index: Option<usize>) {
