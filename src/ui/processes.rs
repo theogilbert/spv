@@ -48,7 +48,7 @@ impl ProcessList {
             .map(|pm| ListItem::new(pm.command()))
             .collect();
 
-        let list = Self::build_list(items)
+        let list = Self::build_default_list_widget(items)
             .block(Block::default().borders(Borders::LEFT | Borders::TOP | Borders::BOTTOM))
             .highlight_symbol(">> ");
 
@@ -56,23 +56,26 @@ impl ProcessList {
     }
 
     fn render_metric_column(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect, metrics: &Archive, label: &str) {
-        let metrics_values: Vec<String> = self.processes.iter()
-            .map(|pm| {  // build String from metric value
-                metrics.current(label, pm.pid())
-                    .expect("Error getting current metric")
-                    .to_string()
-            })
-            .map(|s| self.align_metric_right(s))
+        let str_metrics: Vec<String> = self.processes.iter()
+            .map(|pm| self.formatted_process_metric(pm, metrics, label))
             .collect();
 
-        let items: Vec<ListItem> = metrics_values.iter()
-            .map(|s| ListItem::new(s.as_str()))
+        let items: Vec<ListItem> = str_metrics.iter()
+            .map(|pm| ListItem::new(pm.as_str()))
             .collect();
 
-        let list = Self::build_list(items)
+        let list = Self::build_default_list_widget(items)
             .block(Block::default().borders(Borders::TOP | Borders::BOTTOM));
 
         frame.render_stateful_widget(list, chunk, &mut self.state);
+    }
+
+    fn formatted_process_metric(&self, process: &ProcessMetadata, metrics: &Archive,
+                                label: &str) -> String {
+        let m = metrics.current(label, process.pid())
+            .expect("Error getting current metric");
+
+        self.align_metric_right(m.to_string())
     }
 
     fn align_metric_right(&self, text: String) -> String {
@@ -82,7 +85,7 @@ impl ProcessList {
         format!("{:indent$}{} ", "", text, indent = indent)
     }
 
-    fn build_list(items: Vec<ListItem>) -> List {
+    fn build_default_list_widget(items: Vec<ListItem>) -> List {
         List::new(items)
             .style(Style::default().fg(Color::White))
             .highlight_style(Style::default().add_modifier(Modifier::BOLD))
@@ -169,7 +172,7 @@ mod test_align_right {
     case("abcdefg"),
     case("abcdefgh"),
     )]
-    fn test_should_align_right_with_padding(process_list: ProcessList, input: &str) {
+    fn test_should_align_right_with_right_padding(process_list: ProcessList, input: &str) {
         let aligned = process_list.align_metric_right(input.to_string());
 
         assert!(aligned.ends_with(&format!("{} ", input)));
