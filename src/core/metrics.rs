@@ -42,6 +42,13 @@ impl Metric {
             Metric::Bitrate(_) => "bps",
         }
     }
+
+    pub fn as_f64(&self) -> f64 {
+        match self {
+            Metric::Percent(pct) => pct.value() as f64,
+            Metric::Bitrate(br) => br.value() as f64,
+        }
+    }
 }
 
 impl PartialOrd for Metric {
@@ -196,7 +203,7 @@ impl Archive {
             .ok_or(Error::InvalidLabel)?;
 
         let metrics_count = metrics.count(pid)?;
-        let collected_metrics = (span.as_secs() / self.resolution.as_secs()) as usize;
+        let collected_metrics = self.expected_metrics(span);
         let skipped_metrics = metrics_count.checked_sub(collected_metrics)
             .unwrap_or(0);
 
@@ -204,6 +211,13 @@ impl Archive {
             iter: metrics.iter_process(pid)?
                 .skip(skipped_metrics)
         })
+    }
+
+    /// Indicates how many metrics should be returned by history() with the given span, according
+    /// to this archive's resolution.
+    /// The value returned by this function is not a guarantee. History() may return less.
+    pub fn expected_metrics(&self, span: Duration) -> usize {
+        (span.as_secs() / self.resolution.as_secs()) as usize
     }
 }
 
@@ -216,6 +230,12 @@ impl<'a> Iterator for MetricIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
+    }
+}
+
+impl DoubleEndedIterator for MetricIter<'_> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.iter.next_back()
     }
 }
 

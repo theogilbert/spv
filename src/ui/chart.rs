@@ -30,16 +30,13 @@ impl Default for MetricsChart {
 
 
 impl MetricsChart {
-    fn build_process_dataset<'a>(&self, process: &'a ProcessMetadata, metrics: &'a Archive) -> Dataset<'a> {
-        // (0..self.span.as_secs())
-        //     .map(|i| (i as f64))
-        //     .map(|i| (i as f64, i.cos()))
-        //     .collect();
-
-        Dataset::default()
-            .name(process.command())
-            .marker(symbols::Marker::Braille)
-            .graph_type(GraphType::Line)
+    fn build_process_data(&self, process: &ProcessMetadata, metrics: &Archive) -> Vec<(f64, f64)> {
+        metrics.history(&self.current_label, process.pid(), self.span)
+            .expect("Could not get history of process")
+            .rev()
+            .enumerate()
+            .map(|(i, m)| (0. - i as f64, m.as_f64()))
+            .collect()
     }
 
     fn get_label_unit(&self, metrics: &Archive) -> &'static str {
@@ -54,20 +51,33 @@ impl MetricsChart {
     pub fn render(&self, frame: &mut Frame<TuiBackend>, chunk: Rect,
                   process_opt: Option<&ProcessMetadata>, metrics: &Archive) {
         if let Some(process) = process_opt {
-            let dataset = vec![self.build_process_dataset(process, metrics)];
+            let data = self.build_process_data(process, metrics);
 
-            let chart = Chart::new(dataset)
+            let max = data.iter()
+                .map(|(_, v)| v.ceil() as u32)
+                .max()
+                .unwrap_or(0) as f64;
+            let max_repr = max.to_string();
+
+            let datasets = vec![
+                Dataset::default()
+                    .name(process.command())
+                    .marker(symbols::Marker::Braille)
+                    .graph_type(GraphType::Line)
+                    .data(&data)];
+
+            let chart = Chart::new(datasets)
                 .block(Block::default()
                     .borders(Borders::ALL))
                 .x_axis(Axis::default()
                     .style(Style::default().fg(Color::White))
-                    .bounds([0.0, 10.])// min(dataset.x) to max(dataset.x)
-                    .labels([&self.axis_origin_label, "0"].iter().cloned().map(Span::from).collect()))
+                    .bounds([0. - metrics.expected_metrics(self.span) as f64, 0.0])// min(dataset.x) to max(dataset.x)
+                    .labels([&self.axis_origin_label, "-0m"].iter().cloned().map(Span::from).collect()))
                 .y_axis(Axis::default()
                     .title(self.get_label_unit(metrics))
                     .style(Style::default().fg(Color::White))
-                    .bounds([-2., 2.]) // 0 to max(dataset.y)
-                    .labels(["-2.0", "0.0", "2.0"].iter().cloned().map(Span::from).collect()));
+                    .bounds([0., 1.1 * max]) // 0 to 1.1 * max(dataset.y)
+                    .labels(["0.0", &max_repr].iter().cloned().map(Span::from).collect()));
 
             frame.render_widget(chart, chunk);
         }

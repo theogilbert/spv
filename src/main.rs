@@ -1,26 +1,28 @@
+use std::env;
 use std::fs::OpenOptions;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
-use simplelog::{WriteLogger, Config};
 use log::error;
+use log::LevelFilter;
+use simplelog::{Config, WriteLogger};
 
 use spv::app::{SpvApplication, SpvContext};
 use spv::core::process_view::ProcessView;
 use spv::procfs::process::ProcfsScanner;
 use spv::triggers::TriggersEmitter;
-use std::env;
-use log::LevelFilter;
 
 fn main() {
     init_logging();
 
     let (tx, rx) = channel();
 
-    TriggersEmitter::launch_async(tx, Duration::from_secs(3));
+    let probe_period = Duration::from_secs(1);
+    TriggersEmitter::launch_async(tx, probe_period);
 
     let app_context = build_spv_context();
-    let app_ret = SpvApplication::new(rx, app_context);
+    let app_ret = SpvApplication::new(rx, app_context,
+                                      probe_period);
 
     match app_ret {
         Err(e) => error!("{:?}", e),

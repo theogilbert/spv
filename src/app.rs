@@ -11,6 +11,7 @@ use crate::core::process_view::ProcessView;
 use crate::procfs::cpu::CpuProbe;
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
+use std::time::Duration;
 
 pub type TuiBackend = TermionBackend<RawTerminal<Stdout>>;
 
@@ -48,8 +49,9 @@ pub struct SpvApplication {
 
 
 impl SpvApplication {
-    pub fn new(receiver: Receiver<Trigger>, context: SpvContext) -> Result<Self, Error> {
+    pub fn new(receiver: Receiver<Trigger>, context: SpvContext, probe_period: Duration) -> Result<Self, Error> {
         let archive = ArchiveBuilder::new()
+            .resolution(probe_period)
             .new_metric("CPU Usage".to_string(),
                         Metric::from_percent(0.).unwrap())
             .unwrap()
