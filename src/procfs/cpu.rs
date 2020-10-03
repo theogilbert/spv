@@ -1,5 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
+use log::error;
+
 use crate::core::Error;
 use crate::core::metrics::{Metric, Probe};
 use crate::core::process_view::PID;
@@ -60,6 +62,10 @@ impl Probe for CpuProbe {
         let metrics = pids.iter()
             .filter_map(|pid| {
                 self.probe(*pid)
+                    .map_err(|e| {
+                        error!("Could not probe CPU metric for pid {}: {}", pid, e.to_string());
+                        e
+                    })
                     .ok()
                     .map(|pct| (*pid, Metric::Percent(pct)))
             })

@@ -19,6 +19,7 @@ pub enum Error {
     MpscError(String),
     IOError(String),
     ProcessScanError(String),
+    ProcessProbeError(String),
 }
 
 pub struct SpvContext {
@@ -122,7 +123,8 @@ impl SpvApplication {
         let pids = processes.iter()
             .map(|pm| pm.pid()).collect();
 
-        let metrics = self.probe.probe_processes(&pids).expect("TODO get rid of this poc..");
+        let metrics = self.probe.probe_processes(&pids)
+            .map_err(|e| Error::ProcessProbeError(e.to_string()))?;
 
         metrics.into_iter()
             .for_each(|(pid, metric)| {
