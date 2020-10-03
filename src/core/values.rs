@@ -10,6 +10,8 @@ pub trait Value: Display + PartialOrd {
     type ValueType: PartialOrd;
 
     fn value(&self) -> Self::ValueType;
+
+    fn unit(&self) -> String;
 }
 
 /// Metric that has a value between 0 and 100
@@ -43,6 +45,10 @@ impl Value for Percent {
 
     fn value(&self) -> Self::ValueType {
         self.percent
+    }
+
+    fn unit(&self) -> String {
+        "%".to_string()
     }
 }
 
@@ -110,6 +116,10 @@ impl Value for Bitrate {
 
     fn value(&self) -> Self::ValueType {
         self.bitrate
+    }
+
+    fn unit(&self) -> String {
+        "bps".to_string()  // TODO update unit to adapt depending on value (b/s, Kb/s, Mb/s, ...)
     }
 }
 

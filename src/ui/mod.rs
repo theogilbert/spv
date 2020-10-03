@@ -40,7 +40,7 @@ impl SpvUI {
 
         self.tabs.render(frame, layout.tabs_chunk());
         self.processes.render(frame, layout.processes_chunk(), metrics, self.tabs.current());
-        self.chart.render(frame, layout.chart_chunk());
+        self.chart.render(frame, layout.chart_chunk(), self.processes.selected(), metrics);
         self.metadata_bar.render(frame, layout.metadata_chunk());
     }
 

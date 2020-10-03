@@ -8,6 +8,7 @@ pub enum Error {
     ReadMetadataError(String),
     InvalidPercentValue(f32),
     InvalidLabel,
+    InvalidPID,
     InvalidMetricVariant,
     DuplicateLabel,
     IOError(String),
@@ -28,7 +29,8 @@ impl ToString for Error {
             Error::ProbingError(s) => format!("Probing error: {}", s.clone()),
             Error::InvalidLabel => "Invalid label".to_string(),
             Error::DuplicateLabel => "Duplicate label".to_string(),
-            Error::InvalidMetricVariant => "Invalid metric variant".to_string()
+            Error::InvalidMetricVariant => "Invalid metric variant".to_string(),
+            Error::InvalidPID => "Invalid PID".to_string(),
         }
     }
 }

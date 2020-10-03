@@ -1,6 +1,9 @@
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry;
+use std::iter::Skip;
+use std::slice::Iter;
+use std::time::Duration;
 
 use crate::core::Error;
 use crate::core::process_view::PID;
@@ -16,7 +19,6 @@ pub enum Metric {
 type PercentType = <Percent as Value>::ValueType;
 type BitrateType = <Bitrate as Value>::ValueType;
 
-// #[cfg(test)]
 impl Metric {
     pub fn from_percent(pct: PercentType) -> Result<Metric, Error> {
         Percent::new(pct)
@@ -26,15 +28,29 @@ impl Metric {
     pub fn from_bitrate(bitrate: BitrateType) -> Metric {
         Metric::Bitrate(Bitrate::new(bitrate))
     }
+
+    pub fn unit(&self) -> String {
+        match self {
+            Metric::Percent(_) => self.unit(),
+            Metric::Bitrate(_) => self.unit(),
+        }
+    }
+
+    pub fn base_unit(&self) -> &'static str {
+        match self {
+            Metric::Percent(_) => "%",
+            Metric::Bitrate(_) => "bps",
+        }
+    }
 }
 
 impl PartialOrd for Metric {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
-            (Metric::Percent(pct), Metric::Bitrate(br)) => {
+            (Metric::Percent(_), Metric::Bitrate(_)) => {
                 panic!("Comparing incompatible metrics")
             }
-            (Metric::Bitrate(br), Metric::Percent(pct)) => {
+            (Metric::Bitrate(_), Metric::Percent(_)) => {
                 panic!("Comparing incompatible metrics")
             }
             (Metric::Percent(pct_self), Metric::Percent(pct_other)) => {
@@ -74,8 +90,16 @@ pub struct ArchiveBuilder {
 
 impl ArchiveBuilder {
     pub fn new() -> Self {
-        let archive = Archive { metrics: HashMap::new() };
+        let archive = Archive {
+            metrics: HashMap::new(),
+            resolution: Duration::from_secs(1),
+        };
         ArchiveBuilder { archive }
+    }
+
+    pub fn resolution(mut self, resolution: Duration) -> Self {
+        self.archive.resolution = resolution;
+        self
     }
 
     pub fn new_metric(mut self, label: String, default: Metric) -> Result<Self, Error> {
@@ -93,6 +117,8 @@ impl ArchiveBuilder {
 
 #[cfg(test)]
 mod test_archive_builder {
+    use std::time::Duration;
+
     use crate::core::Error;
     use crate::core::metrics::ArchiveBuilder;
     use crate::core::metrics::Metric;
@@ -110,12 +136,22 @@ mod test_archive_builder {
             Err(_) => panic!("Should have been duplicate error"),
         };
     }
+
+    #[test]
+    fn test_set_archive_resolution() {
+        let archive = ArchiveBuilder::new()
+            .resolution(Duration::from_secs(123))
+            .build();
+
+        assert_eq!(archive.resolution, Duration::from_secs(123));
+    }
 }
 
 
 /// Represents all collected metrics for all processes
 pub struct Archive {
     metrics: HashMap<String, ProcessMetrics>,
+    resolution: Duration,
 }
 
 impl Archive {
@@ -145,23 +181,81 @@ impl Archive {
 
     pub fn current(&self, label: &str, pid: PID) -> Result<&Metric, Error> {
         self.metrics.get(label)
+            .and_then(|pm| Some(pm.last(pid)))
             .ok_or(Error::InvalidLabel)
-            .and_then(|pm| Ok(pm.last(pid)))
+    }
+
+    pub fn label_unit(&self, label: &str) -> Result<&'static str, Error> {
+        self.metrics.get(label)
+            .and_then(|pm| Some(pm.unit()))
+            .ok_or(Error::InvalidLabel)
+    }
+
+    pub fn history(&self, label: &str, pid: PID, span: Duration) -> Result<MetricIter, Error> {
+        let metrics = self.metrics.get(label)
+            .ok_or(Error::InvalidLabel)?;
+
+        let metrics_count = metrics.count(pid)?;
+        let collected_metrics = (span.as_secs() / self.resolution.as_secs()) as usize;
+        let skipped_metrics = metrics_count.checked_sub(collected_metrics)
+            .unwrap_or(0);
+
+        Ok(MetricIter {
+            iter: metrics.iter_process(pid)?
+                .skip(skipped_metrics)
+        })
+    }
+}
+
+pub struct MetricIter<'a> {
+    iter: Skip<Iter<'a, Metric>>
+}
+
+impl<'a> Iterator for MetricIter<'a> {
+    type Item = &'a Metric;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
     }
 }
 
 #[cfg(test)]
 mod test_archive {
+    use std::time::Duration;
+
+    use rstest::*;
+
     use crate::core::Error;
     use crate::core::metrics::{Archive, ArchiveBuilder, Metric};
 
-    #[test]
-    fn test_current_should_be_last_pushed() {
-        let mut archive = ArchiveBuilder::new()
+    #[fixture]
+    fn archive() -> Archive {
+        ArchiveBuilder::new()
+            .resolution(Duration::from_secs(2))
             .new_metric("label".to_string(), Metric::from_bitrate(1))
             .unwrap()
-            .build();
+            .build()
+    }
 
+    #[fixture]
+    fn metrics(mut archive: Archive) -> Vec<Metric> {
+        (1..100).map(|i| {
+            Metric::from_bitrate(i)
+        }).collect::<Vec<Metric>>()
+    }
+
+    #[fixture]
+    fn filled_archive(mut archive: Archive, metrics: Vec<Metric>) -> Archive {
+        metrics.into_iter()
+            .for_each(|m| {
+                archive.push("label", 123, m);
+            });
+
+        archive
+    }
+
+    #[rstest]
+    fn test_current_should_be_last_pushed(mut archive: Archive) {
         archive.push("label", 123, Metric::from_bitrate(123))
             .unwrap();
         archive.push("label", 123, Metric::from_bitrate(456))
@@ -171,61 +265,76 @@ mod test_archive {
                    &Metric::from_bitrate(456));
     }
 
-    #[test]
-    fn test_current_should_be_default_when_no_push() {
-        let mut archive = ArchiveBuilder::new()
-            .new_metric("label".to_string(), Metric::from_percent(45.1).unwrap())
-            .unwrap()
-            .build();
-
+    #[rstest]
+    fn test_current_should_be_default_when_no_push(archive: Archive) {
         assert_eq!(archive.current("label", 123).unwrap(),
-                   &Metric::from_percent(45.1).unwrap());
+                   &Metric::from_bitrate(1));
     }
 
-    #[test]
-    fn test_push_should_fail_when_first_variant_is_invalid() {
-        let mut archive = ArchiveBuilder::new()
-            .new_metric("label".to_string(), Metric::from_percent(45.1).unwrap())
-            .unwrap()
-            .build();
-
+    #[rstest]
+    fn test_push_should_fail_when_first_variant_is_invalid(mut archive: Archive) {
         assert_eq!(archive.push("label", 123,
-                                Metric::from_bitrate(123)),
+                                Metric::from_percent(45.1).unwrap()),
                    Err(Error::InvalidMetricVariant));
     }
 
-    #[test]
-    fn test_push_should_fail_when_additional_variant_is_invalid() {
-        let mut archive = ArchiveBuilder::new()
-            .new_metric("label".to_string(), Metric::from_percent(45.1).unwrap())
-            .unwrap()
-            .build();
-
-        archive.push("label", 123, Metric::from_percent(45.1).unwrap())
+    #[rstest]
+    fn test_push_should_fail_when_additional_variant_is_invalid(mut archive: Archive) {
+        archive.push("label", 123, Metric::from_bitrate(45))
             .unwrap();
 
         assert_eq!(archive.push("label", 123,
-                                Metric::from_bitrate(123)),
+                                Metric::from_percent(50.).unwrap()),
                    Err(Error::InvalidMetricVariant));
     }
 
-    #[test]
-    fn test_push_should_fail_when_label_is_invalid() {
-        let mut archive = ArchiveBuilder::new()
-            .build();
-
+    #[rstest]
+    fn test_push_should_fail_when_label_is_invalid(mut archive: Archive) {
         assert_eq!(archive.push("invalid-label", 123,
                                 Metric::from_bitrate(123)),
                    Err(Error::InvalidLabel));
     }
 
-    #[test]
-    fn test_current_should_fail_when_label_is_invalid() {
-        let mut archive = ArchiveBuilder::new()
-            .build();
-
+    #[rstest]
+    fn test_current_should_fail_when_label_is_invalid(archive: Archive) {
         assert_eq!(archive.current("invalid-label", 123),
                    Err(Error::InvalidLabel));
+    }
+
+    #[rstest]
+    fn test_history_should_be_iterator_of_pushed_metrics(mut archive: Archive) {
+        let mut expected_metrics = Vec::new();
+        (1..10).for_each(|i| {
+            archive.push("label", 123, Metric::from_bitrate(i));
+            expected_metrics.push(Metric::from_bitrate(i));
+        });
+
+        let iter = archive.history("label", 123, Duration::from_secs(60))
+            .unwrap();
+
+        assert_eq!(iter.collect::<Vec<&Metric>>(),
+                   expected_metrics.iter().collect::<Vec<&Metric>>());
+    }
+
+    #[rstest]
+    fn test_history_with_same_span_and_resolution(filled_archive: Archive, metrics: Vec<Metric>) {
+        let iter = filled_archive.history("label", 123,
+                                          filled_archive.resolution)
+            .unwrap();
+
+        assert_eq!(iter.collect::<Vec<&Metric>>(),
+                   vec![metrics.last().unwrap()])
+    }
+
+    #[rstest]
+    fn test_history_with_double_span_than_resolution(filled_archive: Archive,
+                                                     metrics: Vec<Metric>) {
+        let iter = filled_archive.history("label", 123,
+                                          filled_archive.resolution * 2)
+            .unwrap();
+
+        assert_eq!(iter.collect::<Vec<&Metric>>(),
+                   metrics.iter().rev().take(2).rev().collect::<Vec<&Metric>>())
     }
 }
 
@@ -252,5 +361,21 @@ impl ProcessMetrics {
         self.series.get(&pid)
             .and_then(|v| v.last())
             .unwrap_or(&self.default)
+    }
+
+    fn unit(&self) -> &'static str {
+        self.default.base_unit()
+    }
+
+    fn iter_process(&self, pid: PID) -> Result<Iter<Metric>, Error> {
+        Ok(self.series.get(&pid)
+            .ok_or(Error::InvalidPID)?
+            .iter())
+    }
+
+    fn count(&self, pid: PID) -> Result<usize, Error> {
+        Ok(self.series.get(&pid)
+            .ok_or(Error::InvalidPID)?
+            .len())
     }
 }
