@@ -1,8 +1,6 @@
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
-use log::error;
-
 use crate::core::metrics::{Archive, ArchiveBuilder, Metric, Probe};
 use crate::core::process_view::ProcessView;
 use crate::Error;
@@ -74,10 +72,6 @@ impl SpvApplication {
                     self.draw_ui();
                 }
             }
-        }
-
-        if let Err(e) = self.terminal.clear() {
-            error!("Error clearing terminal: {}", e);
         }
 
         Ok(())

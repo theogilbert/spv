@@ -1,6 +1,8 @@
 use std::io;
 use std::io::Stdout;
 
+use log::error;
+
 use termion::raw::{IntoRawMode, RawTerminal};
 use tui::{Frame, Terminal as TuiTerminal};
 use tui::backend::TermionBackend;
@@ -36,15 +38,18 @@ impl Terminal {
         print!("{}", "\n".repeat(terminal.get_frame().size().height as usize));
     }
 
-    pub fn clear(&mut self) -> Result<(), Error> {
-        self.tui_terminal.clear()
-            .map_err(|e| Error::IOError(e.to_string()))
-    }
-
     pub fn draw<F>(&mut self, f: F) -> Result<(), Error>
         where F: FnOnce(&mut Frame<TuiBackend>),
     {
         self.tui_terminal.draw(f)
             .map_err(|e| Error::IOError(e.to_string()))
+    }
+}
+
+impl Drop for Terminal {
+    fn drop(&mut self) {
+        if let Err(e) = self.tui_terminal.clear() {
+            error!("Error clearing terminal: {}", e);
+        }
     }
 }
