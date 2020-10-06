@@ -2,7 +2,6 @@ use std::io;
 use std::io::Stdout;
 
 use log::error;
-
 use termion::raw::{IntoRawMode, RawTerminal};
 use tui::{Frame, Terminal as TuiTerminal};
 use tui::backend::TermionBackend;
@@ -11,10 +10,10 @@ use crate::ui::Error;
 
 pub type TuiBackend = TermionBackend<RawTerminal<Stdout>>;
 
+
 pub struct Terminal {
     tui_terminal: TuiTerminal<TuiBackend>
 }
-
 
 impl Terminal {
     pub fn new() -> Result<Self, Error> {
@@ -53,3 +52,4 @@ impl Drop for Terminal {
         }
     }
 }
+

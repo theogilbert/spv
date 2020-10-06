@@ -7,7 +7,6 @@ use crate::Error;
 use crate::procfs::cpu::CpuProbe;
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
-use crate::ui::Terminal;
 
 pub struct SpvContext {
     process_view: ProcessView
@@ -26,7 +25,6 @@ impl SpvContext {
 
 pub struct SpvApplication {
     receiver: Receiver<Trigger>,
-    terminal: Terminal,
     process_view: ProcessView,
     metrics: Archive,
     ui: SpvUI,
@@ -45,10 +43,9 @@ impl SpvApplication {
 
         Ok(Self {
             receiver,
-            terminal: Terminal::new().map_err(|e| Error::UiError(e.to_string()))?,
             process_view: context.unpack(),
             metrics: archive,
-            ui: SpvUI::default(),
+            ui: SpvUI::new().map_err(|e| Error::UiError(e.to_string()))?,
             probe: CpuProbe::new().expect("... TODO get rid of this POC"), // TODO
         })
     }
@@ -114,9 +111,7 @@ impl SpvApplication {
     }
 
     fn draw_ui(&mut self) -> Result<(), Error> {
-        let ui = &mut self.ui;
-        let metrics = &self.metrics;
-        self.terminal.draw(|f| ui.render(f, metrics))
+        self.ui.render(&self.metrics)
             .map_err(|e| Error::UiError(e.to_string()));
 
         Ok(())

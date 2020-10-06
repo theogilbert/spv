@@ -263,7 +263,7 @@ mod test_archive {
     }
 
     #[fixture]
-    fn metrics(mut archive: Archive) -> Vec<Metric> {
+    fn metrics() -> Vec<Metric> {
         (1..100).map(|i| {
             Metric::from_bitrate(i)
         }).collect::<Vec<Metric>>()
