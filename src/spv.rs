@@ -64,6 +64,7 @@ impl SpvApplication {
                 }
                 Trigger::NextProcess => self.ui.next_process(),
                 Trigger::PreviousProcess => self.ui.previous_process(),
+                Trigger::Resize => {},
             }
 
             self.draw_ui();

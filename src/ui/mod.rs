@@ -55,7 +55,7 @@ impl SpvUI {
         // We need to do this because the borrow checker does not like having &self.foo in a closure
         // while borrowing &mut self.terminal
         let tabs = &self.tabs;
-        let mut process_list = &mut self.process_list;
+        let process_list = &mut self.process_list;
         let chart = &self.chart;
         let metadata_bar = &self.metadata_bar;
 

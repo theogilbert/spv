@@ -1,7 +1,7 @@
 use std::sync::mpsc::Sender;
 
 use libc::c_int;
-use signal_hook::{SIGINT, SIGQUIT, SIGTERM};
+use signal_hook::{SIGINT, SIGQUIT, SIGTERM, SIGWINCH};
 use signal_hook::iterator::Signals;
 
 use crate::triggers::{Error, Trigger};
@@ -17,7 +17,7 @@ impl SignalListener {
     }
 
     pub fn listen(mut self) -> Result<(), Error> {
-        let mut signals = Signals::new(&[SIGINT, SIGTERM, SIGQUIT])
+        let signals = Signals::new(&[SIGINT, SIGTERM, SIGQUIT, SIGWINCH])
             .map_err(|e| Error::SignalError(e.to_string()))?;
 
         while !self.exit {
@@ -26,6 +26,7 @@ impl SignalListener {
                     signal_hook::SIGTERM | signal_hook::SIGINT | signal_hook::SIGQUIT => {
                         self.send_exit();
                     }
+                    signal_hook::SIGWINCH => self.send(Trigger::Resize),
                     _ => unreachable!()
                 }
             }

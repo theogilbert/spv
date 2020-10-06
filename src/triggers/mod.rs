@@ -33,11 +33,11 @@ pub enum Trigger {
     Impulse,
     NextProcess,
     PreviousProcess,
+    Resize,
 }
 
 pub struct TriggersEmitter;
 
-// TODO add signal hook for SIGWINCH (terminal resize) to ask to redraw
 impl TriggersEmitter {
     pub fn launch_async(sender: Sender<Trigger>, impulse_period: Duration) {
         let impulse_sender = sender.clone();
