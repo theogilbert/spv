@@ -56,12 +56,11 @@ impl ProcessView {
             .collect()
     }
 
-    pub fn sorted_processes(&self, archive: &Archive, label: &str) -> Result<Vec<ProcessMetadata>, Error> {
-        let mut processes = self.processes()?;
-
+    pub fn sort_processes(mut processes: Vec<ProcessMetadata>, archive: &Archive,
+                          label: &str) -> Result<Vec<ProcessMetadata>, Error> {
         processes.sort_by(|pm_a, pm_b| {
             let metric_b = Self::current_metric(pm_b, archive, label)
-                .expect("Error getting current metric");
+                .expect("Error getting current metric"); // TODO replace with clean error
 
             let metric_a = Self::current_metric(pm_a, archive, label)
                 .expect("Error getting current metric");

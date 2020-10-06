@@ -2,7 +2,7 @@ use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
 use crate::core::metrics::{Archive, ArchiveBuilder, Metric, Probe};
-use crate::core::process_view::ProcessView;
+use crate::core::process_view::{ProcessMetadata, ProcessView};
 use crate::Error;
 use crate::procfs::cpu::CpuProbe;
 use crate::triggers::Trigger;
@@ -31,7 +31,7 @@ pub struct SpvApplication {
     probe: CpuProbe,
 }
 
-// TODO bundle and inject Terminal/SpvUI, to only have one object rendering app from Archive instance
+
 impl SpvApplication {
     pub fn new(receiver: Receiver<Trigger>, context: SpvContext, probe_period: Duration) -> Result<Self, Error> {
         let archive = ArchiveBuilder::new()
@@ -51,7 +51,7 @@ impl SpvApplication {
     }
 
     pub fn run(mut self) -> Result<(), Error> {
-        self.update_metrics();
+        self.probe_metrics();
 
         loop {
             let trigger = self.receiver.recv()
@@ -59,38 +59,21 @@ impl SpvApplication {
 
             match trigger {
                 Trigger::Exit => break,
-                Trigger::Impulse => self.refresh()?,
-                Trigger::NextProcess => {
-                    self.ui.next_process();
-                    self.draw_ui();
+                Trigger::Impulse => {
+                    self.probe_metrics()?
                 }
-                Trigger::PreviousProcess => {
-                    self.ui.previous_process();
-                    self.draw_ui();
-                }
+                Trigger::NextProcess => self.ui.next_process(),
+                Trigger::PreviousProcess => self.ui.previous_process(),
             }
+
+            self.draw_ui();
         }
 
         Ok(())
     }
 
-    fn refresh(&mut self) -> Result<(), Error> {
-        self.update_metrics()?;
-
-        self.draw_ui()?;
-
-        Ok(())
-    }
-
-    fn update_metrics(&mut self) -> Result<(), Error> {
-        // 1. Get processes
-        // 2. Probe metrics for all processes
-        // 3. Render
-        // How to pass all required info to renderer ?
-        //  - it accesses it itself as it has references to MetricsArchive and ProcessSnapshot
-        //  - the informations are passed as parameters to render
-        let processes = self.process_view
-            .sorted_processes(&self.metrics, self.ui.current_tab())
+    fn probe_metrics(&mut self) -> Result<(), Error> {
+        let processes = self.process_view.processes()
             .map_err(|e| Error::CoreError(e.to_string()))?;
 
         let pids = processes.iter()
@@ -105,6 +88,9 @@ impl SpvApplication {
                     .expect("todo get rid of this poc..") // TODO
             });
 
+        // TODO processes should be its own type of object, with a sort() method instead..
+        let processes = ProcessView::sort_processes(processes, &self.metrics, self.ui.current_tab())
+            .map_err(|e| Error::CoreError(e.to_string()))?;
         self.ui.set_processes(processes);
 
         Ok(())
@@ -112,8 +98,6 @@ impl SpvApplication {
 
     fn draw_ui(&mut self) -> Result<(), Error> {
         self.ui.render(&self.metrics)
-            .map_err(|e| Error::UiError(e.to_string()));
-
-        Ok(())
+            .map_err(|e| Error::UiError(e.to_string()))
     }
 }
