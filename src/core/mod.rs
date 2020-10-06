@@ -1,3 +1,6 @@
+use std::fmt::{Display, Formatter};
+use std::fmt;
+
 pub mod process_view;
 pub mod metrics;
 pub mod values;
@@ -15,9 +18,10 @@ pub enum Error {
     ProbingError(String),
 }
 
-impl ToString for Error {
-    fn to_string(&self) -> String {
-        match self {
+impl Display for Error {
+
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let repr = match self {
             Error::ScanProcessesError(s) => {
                 format!("Error while scanning processes: {}", s)
             }
@@ -30,7 +34,9 @@ impl ToString for Error {
             Error::InvalidLabel => "Invalid label".to_string(),
             Error::DuplicateLabel => "Duplicate label".to_string(),
             Error::InvalidMetricVariant => "Invalid metric variant".to_string(),
-            Error::InvalidPID => "Invalid PID".to_string(),
-        }
+            Error::InvalidPID => "Invalid PID".to_string()
+        };
+
+        write!(f, "{}", repr)
     }
 }

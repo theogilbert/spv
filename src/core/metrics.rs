@@ -1,6 +1,8 @@
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry;
+use std::fmt::{Display, Formatter};
+use std::fmt;
 use std::iter::Skip;
 use std::slice::Iter;
 use std::time::Duration;
@@ -70,12 +72,15 @@ impl PartialOrd for Metric {
     }
 }
 
-impl ToString for Metric {
-    fn to_string(&self) -> String {
-        match self {
+
+impl Display for Metric {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let repr = match self {
             Metric::Percent(pct) => pct.to_string(),
             Metric::Bitrate(br) => br.to_string(),
-        }
+        };
+
+        write!(f, "{}", repr)
     }
 }
 

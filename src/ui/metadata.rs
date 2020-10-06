@@ -4,8 +4,8 @@ use tui::style::{Color, Style};
 use tui::text::Span;
 use tui::widgets::Paragraph;
 
-use crate::app::TuiBackend;
 use crate::core::process_view::ProcessMetadata;
+use crate::ui::terminal::TuiBackend;
 
 pub struct MetadataBar {
     current_text: String,

@@ -4,7 +4,7 @@ use tui::style::{Color, Style};
 use tui::text::Spans;
 use tui::widgets::Tabs;
 
-use crate::app::TuiBackend;
+use crate::ui::terminal::TuiBackend;
 
 pub struct MetricTabs {
     selected_index: usize,

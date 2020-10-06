@@ -5,6 +5,8 @@ use std::io::{Read, Seek, SeekFrom};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use crate::core::process_view::PID;
+use std::fmt::{Display, Formatter};
+use std::fmt;
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum ProcfsError {
@@ -13,13 +15,17 @@ pub enum ProcfsError {
     IoError(String),
 }
 
-impl ToString for ProcfsError {
-    fn to_string(&self) -> String {
-        match self {
+
+impl Display for ProcfsError {
+
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let repr = match self {
             ProcfsError::InvalidFileContent(s) => s.clone(),
             ProcfsError::InvalidFileFormat(s) => s.clone(),
             ProcfsError::IoError(s) => s.clone()
-        }
+        };
+
+        write!(f, "{}", repr)
     }
 }
 

@@ -3,9 +3,9 @@ use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::widgets::{Block, Borders, List, ListItem, ListState};
 
-use crate::app::TuiBackend;
 use crate::core::metrics::Archive;
 use crate::core::process_view::{PID, ProcessMetadata};
+use crate::ui::terminal::TuiBackend;
 
 pub struct ProcessList {
     processes: Vec<ProcessMetadata>,

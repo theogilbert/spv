@@ -1,6 +1,5 @@
 use tui::Frame;
 
-use crate::app::TuiBackend;
 use crate::core::metrics::Archive;
 use crate::core::process_view::ProcessMetadata;
 use crate::ui::chart::MetricsChart;
@@ -8,13 +7,32 @@ use crate::ui::layout::UiLayout;
 use crate::ui::metadata::MetadataBar;
 use crate::ui::processes::ProcessList;
 use crate::ui::tabs::MetricTabs;
+use crate::ui::terminal::TuiBackend;
+use std::fmt::{Display, Formatter};
+use std::fmt;
 
-// Tabs, ProcessList etc... should not leak. FrameRenderer will have next_tab() etc... methods
 mod layout;
 mod tabs;
 mod processes;
 mod chart;
 mod metadata;
+mod terminal;
+
+pub type Terminal = terminal::Terminal;
+
+pub enum Error {
+    IOError(String),
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let repr = match self {
+            Error::IOError(e) => format!("IOError: {}", e),
+        };
+
+        write!(f, "{}", repr)
+    }
+}
 
 pub struct SpvUI {
     tabs: MetricTabs,
@@ -26,6 +44,7 @@ pub struct SpvUI {
 impl Default for SpvUI {
     fn default() -> Self {
         Self {
+            // TODO This is for POC purposes
             tabs: MetricTabs::new(vec!["CPU Usage".to_string()]),
             processes: ProcessList::default(),
             chart: MetricsChart::default(),

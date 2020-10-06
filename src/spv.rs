@@ -1,27 +1,15 @@
-use std::io;
-use std::io::Stdout;
 use std::sync::mpsc::Receiver;
+use std::time::Duration;
 
-use termion::raw::{IntoRawMode, RawTerminal};
-use tui::backend::TermionBackend;
-use tui::Terminal;
+use log::error;
 
 use crate::core::metrics::{Archive, ArchiveBuilder, Metric, Probe};
 use crate::core::process_view::ProcessView;
+use crate::Error;
 use crate::procfs::cpu::CpuProbe;
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
-use std::time::Duration;
-
-pub type TuiBackend = TermionBackend<RawTerminal<Stdout>>;
-
-#[derive(Debug)]
-pub enum Error {
-    MpscError(String),
-    IOError(String),
-    ProcessScanError(String),
-    ProcessProbeError(String),
-}
+use crate::ui::Terminal;
 
 pub struct SpvContext {
     process_view: ProcessView
@@ -40,14 +28,14 @@ impl SpvContext {
 
 pub struct SpvApplication {
     receiver: Receiver<Trigger>,
-    terminal: Terminal<TuiBackend>,
+    terminal: Terminal,
     process_view: ProcessView,
     metrics: Archive,
     ui: SpvUI,
     probe: CpuProbe,
 }
 
-
+// TODO bundle and inject Terminal/SpvUI, to only have one object rendering app from Archive instance
 impl SpvApplication {
     pub fn new(receiver: Receiver<Trigger>, context: SpvContext, probe_period: Duration) -> Result<Self, Error> {
         let archive = ArchiveBuilder::new()
@@ -59,16 +47,15 @@ impl SpvApplication {
 
         Ok(Self {
             receiver,
-            terminal: SpvApplication::init_terminal()?,
+            terminal: Terminal::new().map_err(|e| Error::UiError(e.to_string()))?,
             process_view: context.unpack(),
             metrics: archive,
             ui: SpvUI::default(),
-            probe: CpuProbe::new().expect("... TODO get rid of this POC"),
+            probe: CpuProbe::new().expect("... TODO get rid of this POC"), // TODO
         })
     }
 
     pub fn run(mut self) -> Result<(), Error> {
-        Self::nice_screen_clear().ok();
         self.update_metrics();
 
         loop {
@@ -77,7 +64,7 @@ impl SpvApplication {
 
             match trigger {
                 Trigger::Exit => break,
-                Trigger::Impulse => self.on_impulse()?,
+                Trigger::Impulse => self.refresh()?,
                 Trigger::NextProcess => {
                     self.ui.next_process();
                     self.draw_ui();
@@ -89,21 +76,14 @@ impl SpvApplication {
             }
         }
 
-        self.terminal.clear().ok();
+        if let Err(e) = self.terminal.clear() {
+            error!("Error clearing terminal: {}", e);
+        }
 
         Ok(())
     }
 
-    fn draw_ui(&mut self) -> Result<(), Error> {
-        let ui = &mut self.ui;
-        let metrics = &self.metrics;
-        self.terminal.draw(|f| ui.render(f, metrics))
-            .map_err(|e| Error::IOError(e.to_string()))?;
-
-        Ok(())
-    }
-
-    fn on_impulse(&mut self) -> Result<(), Error> {
+    fn refresh(&mut self) -> Result<(), Error> {
         self.update_metrics()?;
 
         self.draw_ui()?;
@@ -120,18 +100,18 @@ impl SpvApplication {
         //  - the informations are passed as parameters to render
         let processes = self.process_view
             .sorted_processes(&self.metrics, self.ui.current_tab())
-            .map_err(|e| Error::ProcessScanError(e.to_string()))?;
+            .map_err(|e| Error::CoreError(e.to_string()))?;
 
         let pids = processes.iter()
             .map(|pm| pm.pid()).collect();
 
         let metrics = self.probe.probe_processes(&pids)
-            .map_err(|e| Error::ProcessProbeError(e.to_string()))?;
+            .map_err(|e| Error::CoreError(e.to_string()))?;
 
         metrics.into_iter()
             .for_each(|(pid, metric)| {
                 self.metrics.push(self.ui.current_tab(), pid, metric)
-                    .expect("todo get rid of this poc..")
+                    .expect("todo get rid of this poc..") // TODO
             });
 
         self.ui.set_processes(processes);
@@ -139,23 +119,12 @@ impl SpvApplication {
         Ok(())
     }
 
-    /// Instead of terminal.clear(), this function will not erase current text in the screen. It
-    /// will rather append new line until the next buffer does not cover existing text
-    fn nice_screen_clear() -> Result<(), Error> {
-        let mut tmp_terminal = Self::init_terminal()?;
-
-        print!("{}", "\n".repeat(tmp_terminal.get_frame().size().height as usize));
+    fn draw_ui(&mut self) -> Result<(), Error> {
+        let ui = &mut self.ui;
+        let metrics = &self.metrics;
+        self.terminal.draw(|f| ui.render(f, metrics))
+            .map_err(|e| Error::UiError(e.to_string()));
 
         Ok(())
-    }
-
-    fn init_terminal() -> Result<Terminal<TuiBackend>, Error> {
-        let stdout = io::stdout()
-            .into_raw_mode()
-            .map_err(|e| Error::IOError(e.to_string()))?;
-        let backend = TermionBackend::new(stdout);
-
-        Terminal::new(backend)
-            .map_err(|e| Error::IOError(e.to_string()))
     }
 }

@@ -7,7 +7,7 @@ use log::error;
 use log::LevelFilter;
 use simplelog::{Config, WriteLogger};
 
-use spv::app::{SpvApplication, SpvContext};
+use spv::spv::{SpvApplication, SpvContext};
 use spv::core::process_view::ProcessView;
 use spv::procfs::process::ProcfsScanner;
 use spv::triggers::TriggersEmitter;

@@ -1,7 +1,7 @@
 use tui::Frame;
 use tui::layout::{Constraint, Direction, Layout, Rect};
 
-use crate::app::TuiBackend;
+use crate::ui::terminal::TuiBackend;
 
 pub struct UiLayout {
     main_chunks: Vec<Rect>,

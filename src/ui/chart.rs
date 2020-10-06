@@ -7,9 +7,9 @@ use tui::style::{Color, Style};
 use tui::text::Span;
 use tui::widgets::{Axis, Block, Borders, Chart, Dataset, GraphType};
 
-use crate::app::TuiBackend;
 use crate::core::metrics::Archive;
 use crate::core::process_view::ProcessMetadata;
+use crate::ui::terminal::TuiBackend;
 
 pub struct MetricsChart {
     // The time span the chart covers

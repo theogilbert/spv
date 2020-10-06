@@ -66,9 +66,15 @@ impl ProcessView {
             let metric_a = Self::current_metric(pm_a, archive, label)
                 .expect("Error getting current metric");
 
-            metric_a.partial_cmp(metric_b)
+            let mut ordering = metric_a.partial_cmp(metric_b)
                 .unwrap_or(Ordering::Greater)
-                .reverse()
+                .reverse();
+
+            if ordering == Ordering::Equal {
+                ordering = pm_a.pid.cmp(&pm_b.pid);
+            }
+
+            ordering
         });
 
         Ok(processes)
