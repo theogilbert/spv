@@ -2,7 +2,7 @@ use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
 use crate::core::metrics::{Archive, ArchiveBuilder, Metric, Probe};
-use crate::core::process_view::{ProcessMetadata, ProcessView};
+use crate::core::process_view::ProcessView;
 use crate::Error;
 use crate::procfs::cpu::CpuProbe;
 use crate::triggers::Trigger;

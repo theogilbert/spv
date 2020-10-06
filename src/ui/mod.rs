@@ -1,6 +1,5 @@
 use std::fmt::{Display, Formatter};
 use std::fmt;
-use std::io::Stdout;
 
 use crate::core::metrics::Archive;
 use crate::core::process_view::ProcessMetadata;
