@@ -11,6 +11,8 @@ tui = "0.10.0"
 termion = "1.5.5"
 log = { version = " 0.4.11", features=["max_level_debug", "release_max_level_warn"] }
 simplelog = "0.8.0"
+signal-hook = "0.1.16"
+libc = "0.2.79"
 
 [dev-dependencies]
 tempfile = "3.1.0"
