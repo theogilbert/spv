@@ -1,3 +1,5 @@
+//! Metric handling
+
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry;
@@ -11,6 +13,7 @@ use crate::core::Error;
 use crate::core::process_view::PID;
 use crate::core::values::{Bitrate, Percent, Value};
 
+/// A value probed from a process
 #[derive(Debug, PartialEq)]
 pub enum Metric {
     Percent(Percent),
@@ -84,18 +87,19 @@ impl Display for Metric {
     }
 }
 
-/// A trait for the ability to measure metrics of processes given their `PIDs`
+/// Types which can probe processes for a specific kind of [`Metric`](enum.Metric)
 pub trait Probe {
     /// Returns a map associating a `Metric` instance to each PID
     ///
     /// This method might not return a metric value for all given processes, for instance if
     /// probing one process produces an error. TODO think this over
+    ///
     /// # Arguments
     ///  * `pids`: A set of `PIDs` to monitor
     fn probe_processes(&mut self, pids: &HashSet<PID>) -> Result<HashMap<PID, Metric>, Error>;
 }
 
-
+/// Builder class to initialize an [`Archive`](struct.Archive.html)
 pub struct ArchiveBuilder {
     archive: Archive
 }
@@ -160,7 +164,7 @@ mod test_archive_builder {
 }
 
 
-/// Represents all collected metrics for all processes
+/// Container for all collected metrics
 pub struct Archive {
     metrics: HashMap<String, ProcessMetrics>,
     resolution: Duration,
@@ -178,6 +182,8 @@ impl Archive {
     ///  * `metric` The new metric to associate to the given process and label
     ///                 Only one variant of `Metric` is allowed per label
     ///
+    /// If `label` is invalid, returns a Error::InvalidLabel
+    ///
     pub fn push(&mut self, label: &str, pid: PID, metric: Metric) -> Result<(), Error> {
         let pm = match self.metrics.get_mut(label) {
             Some(pm) => Ok(pm),
@@ -191,23 +197,50 @@ impl Archive {
         })
     }
 
-    pub fn current(&self, label: &str, pid: PID) -> Result<&Metric, Error> {
+    /// Get the latest metric entry for the given label and PID, or a default value if none exist
+    ///
+    /// # Arguments
+    ///  * `label`: The name of the label of the probe which produced the metric
+    ///  * `pid`: The ID of the process for which to retrieve the latest metric
+    ///
+    /// If `label` is invalid, returns a Error::InvalidLabel
+    ///
+    pub fn last(&self, label: &str, pid: PID) -> Result<&Metric, Error> {
         self.metrics.get(label)
             .and_then(|pm| Some(pm.last(pid)))
             .ok_or(Error::InvalidLabel)
     }
 
+    /// Get a textual representation of the unit of metrics pushed by the probe with the given label
+    /// name
+    ///
+    /// # Arguments
+    ///  * `label`: The name of the label of the probe for which to retrieve the unit
+    ///
+    /// If `label` is invalid, returns a Error::InvalidLabel
+    ///
     pub fn label_unit(&self, label: &str) -> Result<&'static str, Error> {
         self.metrics.get(label)
             .and_then(|pm| Some(pm.unit()))
             .ok_or(Error::InvalidLabel)
     }
 
+    /// Returns an iterator over `Metric` for the given probe label and process ID.
+    /// The iterator only contains metrics in the given span
+    ///
+    /// # Arguments
+    ///  * `label`: The name of the label of the probe for which to retrieve the unit
+    ///  * `pid`: The ID of the process for which to retrieve the history
+    ///  * `span`: Indicates from how long back to retrieve metrics. To see how many metrics can
+    ///         be contained in the iterator based on this argument, see `expected_metrics()`
+    ///
+    /// If `label` is invalid, returns a Error::InvalidLabel
+    ///
     pub fn history(&self, label: &str, pid: PID, span: Duration) -> Result<MetricIter, Error> {
         let metrics = self.metrics.get(label)
             .ok_or(Error::InvalidLabel)?;
 
-        let metrics_count = metrics.count(pid)?;
+        let metrics_count = metrics.count(pid);
         let collected_metrics = self.expected_metrics(span);
         let skipped_metrics = metrics_count.checked_sub(collected_metrics)
             .unwrap_or(0);
@@ -229,6 +262,7 @@ impl Archive {
     }
 }
 
+/// An iterator over [`Metric`](enum.Metric.html)
 pub struct MetricIter<'a> {
     iter: Skip<Iter<'a, Metric>>
 }
@@ -289,13 +323,13 @@ mod test_archive {
         archive.push("label", 123, Metric::from_bitrate(456))
             .unwrap();
 
-        assert_eq!(archive.current("label", 123).unwrap(),
+        assert_eq!(archive.last("label", 123).unwrap(),
                    &Metric::from_bitrate(456));
     }
 
     #[rstest]
     fn test_current_should_be_default_when_no_push(archive: Archive) {
-        assert_eq!(archive.current("label", 123).unwrap(),
+        assert_eq!(archive.last("label", 123).unwrap(),
                    &Metric::from_bitrate(1));
     }
 
@@ -325,7 +359,7 @@ mod test_archive {
 
     #[rstest]
     fn test_current_should_fail_when_label_is_invalid(archive: Archive) {
-        assert_eq!(archive.current("invalid-label", 123),
+        assert_eq!(archive.last("invalid-label", 123),
                    Err(Error::InvalidLabel));
     }
 
@@ -401,9 +435,9 @@ impl ProcessMetrics {
             .iter())
     }
 
-    fn count(&self, pid: PID) -> Result<usize, Error> {
-        Ok(self.series.get(&pid)
-            .ok_or(Error::InvalidPID)?
-            .len())
+    fn count(&self, pid: PID) -> usize {
+        self.series.get(&pid)
+            .map(|v| v.len())
+            .unwrap_or(0)
     }
 }

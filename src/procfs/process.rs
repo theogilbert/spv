@@ -1,3 +1,6 @@
+//! Process discovery
+
+
 use std::collections::HashSet;
 use std::fs::{DirEntry, File, read_dir};
 use std::io::Read;

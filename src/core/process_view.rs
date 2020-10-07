@@ -1,3 +1,5 @@
+//! Process discovery
+
 use std::cmp::Ordering;
 use std::collections::HashSet;
 
@@ -56,8 +58,8 @@ impl ProcessView {
             .collect()
     }
 
-    pub fn sort_processes(mut processes: Vec<ProcessMetadata>, archive: &Archive,
-                          label: &str) -> Result<Vec<ProcessMetadata>, Error> {
+    pub fn sort_processes(processes: &mut Vec<ProcessMetadata>, archive: &Archive,
+                          label: &str) -> () {
         processes.sort_by(|pm_a, pm_b| {
             let metric_b = Self::current_metric(pm_b, archive, label)
                 .expect("Error getting current metric"); // TODO replace with clean error
@@ -75,12 +77,10 @@ impl ProcessView {
 
             ordering
         });
-
-        Ok(processes)
     }
 
     fn current_metric<'a>(process: &ProcessMetadata, archive: &'a Archive, label: &str) -> Result<&'a Metric, Error> {
-        archive.current(label, process.pid())
+        archive.last(label, process.pid())
     }
 }
 

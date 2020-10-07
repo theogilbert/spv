@@ -1,3 +1,7 @@
+//!
+
+// TODO is this module even required ? Couldn't we simply put Percent(f32) and Bitrate(u32)
+// in Metrics ?
 use std::fmt::{Display, Formatter};
 use std::fmt;
 

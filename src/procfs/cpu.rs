@@ -1,3 +1,5 @@
+//! CPU Usage probing
+
 use std::collections::{HashMap, HashSet};
 
 use log::error;
@@ -9,7 +11,7 @@ use crate::core::values::Percent;
 use crate::procfs::parsers;
 use crate::procfs::parsers::{PidStat, ProcessDataReader, ReadProcessData, ReadSystemData, Stat, SystemDataReader};
 
-/// Probe implementation to measure the CPU usage (in percent) of processes///
+/// Probe implementation to measure the CPU usage (in percent) of processes
 pub struct CpuProbe {
     stat_reader: Box<dyn ReadSystemData<Stat>>,
     pid_stat_reader: Box<dyn ReadProcessData<PidStat>>,

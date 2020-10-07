@@ -72,7 +72,7 @@ impl ProcessList {
 
     fn formatted_process_metric(&self, process: &ProcessMetadata, metrics: &Archive,
                                 label: &str) -> String {
-        let m = metrics.current(label, process.pid())
+        let m = metrics.last(label, process.pid())
             .expect("Error getting current metric");
 
         self.align_metric_right(m.to_string())
