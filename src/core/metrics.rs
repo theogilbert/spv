@@ -220,7 +220,10 @@ impl Archive {
 
     /// Indicates how many metrics should be returned by history() with the given span, according
     /// to this archive's resolution.
-    /// The value returned by this function is not a guarantee. History() may return less.
+    /// Note that The value returned by this function is not a guarantee. History() may return less.
+    /// 
+    /// # Arguments
+    ///  * span: Indicates from how long ago should metrics be returned
     pub fn expected_metrics(&self, span: Duration) -> usize {
         (span.as_secs() / self.resolution.as_secs()) as usize
     }
