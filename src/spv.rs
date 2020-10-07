@@ -1,6 +1,8 @@
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
+use log::critical;
+
 use crate::core::metrics::{Archive, ArchiveBuilder, Metric, Probe};
 use crate::core::process_view::ProcessView;
 use crate::Error;
@@ -64,7 +66,7 @@ impl SpvApplication {
                 }
                 Trigger::NextProcess => self.ui.next_process(),
                 Trigger::PreviousProcess => self.ui.previous_process(),
-                Trigger::Resize => {},
+                Trigger::Resize => {}
             }
 
             self.draw_ui();
@@ -85,8 +87,13 @@ impl SpvApplication {
 
         metrics.into_iter()
             .for_each(|(pid, metric)| {
-                self.metrics.push(self.ui.current_tab(), pid, metric)
-                    .expect("todo get rid of this poc..") // TODO
+                let metric_label = self.ui.current_tab();
+                self.metrics.push(metric_label, pid, metric)
+                    .map_err(|e| {
+                        critical!("Error pushing {} metric for PID {}: {}", metric_label, pid, e);
+                        e
+                    })
+                    .expect(&format!("Error pushing {} metric for PID {}", metric_label, pid));
             });
 
         // TODO processes should be its own type of object, with a sort() method instead..
