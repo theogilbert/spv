@@ -9,6 +9,8 @@ use std::iter::Skip;
 use std::slice::Iter;
 use std::time::Duration;
 
+use log::error;
+
 use crate::core::Error;
 use crate::core::process_view::PID;
 use crate::core::values::{Bitrate, Percent, Value};
@@ -89,6 +91,14 @@ impl Display for Metric {
 
 /// Types which can probe processes for a specific kind of [`Metric`](enum.Metric)
 pub trait Probe {
+    fn probe_name(&self) -> &'static str;
+    
+    fn init_iteration(&mut self) -> Result<(), Error> {
+        Ok(())
+    }
+
+    fn probe(&mut self, pid: PID) -> Result<Metric, Error>;
+
     /// Returns a map associating a `Metric` instance to each PID
     ///
     /// This method might not return a metric value for all given processes, for instance if
@@ -97,7 +107,23 @@ pub trait Probe {
     ///
     /// # Arguments
     ///  * `pids`: A set of `PIDs` to monitor
-    fn probe_processes(&mut self, pids: &HashSet<PID>) -> Result<HashMap<PID, Metric>, Error>;
+    fn probe_processes(&mut self, pids: impl Iterator<Item=PID>) -> Result<HashMap<PID, Metric>, Error> {
+        self.init_iteration()?;
+
+        let metrics = pids.filter_map(|pid| {
+            self.probe(pid)
+                .map_err(|e| {
+                    error!("Could not probe {} metric for pid {}: {}",
+                           self.probe_name(), pid, e.to_string());
+                    e
+                })
+                .ok()
+                .map(|m| (pid, m))
+        })
+            .collect();
+
+        Ok(metrics)
+    }
 }
 
 /// Builder class to initialize an [`Archive`](struct.Archive.html)

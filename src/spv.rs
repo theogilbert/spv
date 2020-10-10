@@ -79,10 +79,10 @@ impl SpvApplication {
         let mut processes = self.process_view.processes()
             .map_err(|e| Error::CoreError(e.to_string()))?;
 
-        let pids = processes.iter()
-            .map(|pm| pm.pid()).collect();
+        let pids_iter = processes.iter()
+            .map(|pm| pm.pid());
 
-        let metrics = self.probe.probe_processes(&pids)
+        let metrics = self.probe.probe_processes(pids_iter)
             .map_err(|e| Error::CoreError(e.to_string()))?;
 
         metrics.into_iter()

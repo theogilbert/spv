@@ -37,6 +37,12 @@ impl CpuProbe {
             calculator: UsageCalculator::new(stat_data),
         })
     }
+}
+
+impl Probe for CpuProbe {
+    fn probe_name(&self) -> &'static str {
+        "CPU usage"
+    }
 
     fn init_iteration(&mut self) -> Result<(), Error> {
         let new_stat: Stat = self.stat_reader
@@ -48,32 +54,13 @@ impl CpuProbe {
         Ok(())
     }
 
-    fn probe(&mut self, pid: PID) -> Result<Percent, Error> {
+    fn probe(&mut self, pid: PID) -> Result<Metric, Error> {
         let pid_stat = self.pid_stat_reader
             .read(pid)
             .map_err(|e| Error::ProbingError(e.to_string()))?;
 
-        self.calculator.calculate_pid_usage(pid, pid_stat)
-    }
-}
-
-impl Probe for CpuProbe {
-    fn probe_processes(&mut self, pids: &HashSet<PID>) -> Result<HashMap<PID, Metric>, Error> {
-        self.init_iteration()?;
-
-        let metrics = pids.iter()
-            .filter_map(|pid| {
-                self.probe(*pid)
-                    .map_err(|e| {
-                        error!("Could not probe CPU metric for pid {}: {}", pid, e.to_string());
-                        e
-                    })
-                    .ok()
-                    .map(|pct| (*pid, Metric::Percent(pct)))
-            })
-            .collect();
-
-        Ok(metrics)
+        let percent = self.calculator.calculate_pid_usage(pid, pid_stat)?;
+        Ok(Metric::Percent(percent))
     }
 }
 
