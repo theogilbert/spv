@@ -43,8 +43,7 @@ impl SpvUI {
     pub fn new() -> Result<Self, Error> {
         Ok(Self {
             terminal: Terminal::new()?,
-            // TODO This is for POC purposes
-            tabs: MetricTabs::new(vec!["CPU Usage".to_string()]),
+            tabs: MetricTabs::new(vec!["CPU Usage".to_string()]), // TODO POC code
             process_list: ProcessList::default(),
             chart: MetricsChart::default(),
             metadata_bar: MetadataBar::default(),

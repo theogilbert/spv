@@ -97,8 +97,8 @@ impl SpvApplication {
             });
 
         // TODO processes should be its own type of object, with a sort() method instead..
-        ProcessView::sort_processes(&mut processes, &self.metrics, self.ui.current_tab())
-            .map_err(|e| Error::CoreError(e.to_string()))?;
+        ProcessView::sort_processes(&mut processes, &self.metrics,
+                                    self.ui.current_tab());
         self.ui.set_processes(processes);
 
         Ok(())
