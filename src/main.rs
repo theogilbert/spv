@@ -1,4 +1,3 @@
-use std::env;
 use std::fs::OpenOptions;
 use std::sync::mpsc::channel;
 use std::time::Duration;
@@ -7,9 +6,11 @@ use log::error;
 use log::LevelFilter;
 use simplelog::{Config, WriteLogger};
 
-use spv::spv::{SpvApplication, SpvContext};
+use spv::core::metrics::Probe;
 use spv::core::process_view::ProcessView;
+use spv::procfs::cpu::CpuProbe;
 use spv::procfs::process::ProcfsScanner;
+use spv::spv::{SpvApplication, SpvContext};
 use spv::triggers::TriggersEmitter;
 
 fn main() {
@@ -21,7 +22,10 @@ fn main() {
     TriggersEmitter::launch_async(tx, probe_period);
 
     let app_context = build_spv_context();
-    let app_ret = SpvApplication::new(rx, app_context,
+
+    let probes = vec![Box::new(CpuProbe::new().expect("... TODO get rid of this POC")) as Box<dyn Probe>];
+
+    let app_ret = SpvApplication::new(rx, probes, app_context,
                                       probe_period);
 
     match app_ret {
@@ -42,7 +46,8 @@ fn init_logging() {
         .open("spv.log")
         .expect("Could not open log file");
 
-    WriteLogger::init(LevelFilter::Debug, Config::default(), log_file);
+    WriteLogger::init(LevelFilter::Debug, Config::default(), log_file)
+        .expect("Could not initialize logging");
 }
 
 

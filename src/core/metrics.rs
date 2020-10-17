@@ -1,7 +1,7 @@
 //! Metric handling
 
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::fmt::{Display, Formatter};
 use std::fmt;
@@ -91,8 +91,10 @@ impl Display for Metric {
 
 /// Types which can probe processes for a specific kind of [`Metric`](enum.Metric)
 pub trait Probe {
-    fn probe_name(&self) -> &'static str;
-    
+    fn name(&self) -> &'static str;
+
+    fn default_metric(&self) -> Metric;
+
     fn init_iteration(&mut self) -> Result<(), Error> {
         Ok(())
     }
@@ -107,18 +109,19 @@ pub trait Probe {
     ///
     /// # Arguments
     ///  * `pids`: A set of `PIDs` to monitor
-    fn probe_processes(&mut self, pids: impl Iterator<Item=PID>) -> Result<HashMap<PID, Metric>, Error> {
+    fn probe_processes(&mut self, pids: &Vec<PID>) -> Result<HashMap<PID, Metric>, Error> {
         self.init_iteration()?;
 
-        let metrics = pids.filter_map(|pid| {
-            self.probe(pid)
+        let metrics = pids.iter()
+            .filter_map(|pid| {
+            self.probe(*pid)
                 .map_err(|e| {
                     error!("Could not probe {} metric for pid {}: {}",
-                           self.probe_name(), pid, e.to_string());
+                           self.name(), pid, e.to_string());
                     e
                 })
                 .ok()
-                .map(|m| (pid, m))
+                .map(|m| (*pid, m))
         })
             .collect();
 
@@ -197,6 +200,9 @@ pub struct Archive {
     resolution: Duration,
 }
 
+
+// TODO there should be a way to signal new iterations so that all metrics from all PIDS/probes are
+// synchronized, with default value for missing metrics
 impl Archive {
     /// Pushes a new `Metric` to the archive
     /// If the label is invalid, `Error::InvalidLabel` will be returned

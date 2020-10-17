@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::fmt;
+use std::time::Duration;
 
 use crate::core::metrics::Archive;
 use crate::core::process_view::ProcessMetadata;
@@ -40,12 +41,15 @@ pub struct SpvUI {
 }
 
 impl SpvUI {
-    pub fn new() -> Result<Self, Error> {
+    pub fn new(labels: impl Iterator<Item=String>) -> Result<Self, Error> {
+        let tabs = MetricTabs::new(labels.collect());
+        let chart = MetricsChart::new(Duration::from_secs(60), tabs.current().to_string());
+
         Ok(Self {
             terminal: Terminal::new()?,
-            tabs: MetricTabs::new(vec!["CPU Usage".to_string()]), // TODO POC code
+            tabs,
             process_list: ProcessList::default(),
-            chart: MetricsChart::default(),
+            chart,
             metadata_bar: MetadataBar::default(),
         })
     }

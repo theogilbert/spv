@@ -1,8 +1,6 @@
 //! CPU Usage probing
 
-use std::collections::{HashMap, HashSet};
-
-use log::error;
+use std::collections::HashMap;
 
 use crate::core::Error;
 use crate::core::metrics::{Metric, Probe};
@@ -40,8 +38,12 @@ impl CpuProbe {
 }
 
 impl Probe for CpuProbe {
-    fn probe_name(&self) -> &'static str {
+    fn name(&self) -> &'static str {
         "CPU usage"
+    }
+
+    fn default_metric(&self) -> Metric {
+        Metric::from_percent(0.).unwrap()
     }
 
     fn init_iteration(&mut self) -> Result<(), Error> {
@@ -66,7 +68,7 @@ impl Probe for CpuProbe {
 
 #[cfg(test)]
 mod test_cpu_probe {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashMap;
 
     use crate::core::metrics::{Metric, Probe};
     use crate::core::process_view::PID;
@@ -106,7 +108,7 @@ mod test_cpu_probe {
                                                Box::new(pid_stat_reader))
             .expect("Could not create procfs");
 
-        assert_eq!(probe.probe_processes(&HashSet::new()), Ok(hashmap!()));
+        assert_eq!(probe.probe_processes(&vec![]), Ok(hashmap!()));
     }
 
 
@@ -123,7 +125,7 @@ mod test_cpu_probe {
                                                Box::new(pid_stat_reader))
             .expect("Could not create procfs");
 
-        assert_eq!(probe.probe_processes(&vec![1].into_iter().collect()),
+        assert_eq!(probe.probe_processes(&vec![1]),
                    Ok(hashmap!(1 => Metric::from_percent(50.).unwrap())));
     }
 
@@ -141,7 +143,7 @@ mod test_cpu_probe {
                                                Box::new(pid_stat_reader))
             .expect("Could not create procfs");
 
-        let metrics = probe.probe_processes(&hashset!(1, 2)).unwrap();
+        let metrics = probe.probe_processes(&vec!(1, 2)).unwrap();
         assert_eq!(metrics,
                    hashmap!(1 => Metric::from_percent(25.).unwrap(),
                    2 => Metric::from_percent(25.).unwrap()));
@@ -164,7 +166,7 @@ mod test_cpu_probe {
                                                Box::new(pid_stat_reader))
             .expect("Could not create procfs");
 
-        assert_eq!(probe.probe_processes(&vec![1, 2].into_iter().collect()),
+        assert_eq!(probe.probe_processes(&vec![1, 2]),
                    Ok(hashmap!(1 => Metric::from_percent(25.).unwrap())));
     }
 }

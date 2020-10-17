@@ -18,18 +18,16 @@ pub struct MetricsChart {
     current_label: String,
 }
 
-impl Default for MetricsChart {
-    fn default() -> Self {
-        Self {
-            span: Duration::from_secs(60),
-            axis_origin_label: "-1m".to_string(),
-            current_label: "CPU Usage".to_string(),
-        }
-    }
-}
-
 
 impl MetricsChart {
+    pub fn new(span: Duration, current_label: String) -> Self {
+        Self {
+            span,
+            axis_origin_label: "-1m".to_string(), // TODO fix this
+            current_label,
+        }
+    }
+
     fn build_process_data(&self, process: &ProcessMetadata, metrics: &Archive) -> Vec<(f64, f64)> {
         metrics.history(&self.current_label, process.pid(), self.span)
             .expect("Could not get history of process")

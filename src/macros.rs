@@ -9,15 +9,3 @@ macro_rules! hashmap (
         }
     }
 );
-
-macro_rules! hashset (
-    { $($key:expr),* } => {
-        {
-            let mut _s = ::std::collections::HashSet::new();
-            $(
-                _s.insert($key);
-            )*
-            _s
-        }
-    }
-);
