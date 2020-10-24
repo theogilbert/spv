@@ -105,7 +105,6 @@ pub trait Probe {
     ///
     /// This method might not return a metric value for all given processes, for instance if
     /// probing one process produces an error. TODO think this over
-    /// TODO shouldn't probe rather be a trait with two methods: one init_iteration() and one probe
     ///
     /// # Arguments
     ///  * `pids`: A set of `PIDs` to monitor

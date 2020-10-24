@@ -43,7 +43,7 @@ impl Probe for CpuProbe {
     }
 
     fn default_metric(&self) -> Metric {
-        Metric::from_percent(0.).unwrap()
+        Metric::from_percent(f32::NAN).unwrap()
     }
 
     fn init_iteration(&mut self) -> Result<(), Error> {
