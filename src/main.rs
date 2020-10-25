@@ -8,7 +8,7 @@ use simplelog::{Config, WriteLogger};
 
 use spv::core::metrics::Probe;
 use spv::core::process_view::ProcessView;
-use spv::procfs::cpu::CpuProbe;
+use spv::procfs::cpu_probe::CpuProbe;
 use spv::procfs::process::ProcfsScanner;
 use spv::spv::{SpvApplication, SpvContext};
 use spv::triggers::TriggersEmitter;

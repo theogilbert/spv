@@ -3,28 +3,35 @@
 
 use std::collections::HashSet;
 use std::fs::{DirEntry, File, read_dir};
+use std::io;
 use std::io::Read;
 use std::path::PathBuf;
+
+use thiserror::Error;
 
 use crate::core::Error as CoreError;
 use crate::core::process_view::{PID, ProcessMetadata, ProcessScanner};
 
 /// Errors internal to the process module
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub enum Error {
-    NotProcessDir,
-    ProcessScanningFailure(String),
-    ProcessParsingError(String),
-    InvalidPID,
+#[derive(Error, Debug)]
+enum Error {
+    #[error("Directory PID has invalid syntax: '{0:?}'")]
+    NotProcessDir(String),
+    #[error("Failed to read the content of directory '{0:?}'")]
+    ProcessScanningFailure(PathBuf, #[source] io::Error),
+    #[error("Error while parsing process directory '{0:?}'")]
+    ProcessParsingError(PathBuf, #[source] io::Error),
+    #[error("PID is invalid: '{0:?}'")]
+    InvalidPID(PID),
 }
 
-impl Into<CoreError> for Error {
-    fn into(self) -> CoreError {
-        match self {
-            Error::InvalidPID => CoreError::ReadMetadataError("Invalid PID".to_string()),
-            Error::NotProcessDir => CoreError::ReadMetadataError("Invalid proc dir".to_string()),
-            Error::ProcessParsingError(s) => CoreError::ReadMetadataError(s),
-            Error::ProcessScanningFailure(s) => CoreError::ScanProcessesError(s),
+impl From<Error> for CoreError {
+    fn from(e: Error) -> Self {
+        match e {
+            Error::ProcessScanningFailure(s, e) => {
+                CoreError::ScanProcessesError(Box::new(Error::ProcessScanningFailure(s, e)))
+            }
+            e => CoreError::ReadMetadataError(Box::new(e)),
         }
     }
 }
@@ -50,13 +57,12 @@ impl ProcfsScanner {
     /// # Arguments
     /// * `dir_name` - An optional string slice that holds the name of a directory
     ///
-    fn extract_pid_from_proc_dir(dir_name: Option<&str>) -> std::result::Result<PID, Error> {
-        let pid_ret = match dir_name {
-            Some(dir_name) => dir_name.parse::<PID>(),
-            None => return Err(Error::NotProcessDir)
-        };
-
-        pid_ret.map_err(|_| Error::NotProcessDir)
+    fn extract_pid_from_proc_dir(dir_name_opt: Option<&str>) -> std::result::Result<PID, Error> {
+        match dir_name_opt {
+            Some(dir_name) => dir_name.parse::<PID>()
+                .or(Err(Error::NotProcessDir(dir_name.to_string()))),
+            None => return Err(Error::NotProcessDir("".to_string()))
+        }
     }
 }
 
@@ -64,22 +70,21 @@ impl ProcfsScanner {
 impl ProcessScanner for ProcfsScanner {
     /// Returns the PIDs of currently running processes
     fn scan(&self) -> std::result::Result<Vec<PID>, CoreError> {
-        let dir_iter = read_dir(self.proc_dir.as_path())
-            .map_err(|e| Error::ProcessScanningFailure(e.to_string()).into())?;
+        let path = self.proc_dir.as_path();
+
+        let dir_iter = read_dir(path)
+            .map_err(|e| Error::ProcessScanningFailure(path.into(), e))?;
 
         let pids = dir_iter
             // only retrieve dir entry which are not err
             .filter_map(|r| r.ok())
             // only retrieve directories
-            .filter(|de| {
-                de.file_type().is_ok() && de.file_type().unwrap().is_dir()
-            })
+            .filter(|de| de.file_type().is_ok() && de.file_type().unwrap().is_dir())
             // retrieve Result<PID> from dir name
             .map(|de: DirEntry| Self::extract_pid_from_proc_dir(de.file_name().to_str()))
             // Discard all dir names which could not be converted to PID
             .filter_map(|pid_ret| pid_ret.ok())
             .collect();
-
 
         Ok(pids)
     }
@@ -94,11 +99,11 @@ impl ProcessScanner for ProcfsScanner {
             .join(pid.to_string())
             .join("comm");
 
-        let mut file = File::open(comm_file_path)
-            .map_err(|_| Error::InvalidPID.into())?;
+        let mut file: File = File::open(comm_file_path.as_path())
+            .map_err(|_| Error::InvalidPID(pid))?;
 
         file.read_to_string(&mut command)
-            .map_err(|io_err| Error::ProcessParsingError(io_err.to_string()).into())?;
+            .map_err(|io_err| Error::ProcessParsingError(comm_file_path, io_err))?;
 
         if command.ends_with('\n') {  // Remove trailing newline
             command.pop();
@@ -116,21 +121,23 @@ mod test_pid_from_proc_dir {
     fn test_pid_from_valid_proc_dir_name() {
         let valid_pid = ProcfsScanner::extract_pid_from_proc_dir(Some("123"));
 
-        assert_eq!(valid_pid, Ok(123));
+        assert!(matches!(valid_pid, Ok(123)));
     }
 
     #[test]
     fn test_pid_from_invalid_proc_dir_name() {
         let invalid_pid = ProcfsScanner::extract_pid_from_proc_dir(Some("abc"));
 
-        assert_eq!(invalid_pid, Err(Error::NotProcessDir));
+        let dir = String::from("abc");
+        assert!(matches!(invalid_pid, Err(Error::NotProcessDir(dir))));
     }
 
     #[test]
     fn test_pid_from_no_proc_dir_name() {
         let invalid_pid = ProcfsScanner::extract_pid_from_proc_dir(None);
 
-        assert_eq!(invalid_pid, Err(Error::NotProcessDir));
+        let dir = String::new();
+        assert!(matches!(invalid_pid, Err(Error::NotProcessDir(dir))));
     }
 }
 
@@ -275,13 +282,10 @@ mod test_pid_scanner {
     fn test_get_metadata_with_invalid_pid() {
         let test_proc_dir = tempdir().expect("Could not create tmp dir");
 
-        let proc_scanner = ProcfsScanner {
-            proc_dir: test_proc_dir.path().to_path_buf()
-        };
+        let proc_scanner = ProcfsScanner { proc_dir: test_proc_dir.path().to_path_buf() };
 
         let process_metadata_ret = proc_scanner.fetch_metadata(123);
 
-        assert_eq!(process_metadata_ret,
-                   Err(CoreError::ReadMetadataError("Invalid PID".to_string())));
+        assert!(matches!(process_metadata_ret, Err(CoreError::ReadMetadataError(_))));
     }
 }

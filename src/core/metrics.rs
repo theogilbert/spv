@@ -1,8 +1,8 @@
 //! Metric handling
 
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::fmt;
 use std::iter::Skip;
@@ -113,15 +113,15 @@ pub trait Probe {
 
         let metrics = pids.iter()
             .filter_map(|pid| {
-            self.probe(*pid)
-                .map_err(|e| {
-                    error!("Could not probe {} metric for pid {}: {}",
-                           self.name(), pid, e.to_string());
-                    e
-                })
-                .ok()
-                .map(|m| (*pid, m))
-        })
+                self.probe(*pid)
+                    .map_err(|e| {
+                        error!("Could not probe {} metric for pid {}: {}",
+                               self.name(), pid, e.to_string());
+                        e
+                    })
+                    .ok()
+                    .map(|m| (*pid, m))
+            })
             .collect();
 
         Ok(metrics)
@@ -148,9 +148,11 @@ impl ArchiveBuilder {
     }
 
     pub fn new_metric(mut self, label: String, default: Metric) -> Result<Self, Error> {
-        match self.archive.metrics.insert(label, ProcessMetrics::new(default)) {
-            Some(_) => Err(Error::DuplicateLabel),
-            None => Ok(self)
+        if self.archive.metrics.contains_key(&label) {
+            Err(Error::DuplicateLabel(label))
+        } else {
+            self.archive.metrics.insert(label, ProcessMetrics::new(default));
+            Ok(self)
         }
     }
 
@@ -177,7 +179,7 @@ mod test_archive_builder {
 
         match err_ret {
             Ok(_) => panic!("Should have failed"),
-            Err(Error::DuplicateLabel) => (),
+            Err(Error::DuplicateLabel(_)) => (),
             Err(_) => panic!("Should have been duplicate error"),
         };
     }
@@ -204,7 +206,7 @@ pub struct Archive {
 // synchronized, with default value for missing metrics
 impl Archive {
     /// Pushes a new `Metric` to the archive
-    /// If the label is invalid, `Error::InvalidLabel` will be returned
+    /// If the label is invalid, `Error::UnexpectedLabel` will be returned
     /// If the metric variant is incompatible with the label, `Error::InvalidMetricVariant` will be
     ///  returned
     ///
@@ -214,18 +216,18 @@ impl Archive {
     ///  * `metric` The new metric to associate to the given process and label
     ///                 Only one variant of `Metric` is allowed per label
     ///
-    /// If `label` is invalid, returns a Error::InvalidLabel
+    /// If `label` is invalid, returns a Error::UnexpectedLabel
     ///
     pub fn push(&mut self, label: &str, pid: PID, metric: Metric) -> Result<(), Error> {
         let pm = match self.metrics.get_mut(label) {
             Some(pm) => Ok(pm),
-            None => Err(Error::InvalidLabel)
+            None => Err(Error::UnexpectedLabel(label.to_string()))
         }?;
 
         Ok(match (pm.last(pid), metric) {
             (&Metric::Percent(_), Metric::Percent(pct)) => pm.push(pid, Metric::Percent(pct)),
             (&Metric::Bitrate(_), Metric::Bitrate(br)) => pm.push(pid, Metric::Bitrate(br)),
-            (_, _) => Err(Error::InvalidMetricVariant)?
+            (_, m) => Err(Error::InvalidMetricVariant(label.to_string(), m))?
         })
     }
 
@@ -235,12 +237,12 @@ impl Archive {
     ///  * `label`: The name of the label of the probe which produced the metric
     ///  * `pid`: The ID of the process for which to retrieve the latest metric
     ///
-    /// If `label` is invalid, returns a Error::InvalidLabel
+    /// If `label` is invalid, returns a Error::UnexpectedLabel
     ///
     pub fn last(&self, label: &str, pid: PID) -> Result<&Metric, Error> {
         self.metrics.get(label)
             .and_then(|pm| Some(pm.last(pid)))
-            .ok_or(Error::InvalidLabel)
+            .ok_or(Error::UnexpectedLabel(label.to_string()))
     }
 
     /// Get a textual representation of the unit of metrics pushed by the probe with the given label
@@ -249,12 +251,12 @@ impl Archive {
     /// # Arguments
     ///  * `label`: The name of the label of the probe for which to retrieve the unit
     ///
-    /// If `label` is invalid, returns a Error::InvalidLabel
+    /// If `label` is invalid, returns a Error::UnexpectedLabel
     ///
     pub fn label_unit(&self, label: &str) -> Result<&'static str, Error> {
         self.metrics.get(label)
             .and_then(|pm| Some(pm.unit()))
-            .ok_or(Error::InvalidLabel)
+            .ok_or(Error::UnexpectedLabel(label.to_string()))
     }
 
     /// Returns an iterator over `Metric` for the given probe label and process ID.
@@ -266,11 +268,11 @@ impl Archive {
     ///  * `span`: Indicates from how long back to retrieve metrics. To see how many metrics can
     ///         be contained in the iterator based on this argument, see `expected_metrics()`
     ///
-    /// If `label` is invalid, returns a Error::InvalidLabel
+    /// If `label` is invalid, returns a Error::UnexpectedLabel
     ///
     pub fn history(&self, label: &str, pid: PID, span: Duration) -> Result<MetricIter, Error> {
         let metrics = self.metrics.get(label)
-            .ok_or(Error::InvalidLabel)?;
+            .ok_or(Error::UnexpectedLabel(label.to_string()))?;
 
         let metrics_count = metrics.count(pid);
         let collected_metrics = self.expected_metrics(span);
@@ -367,32 +369,34 @@ mod test_archive {
 
     #[rstest]
     fn test_push_should_fail_when_first_variant_is_invalid(mut archive: Archive) {
-        assert_eq!(archive.push("label", 123,
-                                Metric::from_percent(45.1).unwrap()),
-                   Err(Error::InvalidMetricVariant));
+        let label = "label".to_string();
+
+        assert!(matches!(archive.push(&label, 123, Metric::from_percent(45.1).unwrap()),
+                         Err(Error::InvalidMetricVariant(label, _))));
     }
 
     #[rstest]
     fn test_push_should_fail_when_additional_variant_is_invalid(mut archive: Archive) {
-        archive.push("label", 123, Metric::from_bitrate(45))
+        let label = "label".to_string();
+        archive.push(&label, 123, Metric::from_bitrate(45))
             .unwrap();
 
-        assert_eq!(archive.push("label", 123,
-                                Metric::from_percent(50.).unwrap()),
-                   Err(Error::InvalidMetricVariant));
+        assert!(matches!(archive.push(&label, 123, Metric::from_percent(50.).unwrap()),
+                         Err(Error::InvalidMetricVariant(label, _))));
     }
 
     #[rstest]
     fn test_push_should_fail_when_label_is_invalid(mut archive: Archive) {
-        assert_eq!(archive.push("invalid-label", 123,
-                                Metric::from_bitrate(123)),
-                   Err(Error::InvalidLabel));
+        let label = "invalid-label".to_string();
+        assert!(matches!(archive.push(&label, 123, Metric::from_bitrate(123)),
+                         Err(Error::UnexpectedLabel(label))));
     }
 
     #[rstest]
     fn test_current_should_fail_when_label_is_invalid(archive: Archive) {
-        assert_eq!(archive.last("invalid-label", 123),
-                   Err(Error::InvalidLabel));
+        let label = "invalid-label".to_string();
+        assert!(matches!(archive.last(&label, 123),
+                         Err(Error::UnexpectedLabel(label))));
     }
 
     #[rstest]
@@ -463,7 +467,7 @@ impl ProcessMetrics {
 
     fn iter_process(&self, pid: PID) -> Result<Iter<Metric>, Error> {
         Ok(self.series.get(&pid)
-            .ok_or(Error::InvalidPID)?
+            .ok_or(Error::InvalidPID(pid))?
             .iter())
     }
 

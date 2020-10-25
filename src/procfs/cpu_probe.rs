@@ -19,7 +19,9 @@ pub struct CpuProbe {
 impl CpuProbe {
     pub fn new() -> Result<Self, Error> {
         let stat_reader = SystemDataReader::new()
-            .map_err(|e| Error::IOError(e.to_string()))?;
+            .map_err(|e| {
+                Error::ProbingError("Error initializing SystemDataReader".to_string(), Box::new(e))
+            })?;
 
         Self::from_readers(Box::new(stat_reader), Box::new(ProcessDataReader::new()))
     }
@@ -27,7 +29,8 @@ impl CpuProbe {
     pub fn from_readers(mut stat_reader: Box<dyn ReadSystemData<Stat>>,
                         pid_stat_reader: Box<dyn ReadProcessData<PidStat>>) -> Result<Self, Error> {
         let stat_data = stat_reader.read()
-            .map_err(|e| Error::ProbingError(e.to_string()))?;
+            .map_err(|e| Error::ProbingError("Error initializing CPU Probe".to_string(),
+                                             Box::new(e)))?;
 
         Ok(CpuProbe {
             pid_stat_reader,
@@ -49,7 +52,9 @@ impl Probe for CpuProbe {
     fn init_iteration(&mut self) -> Result<(), Error> {
         let new_stat: Stat = self.stat_reader
             .read()
-            .map_err(|e| Error::ProbingError(e.to_string()))?;
+            .map_err(|e| {
+                Error::ProbingError("Error reading global CPU stats".to_string(), Box::new(e))
+            })?;
 
         self.calculator.update_stat_data(new_stat);
 
@@ -59,7 +64,10 @@ impl Probe for CpuProbe {
     fn probe(&mut self, pid: PID) -> Result<Metric, Error> {
         let pid_stat = self.pid_stat_reader
             .read(pid)
-            .map_err(|e| Error::ProbingError(e.to_string()))?;
+            .map_err(|e| {
+                Error::ProbingError(format!("Error probing CPU stats for PID {}", pid),
+                                    Box::new(e))
+            })?;
 
         let percent = self.calculator.calculate_pid_usage(pid, pid_stat)?;
         Ok(Metric::Percent(percent))
@@ -69,12 +77,16 @@ impl Probe for CpuProbe {
 #[cfg(test)]
 mod test_cpu_probe {
     use std::collections::HashMap;
+    use std::io;
 
     use crate::core::metrics::{Metric, Probe};
     use crate::core::process_view::PID;
-    use crate::procfs::cpu::common_test_utils::{create_pid_stat, create_stat};
-    use crate::procfs::cpu::CpuProbe;
-    use crate::procfs::parsers::{PidStat, ProcfsError, ReadProcessData, ReadSystemData, Stat};
+    use crate::procfs::cpu_probe::common_test_utils::{create_pid_stat, create_stat};
+    use crate::procfs::cpu_probe::CpuProbe;
+    use crate::procfs::parsers::{PidStat, ReadProcessData, ReadSystemData, Stat};
+    use crate::procfs::ProcfsError;
+
+    use super::*;
 
     struct MemoryPidStatReader {
         pid_stats_seq: HashMap<PID, Result<PidStat, ProcfsError>>
@@ -108,7 +120,8 @@ mod test_cpu_probe {
                                                Box::new(pid_stat_reader))
             .expect("Could not create procfs");
 
-        assert_eq!(probe.probe_processes(&vec![]), Ok(hashmap!()));
+        let empty_map: HashMap<PID, Metric> = HashMap::new();
+        assert!(matches!(probe.probe_processes(&vec![]), Ok(empty_map)));
     }
 
 
@@ -125,8 +138,8 @@ mod test_cpu_probe {
                                                Box::new(pid_stat_reader))
             .expect("Could not create procfs");
 
-        assert_eq!(probe.probe_processes(&vec![1]),
-                   Ok(hashmap!(1 => Metric::from_percent(50.).unwrap())));
+        assert_eq!(probe.probe_processes(&vec![1]).unwrap(),
+                   hashmap!(1 => Metric::from_percent(50.).unwrap()));
     }
 
 
@@ -157,8 +170,9 @@ mod test_cpu_probe {
         };
         let pid_stat_reader = MemoryPidStatReader {
             pid_stats_seq: hashmap!(
-            1 => Ok(create_pid_stat(50)),
-            2 => Err(ProcfsError::IoError("abc".to_string())))
+                1 => Ok(create_pid_stat(50)),
+                2 => Err(ProcfsError::IoError(io::Error::new(io::ErrorKind::Other, "oh no!")))
+            )
         };
 
 
@@ -166,8 +180,8 @@ mod test_cpu_probe {
                                                Box::new(pid_stat_reader))
             .expect("Could not create procfs");
 
-        assert_eq!(probe.probe_processes(&vec![1, 2]),
-                   Ok(hashmap!(1 => Metric::from_percent(25.).unwrap())));
+        let map = hashmap!(1 => Metric::from_percent(25.).unwrap());
+        assert!(matches!(probe.probe_processes(&vec![1, 2]), Ok(map)));
     }
 }
 
@@ -208,9 +222,9 @@ impl UsageCalculator {
         let percent = (100. * ratio) as f32;
 
         Percent::new(percent)
-            .map_err(|_e| {
+            .map_err(|e| {
                 Error::ProbingError(format!("Invalid CPU usage value for PID {} : {}",
-                                            pid, percent))
+                                            pid, percent), Box::new(e))
             })
     }
 }
@@ -219,8 +233,8 @@ impl UsageCalculator {
 #[cfg(test)]
 mod test_cpu_calculator {
     use crate::core::values::Percent;
-    use crate::procfs::cpu::common_test_utils::create_stat;
-    use crate::procfs::cpu::UsageCalculator;
+    use crate::procfs::cpu_probe::common_test_utils::create_stat;
+    use crate::procfs::cpu_probe::UsageCalculator;
     use crate::procfs::parsers;
 
     fn create_initialized_calc(elapsed_ticks: u64) -> UsageCalculator {

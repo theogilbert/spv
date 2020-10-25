@@ -1,34 +1,14 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
+use std::fmt;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
+
 use crate::core::process_view::PID;
-use std::fmt::{Display, Formatter};
-use std::fmt;
-
-#[derive(Eq, PartialEq, Debug)]
-pub enum ProcfsError {
-    InvalidFileContent(String),
-    InvalidFileFormat(String),
-    IoError(String),
-}
-
-
-impl Display for ProcfsError {
-
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let repr = match self {
-            ProcfsError::InvalidFileContent(s) => s.clone(),
-            ProcfsError::InvalidFileFormat(s) => s.clone(),
-            ProcfsError::IoError(s) => s.clone()
-        };
-
-        write!(f, "{}", repr)
-    }
-}
-
+use crate::procfs::ProcfsError;
 
 pub trait ReadSystemData<D> where D: SystemData + Sized {
     fn read(&mut self) -> Result<D, ProcfsError>;
@@ -40,7 +20,7 @@ pub trait ReadProcessData<D> where D: ProcessData + Sized {
 }
 
 
-/// Reads data from procfs system files (directly in `/proc`)
+/// Reads data from procfs system files that are not associated to processes (directly in `/proc`)
 pub struct SystemDataReader<D> where D: SystemData + Sized {
     reader: ProcfsReader<D>,
 }
@@ -99,7 +79,7 @@ struct ProcfsReader<D> where D: Data + Sized {
 impl<D> ProcfsReader<D> where D: Data + Sized {
     pub fn new(filepath: &Path) -> Result<Self, ProcfsError> {
         File::open(filepath)
-            .map_err(|e| ProcfsError::IoError(e.to_string()))
+            .map_err(|e| ProcfsError::IoError(e))
             .map(|file| Self { reader: DataReader::new(file) })
     }
 
@@ -121,12 +101,12 @@ impl<R, D> DataReader<R, D> where R: Read + Seek, D: Data + Sized {
     pub fn read(&mut self) -> Result<D, ProcfsError> {
         self.src
             .seek(SeekFrom::Start(0))
-            .map_err(|e| ProcfsError::IoError(e.to_string()))?;
+            .map_err(|e| ProcfsError::IoError(e))?;
 
         // Might be optimized, by not reallocating at each call
         let mut stat_content = String::new();
         self.src.read_to_string(&mut stat_content)
-            .map_err(|io_err| ProcfsError::IoError(io_err.to_string()))?;
+            .map_err(|io_err| ProcfsError::IoError(io_err))?;
 
         let tp = TokenParser::new(&stat_content);
 
@@ -162,7 +142,7 @@ mod test_data_reader {
 
         let mut data_reader = DataReader::new(data_src);
 
-        assert_eq!(data_reader.read(), Ok(TestSystemData { field_1: 12, field_2: -92 }));
+        assert!(matches!(data_reader.read(), Ok(TestSystemData { field_1: 12, field_2: -92 })));
     }
 }
 
@@ -224,7 +204,7 @@ mod test_token_parser {
     fn test_extract_data_from_content() {
         let tp = TokenParser::new("1 2 3\n4 5 6");
 
-        assert_eq!(tp.token::<u8>(1, 1), Ok(5));
+        assert!(matches!(tp.token::<u8>(1, 1), Ok(5)));
     }
 
     #[test]
