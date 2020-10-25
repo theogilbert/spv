@@ -1,7 +1,6 @@
 //! Platform-independant process monitoring
 
-use std::{fmt, io};
-use std::fmt::{Display, Formatter};
+use std::io;
 
 use thiserror::Error;
 

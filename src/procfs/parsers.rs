@@ -1,7 +1,5 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
-use std::fmt;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::marker::PhantomData;

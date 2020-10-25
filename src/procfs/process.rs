@@ -1,7 +1,6 @@
 //! Process discovery
 
 
-use std::collections::HashSet;
 use std::fs::{DirEntry, File, read_dir};
 use std::io;
 use std::io::Read;
@@ -36,7 +35,6 @@ impl From<Error> for CoreError {
     }
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
 
 /// Implementation of ProcessScanner that uses the `/proc` Linux virtual directory as source
 #[derive(Default)]

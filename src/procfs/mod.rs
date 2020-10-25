@@ -1,11 +1,8 @@
 //! Processes monitoring based on /proc filesystem
 
-use std::fmt::{Display, Formatter};
 use std::io;
 
 use thiserror::Error;
-
-use crate::fmt;
 
 pub mod cpu_probe;
 mod parsers;

@@ -1,7 +1,6 @@
 //! Process discovery
 
 use std::cmp::Ordering;
-use std::collections::HashSet;
 
 use crate::core::Error;
 use crate::core::metrics::{Archive, Metric};
