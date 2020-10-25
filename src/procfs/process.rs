@@ -63,7 +63,7 @@ impl ProcfsScanner {
 
 impl ProcessScanner for ProcfsScanner {
     /// Returns the PIDs of currently running processes
-    fn scan(&self) -> std::result::Result<HashSet<PID>, CoreError> {
+    fn scan(&self) -> std::result::Result<Vec<PID>, CoreError> {
         let dir_iter = read_dir(self.proc_dir.as_path())
             .map_err(|e| Error::ProcessScanningFailure(e.to_string()).into())?;
 
@@ -201,7 +201,7 @@ mod test_pid_scanner {
             .expect("Could not scan processes");
 
         // The PIDs are only those represented by a dir with an integer name
-        assert_eq!(hashset![123, 456], pids);
+        assert_eq!(vec![123, 456], pids);
     }
 
     #[test]

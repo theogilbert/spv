@@ -87,7 +87,7 @@ impl ProcessView {
 /// Trait with methods to retrieve basic information about running processes
 pub trait ProcessScanner {
     /// Returns a list containing the PIDs of all currently running processes
-    fn scan(&self) -> Result<HashSet<PID>, Error>;
+    fn scan(&self) -> Result<Vec<PID>, Error>;
 
     /// Returns The ProcessMetadata of the currently running process with the given PID
     ///
