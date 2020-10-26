@@ -97,11 +97,11 @@ mod test_cpu_probe {
         }
     }
 
-    struct MemoryStatReader {
+    struct InMemoryStatReader {
         stat_seq: Vec<Stat>
     }
 
-    impl ReadSystemData<Stat> for MemoryStatReader {
+    impl ReadSystemData<Stat> for InMemoryStatReader {
         fn read(&mut self) -> Result<Stat, ProcfsError> {
             Ok(self.stat_seq.remove(0))
         }
@@ -109,7 +109,7 @@ mod test_cpu_probe {
 
     #[test]
     fn test_should_return_zero_metrics_when_no_pid() {
-        let stat_reader = MemoryStatReader {
+        let stat_reader = InMemoryStatReader {
             stat_seq: vec![create_stat(0), create_stat(200)]
         };
         let pid_stat_reader = MemoryPidStatReader { pid_stats_seq: HashMap::new() };
@@ -125,7 +125,7 @@ mod test_cpu_probe {
 
     #[test]
     fn test_should_return_one_metric_when_one_pid() {
-        let stat_reader = MemoryStatReader {
+        let stat_reader = InMemoryStatReader {
             stat_seq: vec![create_stat(0), create_stat(200)]
         };
         let pid_stat_reader = MemoryPidStatReader {
@@ -143,7 +143,7 @@ mod test_cpu_probe {
 
     #[test]
     fn test_should_return_two_metrics_when_two_pids() {
-        let stat_reader = MemoryStatReader {
+        let stat_reader = InMemoryStatReader {
             stat_seq: vec![create_stat(0), create_stat(200)]
         };
         let pid_stat_reader = MemoryPidStatReader {
@@ -163,7 +163,7 @@ mod test_cpu_probe {
 
     #[test]
     fn test_should_return_ignore_pid_when_probe_returns_err() {
-        let stat_reader = MemoryStatReader {
+        let stat_reader = InMemoryStatReader {
             stat_seq: vec![create_stat(0), create_stat(200)]
         };
         let pid_stat_reader = MemoryPidStatReader {
