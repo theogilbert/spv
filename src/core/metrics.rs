@@ -29,7 +29,7 @@ type BitrateType = <Bitrate as Value>::ValueType;
 impl Metric {
     pub fn from_percent(pct: PercentType) -> Result<Metric, Error> {
         Percent::new(pct)
-            .and_then(|p| Ok(Metric::Percent(p)))
+            .map(Metric::Percent)
     }
 
     pub fn from_bitrate(bitrate: BitrateType) -> Metric {
@@ -108,7 +108,7 @@ pub trait Probe {
     ///
     /// # Arguments
     ///  * `pids`: A set of `PIDs` to monitor
-    fn probe_processes(&mut self, pids: &Vec<PID>) -> Result<HashMap<PID, Metric>, Error> {
+    fn probe_processes(&mut self, pids: &[PID]) -> Result<HashMap<PID, Metric>, Error> {
         self.init_iteration()?;
 
         let metrics = pids.iter()
@@ -133,6 +133,12 @@ pub struct ArchiveBuilder {
     archive: Archive
 }
 
+impl Default for ArchiveBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ArchiveBuilder {
     pub fn new() -> Self {
         let archive = Archive {
@@ -148,11 +154,12 @@ impl ArchiveBuilder {
     }
 
     pub fn new_metric(mut self, label: String, default: Metric) -> Result<Self, Error> {
-        if self.archive.metrics.contains_key(&label) {
-            Err(Error::DuplicateLabel(label))
-        } else {
-            self.archive.metrics.insert(label, ProcessMetrics::new(default));
-            Ok(self)
+        match self.archive.metrics.entry(label.to_string()) {
+            Entry::Occupied(_) => Err(Error::DuplicateLabel(label)),
+            Entry::Vacant(entry) => {
+                entry.insert(ProcessMetrics::new(default));
+                Ok(self)
+            }
         }
     }
 
@@ -224,11 +231,13 @@ impl Archive {
             None => Err(Error::UnexpectedLabel(label.to_string()))
         }?;
 
-        Ok(match (pm.last(pid), metric) {
+        match (pm.last(pid), metric) {
             (&Metric::Percent(_), Metric::Percent(pct)) => pm.push(pid, Metric::Percent(pct)),
             (&Metric::Bitrate(_), Metric::Bitrate(br)) => pm.push(pid, Metric::Bitrate(br)),
-            (_, m) => Err(Error::InvalidMetricVariant(label.to_string(), m))?
-        })
+            (_, m) => return Err(Error::InvalidMetricVariant(label.to_string(), m))
+        };
+
+        Ok(())
     }
 
     /// Get the latest metric entry for the given label and PID, or a default value if none exist
@@ -241,8 +250,8 @@ impl Archive {
     ///
     pub fn last(&self, label: &str, pid: PID) -> Result<&Metric, Error> {
         self.metrics.get(label)
-            .and_then(|pm| Some(pm.last(pid)))
-            .ok_or(Error::UnexpectedLabel(label.to_string()))
+            .map(|pm| pm.last(pid))
+            .ok_or_else(|| Error::UnexpectedLabel(label.to_string()))
     }
 
     /// Get a textual representation of the unit of metrics pushed by the probe with the given label
@@ -255,8 +264,8 @@ impl Archive {
     ///
     pub fn label_unit(&self, label: &str) -> Result<&'static str, Error> {
         self.metrics.get(label)
-            .and_then(|pm| Some(pm.unit()))
-            .ok_or(Error::UnexpectedLabel(label.to_string()))
+            .map(|pm| pm.unit())
+            .ok_or_else(|| Error::UnexpectedLabel(label.to_string()))
     }
 
     /// Returns an iterator over `Metric` for the given probe label and process ID.
@@ -272,12 +281,11 @@ impl Archive {
     ///
     pub fn history(&self, label: &str, pid: PID, span: Duration) -> Result<MetricIter, Error> {
         let metrics = self.metrics.get(label)
-            .ok_or(Error::UnexpectedLabel(label.to_string()))?;
+            .ok_or_else(|| Error::UnexpectedLabel(label.to_string()))?;
 
         let metrics_count = metrics.count(pid);
         let collected_metrics = self.expected_metrics(span);
-        let skipped_metrics = metrics_count.checked_sub(collected_metrics)
-            .unwrap_or(0);
+        let skipped_metrics = metrics_count.saturating_sub(collected_metrics);
 
         Ok(MetricIter {
             iter: metrics.iter_process(pid)?

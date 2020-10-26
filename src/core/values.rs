@@ -70,12 +70,12 @@ mod test_percent_value {
 
     #[test]
     fn test_create_too_great_percent_value() {
-        assert!(matches!(Percent::new(150.), Err(Error::InvalidPercentValue(150.))));
+        assert!(matches!(Percent::new(150.), Err(Error::InvalidPercentValue(_))));
     }
 
     #[test]
     fn test_create_negative_percent_value() {
-        assert!(matches!(Percent::new(-1.), Err(Error::InvalidPercentValue(-1.))));
+        assert!(matches!(Percent::new(-1.), Err(Error::InvalidPercentValue(_))));
     }
 
     #[test]

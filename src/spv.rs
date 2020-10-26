@@ -4,7 +4,7 @@ use std::time::Duration;
 use log::error;
 
 use crate::core::metrics::{Archive, ArchiveBuilder, Probe};
-use crate::core::process_view::{ProcessView, PID};
+use crate::core::process_view::{PID, ProcessView};
 use crate::Error;
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
@@ -86,7 +86,7 @@ impl SpvApplication {
         let mut processes = self.process_view.processes()
             .map_err(|e| Error::CoreError(e.to_string()))?;
 
-        let pids = processes.iter()
+        let pids: Vec<PID> = processes.iter()
             .map(|p| p.pid())
             .collect();
 
@@ -105,7 +105,7 @@ impl SpvApplication {
         Ok(())
     }
 
-    fn probe_metrics(probe: &mut Box<dyn Probe>, pids: &Vec<PID>, archive: &mut Archive, current_tab: &str) -> Result<(), Error> {
+    fn probe_metrics(probe: &mut Box<dyn Probe>, pids: &[PID], archive: &mut Archive, current_tab: &str) -> Result<(), Error> {
         let metrics = probe.probe_processes(pids)
             .map_err(|e| Error::CoreError(e.to_string()))?;
 
@@ -116,7 +116,7 @@ impl SpvApplication {
                     error!("Error pushing {} metric for PID {}: {}", metric_label, pid, e);
                     e
                 })
-                .expect(&format!("Error pushing {} metric for PID {}", metric_label, pid));
+                .unwrap_or_else(|_| panic!("Error pushing {} metric for PID {}", metric_label, pid))
         }
 
         Ok(())

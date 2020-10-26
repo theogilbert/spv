@@ -27,7 +27,7 @@ impl Default for ProcessList {
 
 // TODO add first row Process name - [%/bps]
 impl ProcessList {
-    pub fn render<'a>(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect, metrics: &Archive,
+    pub fn render(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect, metrics: &Archive,
                       label: &str) {
         let columns_chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -102,7 +102,7 @@ impl ProcessList {
         self.select(index_opt);
     }
 
-    fn retrieve_previously_selected_index(processes: &Vec<ProcessMetadata>,
+    fn retrieve_previously_selected_index(processes: &[ProcessMetadata],
                                           selected_pid: Option<PID>) -> usize {
         let mut selected_idx = 0;
 
@@ -132,7 +132,7 @@ impl ProcessList {
 
     pub fn previous(&mut self) {
         let prev_idx = self.state.selected()
-            .and_then(|s| Some(if s > 0 { s - 1 } else { 0 }))
+            .map(|s| if s > 0 { s - 1 } else { 0 })
             .unwrap_or(0);
 
         self.select(Some(prev_idx));
@@ -140,7 +140,7 @@ impl ProcessList {
 
     pub fn next(&mut self) {
         let next_idx = self.state.selected()
-            .and_then(|s| Some(s + 1))
+            .map(|s| s + 1)
             .unwrap_or(0);
 
         self.select(Some(next_idx));

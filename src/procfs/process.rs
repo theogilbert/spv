@@ -19,7 +19,7 @@ enum Error {
     #[error("Failed to read the content of directory '{0:?}'")]
     ProcessScanningFailure(PathBuf, #[source] io::Error),
     #[error("Error while parsing process directory '{0:?}'")]
-    ProcessParsingError(PathBuf, #[source] io::Error),
+    ProcessParsing(PathBuf, #[source] io::Error),
     #[error("PID is invalid: '{0:?}'")]
     InvalidPID(PID),
 }
@@ -58,8 +58,8 @@ impl ProcfsScanner {
     fn extract_pid_from_proc_dir(dir_name_opt: Option<&str>) -> std::result::Result<PID, Error> {
         match dir_name_opt {
             Some(dir_name) => dir_name.parse::<PID>()
-                .or(Err(Error::NotProcessDir(dir_name.to_string()))),
-            None => return Err(Error::NotProcessDir("".to_string()))
+                .map_err(|_| Error::NotProcessDir(dir_name.to_string())),
+            None => Err(Error::NotProcessDir("".to_string()))
         }
     }
 }
@@ -101,7 +101,7 @@ impl ProcessScanner for ProcfsScanner {
             .map_err(|_| Error::InvalidPID(pid))?;
 
         file.read_to_string(&mut command)
-            .map_err(|io_err| Error::ProcessParsingError(comm_file_path, io_err))?;
+            .map_err(|io_err| Error::ProcessParsing(comm_file_path, io_err))?;
 
         if command.ends_with('\n') {  // Remove trailing newline
             command.pop();

@@ -63,7 +63,7 @@ impl SpvUI {
         let metadata_bar = &self.metadata_bar;
 
         self.terminal.draw(|mut frame| {
-            let layout = UiLayout::new(&mut frame);
+            let layout = UiLayout::new(&frame);
 
             tabs.render(&mut frame, layout.tabs_chunk());
             process_list.render(&mut frame, layout.processes_chunk(), metrics, tabs.current());

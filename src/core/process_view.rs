@@ -52,13 +52,15 @@ impl ProcessView {
     pub fn processes(&self) -> Result<Vec<ProcessMetadata>, Error> {
         let pids = self.scanner.scan()?;
 
+        // TODO ProcessView.processes() will fail if one process cannot be read. Is this what we
+        //  want ?
         pids.iter()
-            .filter_map(|pid| Some(self.scanner.fetch_metadata(*pid)))
+            .map(|pid| self.scanner.fetch_metadata(*pid))
             .collect()
     }
 
     pub fn sort_processes(processes: &mut Vec<ProcessMetadata>, archive: &Archive,
-                          label: &str) -> () {
+                          label: &str) {
         processes.sort_by(|pm_a, pm_b| {
             let metric_b = Self::current_metric(pm_b, archive, label)
                 .expect("Error getting current metric"); // TODO replace with clean error

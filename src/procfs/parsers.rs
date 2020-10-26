@@ -77,7 +77,7 @@ struct ProcfsReader<D> where D: Data + Sized {
 impl<D> ProcfsReader<D> where D: Data + Sized {
     pub fn new(filepath: &Path) -> Result<Self, ProcfsError> {
         File::open(filepath)
-            .map_err(|e| ProcfsError::IoError(e))
+            .map_err(ProcfsError::from)
             .map(|file| Self { reader: DataReader::new(file) })
     }
 
@@ -98,13 +98,11 @@ impl<R, D> DataReader<R, D> where R: Read + Seek, D: Data + Sized {
 
     pub fn read(&mut self) -> Result<D, ProcfsError> {
         self.src
-            .seek(SeekFrom::Start(0))
-            .map_err(|e| ProcfsError::IoError(e))?;
+            .seek(SeekFrom::Start(0))?;
 
         // Might be optimized, by not reallocating at each call
         let mut stat_content = String::new();
-        self.src.read_to_string(&mut stat_content)
-            .map_err(|io_err| ProcfsError::IoError(io_err))?;
+        self.src.read_to_string(&mut stat_content)?;
 
         let tp = TokenParser::new(&stat_content);
 

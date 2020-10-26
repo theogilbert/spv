@@ -47,9 +47,8 @@ impl InputListener {
     }
 
     fn on_key_pressed(&mut self, key: char) {
-        match key {
-            'q' => self.send_exit(),
-            _ => ()
+        if let 'q' = key {
+            self.send_exit();
         }
     }
 

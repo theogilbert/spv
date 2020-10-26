@@ -86,8 +86,6 @@ mod test_cpu_probe {
     use crate::procfs::parsers::{PidStat, ReadProcessData, ReadSystemData, Stat};
     use crate::procfs::ProcfsError;
 
-    use super::*;
-
     struct MemoryPidStatReader {
         pid_stats_seq: HashMap<PID, Result<PidStat, ProcfsError>>
     }
