@@ -2,6 +2,8 @@
 
 use std::cmp::Ordering;
 
+use log::warn;
+
 use crate::core::Error;
 use crate::core::metrics::{Archive, Metric};
 
@@ -52,11 +54,17 @@ impl ProcessView {
     pub fn processes(&self) -> Result<Vec<ProcessMetadata>, Error> {
         let pids = self.scanner.scan()?;
 
-        // TODO ProcessView.processes() will fail if one process cannot be read. Is this what we
-        //  want ?
-        pids.iter()
-            .map(|pid| self.scanner.fetch_metadata(*pid))
-            .collect()
+        Ok(pids.iter()
+            .filter_map(|pid| {
+                match self.scanner.fetch_metadata(*pid) {
+                    Err(e) => {
+                        warn!("Error fetching process metadata: {:?}", e);
+                        None
+                    }
+                    Ok(pm) => Some(pm)
+                }
+            })
+            .collect())
     }
 
     pub fn sort_processes(processes: &mut Vec<ProcessMetadata>, archive: &Archive,
