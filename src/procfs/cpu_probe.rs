@@ -22,19 +22,16 @@ impl CpuProbe {
                 Error::ProbingError("Error initializing SystemDataReader".to_string(), Box::new(e))
             })?;
 
+
         Self::from_readers(Box::new(stat_reader), Box::new(ProcessDataReader::new()))
     }
 
-    pub fn from_readers(mut stat_reader: Box<dyn ReadSystemData<Stat>>,
+    pub fn from_readers(stat_reader: Box<dyn ReadSystemData<Stat>>,
                         pid_stat_reader: Box<dyn ReadProcessData<PidStat>>) -> Result<Self, Error> {
-        let stat_data = stat_reader.read()
-            .map_err(|e| Error::ProbingError("Error initializing CPU Probe".to_string(),
-                                             Box::new(e)))?;
-
         Ok(CpuProbe {
             pid_stat_reader,
             stat_reader,
-            calculator: UsageCalculator::new(stat_data),
+            calculator: UsageCalculator::default(),
         })
     }
 }
@@ -55,7 +52,7 @@ impl Probe for CpuProbe {
                 Error::ProbingError("Error reading global CPU stats".to_string(), Box::new(e))
             })?;
 
-        self.calculator.update_stat_data(new_stat);
+        self.calculator.compute_new_runtime_diff(new_stat);
 
         Ok(())
     }
@@ -188,16 +185,25 @@ struct UsageCalculator {
     global_runtime_diff: f64,
 }
 
-impl UsageCalculator {
-    pub fn new(init_stat_data: parsers::Stat) -> Self {
+impl Default for UsageCalculator {
+    fn default() -> Self {
         UsageCalculator {
             processes_prev_stats: HashMap::new(),
-            prev_global_stat: init_stat_data,
+            prev_global_stat: parsers::Stat::new(0, 0, 0, 0, 0, 0),
             global_runtime_diff: 0.,
         }
     }
+}
 
-    pub fn update_stat_data(&mut self, stat_data: Stat) {
+impl UsageCalculator {
+    ///
+    /// Given new content of /proc/stat and the last known content of /proc/stat, calculates the
+    /// elapsed ticks corresponding to global CPU runtime in this lapse of time
+    ///
+    /// # Arguments
+    ///  * `stat_data` The new content of /proc/stat
+    ///
+    pub fn compute_new_runtime_diff(&mut self, stat_data: Stat) {
         let cur_runtime = stat_data.running_time();
         let prev_runtime = self.prev_global_stat.running_time();
 
@@ -205,6 +211,17 @@ impl UsageCalculator {
         self.prev_global_stat = stat_data;
     }
 
+    ///
+    /// Given new content of /proc/[pid]/stat and its last known content, calculates the elapsed
+    /// ticks corresponding to CPU runtime related to this process
+    ///
+    /// Then given a recently calculated global CPU runtime lapse (see [compute_new_runtime_diff()]),
+    /// calculates the portion of this runtime that was dedicated to the given process in percent
+    ///
+    /// # Arguments
+    ///  * `pid` The ID of a process
+    ///  * `pid_stat_data`: The new content of the stat file of the process with ID [pid]
+    ///
     pub fn calculate_pid_usage(&mut self, pid: PID, pid_stat_data: PidStat) -> f64 {
         let last_iter_runtime = match self.processes_prev_stats.get(&pid) {
             Some(stat_data) => stat_data.running_time(),
@@ -226,9 +243,10 @@ mod test_cpu_calculator {
     use crate::procfs::parsers;
 
     fn create_initialized_calc(elapsed_ticks: u64) -> UsageCalculator {
-        let mut calc = UsageCalculator::new(create_stat(100));
+        let mut calc = UsageCalculator::default();
 
-        calc.update_stat_data(create_stat(100 + elapsed_ticks));
+        calc.compute_new_runtime_diff(create_stat(100));
+        calc.compute_new_runtime_diff(create_stat(100 + elapsed_ticks));
 
         calc
     }
