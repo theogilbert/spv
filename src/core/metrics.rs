@@ -9,37 +9,24 @@ use std::iter::Skip;
 use std::slice::Iter;
 use std::time::Duration;
 
-use log::error;
+use log::warn;
 
 use crate::core::Error;
 use crate::core::process_view::PID;
-use crate::core::values::{Bitrate, Percent, Value};
 
 /// A value probed from a process
 #[derive(Debug, PartialEq)]
 pub enum Metric {
-    Percent(Percent),
-    Bitrate(Bitrate),
+    Percent(f64),
+    Bitrate(usize),
 }
 
 
-type PercentType = <Percent as Value>::ValueType;
-type BitrateType = <Bitrate as Value>::ValueType;
-
 impl Metric {
-    pub fn from_percent(pct: PercentType) -> Result<Metric, Error> {
-        Percent::new(pct)
-            .map(Metric::Percent)
-    }
-
-    pub fn from_bitrate(bitrate: BitrateType) -> Metric {
-        Metric::Bitrate(Bitrate::new(bitrate))
-    }
-
     pub fn unit(&self) -> String {
         match self {
-            Metric::Percent(_) => self.unit(),
-            Metric::Bitrate(_) => self.unit(),
+            Metric::Percent(_) => "%".to_string(),
+            Metric::Bitrate(_) => "bps".to_string(),  // TODO return kbps/mbps depending on bps
         }
     }
 
@@ -52,8 +39,8 @@ impl Metric {
 
     pub fn as_f64(&self) -> f64 {
         match self {
-            Metric::Percent(pct) => pct.value() as f64,
-            Metric::Bitrate(br) => br.value() as f64,
+            Metric::Percent(pct) => *pct,
+            Metric::Bitrate(br) => *br as f64,
         }
     }
 }
@@ -80,12 +67,10 @@ impl PartialOrd for Metric {
 
 impl Display for Metric {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let repr = match self {
-            Metric::Percent(pct) => pct.to_string(),
-            Metric::Bitrate(br) => br.to_string(),
-        };
-
-        write!(f, "{}", repr)
+        match self {
+            Metric::Percent(pct) => write!(f, "{:.1}", pct),
+            Metric::Bitrate(br) => write!(f, "{:}", br),
+        }
     }
 }
 
@@ -108,6 +93,7 @@ pub trait Probe {
     ///
     /// # Arguments
     ///  * `pids`: A set of `PIDs` to monitor
+    ///
     fn probe_processes(&mut self, pids: &[PID]) -> Result<HashMap<PID, Metric>, Error> {
         self.init_iteration()?;
 
@@ -180,9 +166,9 @@ mod test_archive_builder {
     #[test]
     fn test_should_return_error_on_duplicate_label() {
         let err_ret = ArchiveBuilder::new()
-            .new_metric("label".to_string(), Metric::from_bitrate(123))
+            .new_metric("label".to_string(), Metric::Bitrate(123))
             .unwrap()
-            .new_metric("label".to_string(), Metric::from_bitrate(123));
+            .new_metric("label".to_string(), Metric::Bitrate(123));
 
         match err_ret {
             Ok(_) => panic!("Should have failed"),
@@ -209,8 +195,6 @@ pub struct Archive {
 }
 
 
-// TODO there should be a way to signal new iterations so that all metrics from all PIDS/probes are
-// synchronized, with default value for missing metrics
 impl Archive {
     /// Pushes a new `Metric` to the archive
     /// If the label is invalid, `Error::UnexpectedLabel` will be returned
@@ -336,7 +320,7 @@ mod test_archive {
     fn archive() -> Archive {
         ArchiveBuilder::new()
             .resolution(Duration::from_secs(2))
-            .new_metric("label".to_string(), Metric::from_bitrate(1))
+            .new_metric("label".to_string(), Metric::Bitrate(1))
             .unwrap()
             .build()
     }
@@ -344,7 +328,7 @@ mod test_archive {
     #[fixture]
     fn metrics() -> Vec<Metric> {
         (1..100).map(|i| {
-            Metric::from_bitrate(i)
+            Metric::Bitrate(i)
         }).collect::<Vec<Metric>>()
     }
 
@@ -360,43 +344,43 @@ mod test_archive {
 
     #[rstest]
     fn test_current_should_be_last_pushed(mut archive: Archive) {
-        archive.push("label", 123, Metric::from_bitrate(123))
+        archive.push("label", 123, Metric::Bitrate(123))
             .unwrap();
-        archive.push("label", 123, Metric::from_bitrate(456))
+        archive.push("label", 123, Metric::Bitrate(456))
             .unwrap();
 
         assert_eq!(archive.last("label", 123).unwrap(),
-                   &Metric::from_bitrate(456));
+                   &Metric::Bitrate(456));
     }
 
     #[rstest]
     fn test_current_should_be_default_when_no_push(archive: Archive) {
         assert_eq!(archive.last("label", 123).unwrap(),
-                   &Metric::from_bitrate(1));
+                   &Metric::Bitrate(1));
     }
 
     #[rstest]
     fn test_push_should_fail_when_first_variant_is_invalid(mut archive: Archive) {
         let label = "label".to_string();
 
-        assert!(matches!(archive.push(&label, 123, Metric::from_percent(45.1).unwrap()),
+        assert!(matches!(archive.push(&label, 123, Metric::Percent(45.1)),
                          Err(Error::InvalidMetricVariant(label, _))));
     }
 
     #[rstest]
     fn test_push_should_fail_when_additional_variant_is_invalid(mut archive: Archive) {
         let label = "label".to_string();
-        archive.push(&label, 123, Metric::from_bitrate(45))
+        archive.push(&label, 123, Metric::Bitrate(45))
             .unwrap();
 
-        assert!(matches!(archive.push(&label, 123, Metric::from_percent(50.).unwrap()),
+        assert!(matches!(archive.push(&label, 123, Metric::Percent(50.)),
                          Err(Error::InvalidMetricVariant(label, _))));
     }
 
     #[rstest]
     fn test_push_should_fail_when_label_is_invalid(mut archive: Archive) {
         let label = "invalid-label".to_string();
-        assert!(matches!(archive.push(&label, 123, Metric::from_bitrate(123)),
+        assert!(matches!(archive.push(&label, 123, Metric::Bitrate(123)),
                          Err(Error::UnexpectedLabel(label))));
     }
 
@@ -411,8 +395,8 @@ mod test_archive {
     fn test_history_should_be_iterator_of_pushed_metrics(mut archive: Archive) {
         let mut expected_metrics = Vec::new();
         (1..10).for_each(|i| {
-            archive.push("label", 123, Metric::from_bitrate(i));
-            expected_metrics.push(Metric::from_bitrate(i));
+            archive.push("label", 123, Metric::Bitrate(i));
+            expected_metrics.push(Metric::Bitrate(i));
         });
 
         let iter = archive.history("label", 123, Duration::from_secs(60))

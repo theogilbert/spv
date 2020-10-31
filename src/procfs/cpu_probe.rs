@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use crate::core::Error;
 use crate::core::metrics::{Metric, Probe};
 use crate::core::process_view::PID;
-use crate::core::values::Percent;
 use crate::procfs::parsers;
 use crate::procfs::parsers::{PidStat, ProcessDataReader, ReadProcessData, ReadSystemData, Stat, SystemDataReader};
 
@@ -46,7 +45,7 @@ impl Probe for CpuProbe {
     }
 
     fn default_metric(&self) -> Metric {
-        Metric::from_percent(f32::NAN).unwrap()
+        Metric::Percent(f64::NAN)
     }
 
     fn init_iteration(&mut self) -> Result<(), Error> {
@@ -69,7 +68,7 @@ impl Probe for CpuProbe {
                                     Box::new(e))
             })?;
 
-        let percent = self.calculator.calculate_pid_usage(pid, pid_stat)?;
+        let percent = self.calculator.calculate_pid_usage(pid, pid_stat);
         Ok(Metric::Percent(percent))
     }
 }
@@ -137,7 +136,7 @@ mod test_cpu_probe {
             .expect("Could not create procfs");
 
         assert_eq!(probe.probe_processes(&vec![1]).unwrap(),
-                   hashmap!(1 => Metric::from_percent(50.).unwrap()));
+                   hashmap!(1 => Metric::Percent(50.)));
     }
 
 
@@ -156,8 +155,8 @@ mod test_cpu_probe {
 
         let metrics = probe.probe_processes(&vec!(1, 2)).unwrap();
         assert_eq!(metrics,
-                   hashmap!(1 => Metric::from_percent(25.).unwrap(),
-                   2 => Metric::from_percent(25.).unwrap()));
+                   hashmap!(1 => Metric::Percent(25.),
+                   2 => Metric::Percent(25.)));
     }
 
 
@@ -178,7 +177,7 @@ mod test_cpu_probe {
                                                Box::new(pid_stat_reader))
             .expect("Could not create procfs");
 
-        let map = hashmap!(1 => Metric::from_percent(25.).unwrap());
+        let map = hashmap!(1 => Metric::Percent(25.));
         assert!(matches!(probe.probe_processes(&vec![1, 2]), Ok(map)));
     }
 }
@@ -206,8 +205,7 @@ impl UsageCalculator {
         self.prev_global_stat = stat_data;
     }
 
-    pub fn calculate_pid_usage(&mut self, pid: PID, pid_stat_data: PidStat)
-                               -> Result<Percent, Error> {
+    pub fn calculate_pid_usage(&mut self, pid: PID, pid_stat_data: PidStat) -> f64 {
         let last_iter_runtime = match self.processes_prev_stats.get(&pid) {
             Some(stat_data) => stat_data.running_time(),
             None => 0
@@ -216,21 +214,13 @@ impl UsageCalculator {
         let pid_runtime_diff = pid_stat_data.running_time() - last_iter_runtime;
         self.processes_prev_stats.insert(pid, pid_stat_data);
 
-        let ratio = pid_runtime_diff as f64 / self.global_runtime_diff;
-        let percent = (100. * ratio) as f32;
-
-        Percent::new(percent)
-            .map_err(|e| {
-                Error::ProbingError(format!("Invalid CPU usage value for PID {} : {}",
-                                            pid, percent), Box::new(e))
-            })
+        100. * pid_runtime_diff as f64 / self.global_runtime_diff
     }
 }
 
 
 #[cfg(test)]
 mod test_cpu_calculator {
-    use crate::core::values::Percent;
     use crate::procfs::cpu_probe::common_test_utils::create_stat;
     use crate::procfs::cpu_probe::UsageCalculator;
     use crate::procfs::parsers;
@@ -249,8 +239,8 @@ mod test_cpu_calculator {
 
         let pid_stat = parsers::PidStat::new(0, 0, 0, 0);
 
-        assert_eq!(calc.calculate_pid_usage(1, pid_stat).unwrap(),
-                   Percent::new(0.).unwrap());
+        assert_eq!(calc.calculate_pid_usage(1, pid_stat),
+                   0.);
     }
 
     #[test]
@@ -259,18 +249,8 @@ mod test_cpu_calculator {
 
         let pid_stat = parsers::PidStat::new(100, 20, 2, 1);
 
-        assert_eq!(calc.calculate_pid_usage(1, pid_stat).unwrap(),
-                   Percent::new(100.).unwrap());
-    }
-
-    #[test]
-    fn test_over_hundred_percent_usage() {
-        let mut calc = create_initialized_calc(20);
-
-        let pid_stat = parsers::PidStat::new(10, 10, 10, 10);
-
-        // 40 ticks spent by pid, but only 20 by cpu -> 200% cpu usage
-        assert!(calc.calculate_pid_usage(1, pid_stat).is_err());
+        assert_eq!(calc.calculate_pid_usage(1, pid_stat),
+                   100.);
     }
 }
 

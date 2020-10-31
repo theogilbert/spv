@@ -9,7 +9,6 @@ use crate::core::process_view::PID;
 
 pub mod process_view;
 pub mod metrics;
-pub mod values;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -20,8 +19,6 @@ pub enum Error {
     ReadMetadataError(#[source] Box<dyn std::error::Error>),
     #[error("Probing error: '{0:?}'")]
     ProbingError(String, #[source] Box<dyn std::error::Error>),
-    #[error("Invalid percent value: '{0:?}'")]
-    InvalidPercentValue(f32),
     #[error("Unexpected label: '{0:?}'")]
     UnexpectedLabel(String),
     #[error("Invalid PID: '{0:?}'")]
