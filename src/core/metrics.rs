@@ -88,8 +88,8 @@ pub trait Probe {
 
     /// Returns a map associating a `Metric` instance to each PID
     ///
-    /// This method might not return a metric value for all given processes, for instance if
-    /// probing one process produces an error. TODO think this over
+    /// If a process is not probed correctly, a default value for the given probe is returned
+    /// and a WARNING level log is produced
     ///
     /// # Arguments
     ///  * `pids`: A set of `PIDs` to monitor
@@ -98,19 +98,69 @@ pub trait Probe {
         self.init_iteration()?;
 
         let metrics = pids.iter()
-            .filter_map(|pid| {
-                self.probe(*pid)
-                    .map_err(|e| {
-                        error!("Could not probe {} metric for pid {}: {}",
-                               self.name(), pid, e.to_string());
-                        e
-                    })
-                    .ok()
-                    .map(|m| (*pid, m))
+            .map(|pid| {
+                let metric = self.probe(*pid)
+                    .unwrap_or_else(|e| {
+                        warn!("Could not probe {} metric for pid {}: {}",
+                              self.name(), pid, e.to_string());
+                        self.default_metric()
+                    });
+
+                (*pid, metric)
             })
             .collect();
 
         Ok(metrics)
+    }
+}
+
+#[cfg(test)]
+mod test_probe_trait {
+    use std::collections::HashMap;
+
+    use rstest::*;
+
+    use crate::core::Error;
+    use crate::core::metrics::{Metric, Probe};
+    use crate::core::process_view::PID;
+
+    struct FakeProbe {
+        probe_responses: HashMap<PID, Metric>
+    }
+
+    impl Probe for FakeProbe {
+        fn name(&self) -> &'static str { "fake-probe" }
+
+        fn default_metric(&self) -> Metric { Metric::Bitrate(0) }
+
+        fn probe(&mut self, pid: u32) -> Result<Metric, Error> {
+            self.probe_responses.remove(&pid)
+                .ok_or(Error::InvalidPID(pid))
+        }
+    }
+
+    #[rstest]
+    fn test_should_return_all_probed_values() {
+        let mut probe = FakeProbe {
+            probe_responses: hashmap!(1 => Metric::Bitrate(10), 2 => Metric::Bitrate(20))
+        };
+
+        let results = probe.probe_processes(&[1, 2]).unwrap();
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results.get(&1), Some(&Metric::Bitrate(10)));
+        assert_eq!(results.get(&2), Some(&Metric::Bitrate(20)));
+    }
+
+    #[rstest]
+    fn test_should_return_default_value_if_probing_fails() {
+        let mut probe = FakeProbe { probe_responses: hashmap!(1 => Metric::Bitrate(10)) };
+
+        let results = probe.probe_processes(&[1, 2]).unwrap();
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results.get(&1), Some(&Metric::Bitrate(10)));
+        assert_eq!(results.get(&2), Some(&probe.default_metric()));
     }
 }
 
