@@ -6,7 +6,8 @@ pub struct Pulse {
     iteration_lapse: Duration,
 }
 
-/// Structure used to lead a cadence
+/// Drives the cadency of the application, using the blocking pulse method which releases on given
+/// interval
 impl Pulse {
     pub fn new(periodic_time: Duration) -> Self {
         Pulse { last_tick: Instant::now(), iteration_lapse: periodic_time }

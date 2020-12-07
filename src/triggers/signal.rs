@@ -11,7 +11,9 @@ pub struct SignalListener {
     exit: bool,
 }
 
+/// Listens for UNIX interrupt signals and emits appropriate triggers
 impl SignalListener {
+
     pub fn new(sender: Sender<Trigger>) -> Self {
         Self { sender, exit: false }
     }
