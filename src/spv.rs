@@ -1,8 +1,6 @@
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
-use log::error;
-
 use crate::core::metrics::{Archive, ArchiveBuilder, Probe};
 use crate::core::process_view::{PID, ProcessView};
 use crate::Error;
@@ -73,7 +71,7 @@ impl SpvApplication {
                 }
                 Trigger::NextProcess => self.ui.next_process(),
                 Trigger::PreviousProcess => self.ui.previous_process(),
-                Trigger::Resize => {}
+                Trigger::Resize => {},
             }
 
             self.draw_ui()?;
@@ -113,10 +111,6 @@ impl SpvApplication {
         let metric_label = current_tab;
         for (pid, m) in metrics.into_iter() {
             archive.push(metric_label, pid, m)
-                .map_err(|e| {
-                    error!("Error pushing {} metric for PID {}: {}", metric_label, pid, e);
-                    e
-                })
                 .unwrap_or_else(|_| panic!("Error pushing {} metric for PID {}", metric_label, pid))
         }
 
