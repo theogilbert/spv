@@ -72,7 +72,7 @@ impl Probe for CpuProbe {
 
 #[cfg(test)]
 mod test_cpu_probe {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, VecDeque};
     use std::io;
 
     use crate::core::metrics::{Metric, Probe};
@@ -83,12 +83,14 @@ mod test_cpu_probe {
     use crate::procfs::ProcfsError;
 
     struct MemoryPidStatReader {
-        pid_stats_seq: HashMap<PID, Result<PidStat, ProcfsError>>
+        pid_stats_seq: HashMap<PID, VecDeque<Result<PidStat, ProcfsError>>>
     }
 
     impl ReadProcessData<PidStat> for MemoryPidStatReader {
         fn read(&mut self, pid: u32) -> Result<PidStat, ProcfsError> {
-            self.pid_stats_seq.remove(&pid)
+            self.pid_stats_seq.get_mut(&pid)
+                .unwrap()
+                .pop_front()
                 .unwrap()
         }
     }
@@ -124,13 +126,17 @@ mod test_cpu_probe {
         let stat_reader = InMemoryStatReader {
             stat_seq: vec![create_stat(0), create_stat(200)]
         };
+
+        let pid_stat_seq = vecdeque!(Ok(create_pid_stat(0)), Ok(create_pid_stat(100)));
         let pid_stat_reader = MemoryPidStatReader {
-            pid_stats_seq: hashmap!(1 => Ok(create_pid_stat(100)))
+            pid_stats_seq: hashmap!(1 => pid_stat_seq)
         };
 
         let mut probe = CpuProbe::from_readers(Box::new(stat_reader),
                                                Box::new(pid_stat_reader))
             .expect("Could not create procfs");
+
+        probe.probe_processes(&vec![1]); // First calibration probing
 
         assert_eq!(probe.probe_processes(&vec![1]).unwrap(),
                    hashmap!(1 => Metric::Percent(50.)));
@@ -142,13 +148,17 @@ mod test_cpu_probe {
         let stat_reader = InMemoryStatReader {
             stat_seq: vec![create_stat(0), create_stat(200)]
         };
+
+        let first_pid_stat_seq = vecdeque!(Ok(create_pid_stat(0)), Ok(create_pid_stat(50)));
+        let second_pid_stat_seq = vecdeque!(Ok(create_pid_stat(0)), Ok(create_pid_stat(50)));
         let pid_stat_reader = MemoryPidStatReader {
-            pid_stats_seq: hashmap!(1 => Ok(create_pid_stat(50)), 2 => Ok(create_pid_stat(50)))
+            pid_stats_seq: hashmap!(1 => first_pid_stat_seq, 2 => second_pid_stat_seq)
         };
 
         let mut probe = CpuProbe::from_readers(Box::new(stat_reader),
                                                Box::new(pid_stat_reader))
             .expect("Could not create procfs");
+        probe.probe_processes(&vec!(1, 2)); // calibrating probe
 
         let metrics = probe.probe_processes(&vec!(1, 2)).unwrap();
         assert_eq!(metrics,
@@ -162,11 +172,11 @@ mod test_cpu_probe {
         let stat_reader = InMemoryStatReader {
             stat_seq: vec![create_stat(0), create_stat(200)]
         };
+        let first_pid_stat_seq = vecdeque!(Ok(create_pid_stat(0)), Ok(create_pid_stat(50)));
+        let second_pid_stat_seq = vecdeque!(Ok(create_pid_stat(0)),
+            Err(ProcfsError::IoError(io::Error::new(io::ErrorKind::Other, "oh no!"))));
         let pid_stat_reader = MemoryPidStatReader {
-            pid_stats_seq: hashmap!(
-                1 => Ok(create_pid_stat(50)),
-                2 => Err(ProcfsError::IoError(io::Error::new(io::ErrorKind::Other, "oh no!")))
-            )
+            pid_stats_seq: hashmap!(1 => first_pid_stat_seq, 2 => second_pid_stat_seq)
         };
 
 
@@ -277,6 +287,8 @@ mod common_test_utils {
     use crate::procfs::parsers::{PidStat, Stat};
 
     pub fn create_stat(running_time: u64) -> Stat {
+        // Creates a Stat structure indicating that the CPU has been running for `running_time`
+        // ticks
         let individual_ticks = running_time / 6;
         let leftover = running_time - 6 * individual_ticks;
 
@@ -286,6 +298,7 @@ mod common_test_utils {
     }
 
     pub fn create_pid_stat(running_time: u32) -> PidStat {
+        // Same operation as above but returns a PidStat instance
         let individual_ticks = (running_time / 4) as u32;
         let leftover = (running_time - 4 * individual_ticks) as u32;
 

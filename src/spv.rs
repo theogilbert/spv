@@ -2,7 +2,7 @@ use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
 use crate::core::metrics::{Archive, ArchiveBuilder, Probe};
-use crate::core::process_view::{PID, ProcessView};
+use crate::core::process_view::{PID, ProcessMetadata, ProcessView};
 use crate::Error;
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
@@ -48,13 +48,18 @@ impl SpvApplication {
             .map(|p| p.name().to_string()))
             .map_err(|e| Error::UiError(e.to_string()))?;
 
-        Ok(Self {
+        let mut spv_app = Self {
             receiver,
             process_view: context.unpack(),
             metrics_archive: archive,
             ui,
             probes,
-        })
+        };
+
+        spv_app.calibrate_probes()?;
+        spv_app.dispatch_probes()?;
+
+        Ok(spv_app)
     }
 
     pub fn run(mut self) -> Result<(), Error> {
@@ -71,7 +76,7 @@ impl SpvApplication {
                 }
                 Trigger::NextProcess => self.ui.next_process(),
                 Trigger::PreviousProcess => self.ui.previous_process(),
-                Trigger::Resize => {},
+                Trigger::Resize => {}
             }
 
             self.draw_ui()?;
@@ -80,13 +85,21 @@ impl SpvApplication {
         Ok(())
     }
 
-    fn dispatch_probes(&mut self) -> Result<(), Error> {
-        let mut processes = self.process_view.processes()
-            .map_err(|e| Error::CoreError(e.to_string()))?;
+    fn calibrate_probes(&mut self) -> Result<(), Error> {
+        let processes = self.collect_processes()?;
+        let pids = SpvApplication::extract_processes_pids(&processes);
 
-        let pids: Vec<PID> = processes.iter()
-            .map(|p| p.pid())
-            .collect();
+        for p in &mut self.probes {
+            p.probe_processes(&pids)
+                .map_err(|e| Error::CoreError(e.to_string()))?;
+        }
+
+        Ok(())
+    }
+
+    fn dispatch_probes(&mut self) -> Result<(), Error> {
+        let mut processes = self.collect_processes()?;
+        let pids = SpvApplication::extract_processes_pids(&processes);
 
         let probes = &mut self.probes;
         let archive = &mut self.metrics_archive;
@@ -102,6 +115,17 @@ impl SpvApplication {
         self.ui.set_processes(processes);
 
         Ok(())
+    }
+
+    fn extract_processes_pids(processes: &Vec<ProcessMetadata>) -> Vec<u32> {
+        processes.iter()
+            .map(|p| p.pid())
+            .collect()
+    }
+
+    fn collect_processes(&mut self) -> Result<Vec<ProcessMetadata>, Error> {
+        self.process_view.processes()
+            .map_err(|e| Error::CoreError(e.to_string()))
     }
 
     fn probe_metrics(probe: &mut Box<dyn Probe>, pids: &[PID], archive: &mut Archive, current_tab: &str) -> Result<(), Error> {
