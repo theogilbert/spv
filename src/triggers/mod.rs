@@ -1,14 +1,14 @@
+use std::fmt::{Display, Formatter};
 use std::sync::mpsc::Sender;
 use std::thread;
 use std::time::Duration;
 
 use log::error;
 
+use crate::fmt;
 use crate::triggers::input::InputListener;
 use crate::triggers::pulse::Pulse;
 use crate::triggers::signal::SignalListener;
-use std::fmt::{Display, Formatter};
-use crate::fmt;
 
 mod pulse;
 mod input;
