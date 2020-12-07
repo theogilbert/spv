@@ -14,6 +14,7 @@ use spv::spv::{SpvApplication, SpvContext};
 use spv::triggers::TriggersEmitter;
 
 fn main() {
+    setup_panic();
     init_logging();
 
     let (tx, rx) = channel();
@@ -36,6 +37,19 @@ fn main() {
             }
         }
     };
+}
+
+fn setup_panic() {
+    // As panic! is swallowed by the raw terminal, log the panic as well
+    let default_hook = std::panic::take_hook();
+
+    std::panic::set_hook(Box::new(move |info| {
+        match info.payload().downcast_ref::<&str>() {
+            Some(c) => error!("Panic occured: {:?}", c),
+            None => error!("Panic occured: could not retrieve the cause"),
+        }
+        default_hook(info);
+    }))
 }
 
 fn init_logging() {
