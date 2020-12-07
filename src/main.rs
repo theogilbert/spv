@@ -14,7 +14,7 @@ use spv::spv::{SpvApplication, SpvContext};
 use spv::triggers::TriggersEmitter;
 
 fn main() {
-    setup_panic();
+    setup_panic_logging();
     init_logging();
 
     let (tx, rx) = channel();
@@ -39,8 +39,8 @@ fn main() {
     };
 }
 
-fn setup_panic() {
-    // As panic! is swallowed by the raw terminal, log the panic as well
+fn setup_panic_logging() {
+    // As panics are erased by the application exiting, log the panic as an error
     let default_hook = std::panic::take_hook();
 
     std::panic::set_hook(Box::new(move |info| {
@@ -51,11 +51,11 @@ fn setup_panic() {
 
         let formatted_location = match info.location() {
             None => "Could not retrieve panic location".to_string(),
-            Some(loc) => format!("Panic occured in file '{}' at line '{}'",
+            Some(loc) => format!("Location: '{}' at line '{}'",
                                  loc.file(), loc.line()),
         };
 
-        error!("Panic occured '{}'. {}", payload, formatted_location);
+        error!("Panic occured: '{}'. {}", payload, formatted_location);
 
         default_hook(info);
     }))
