@@ -28,12 +28,36 @@ impl MetricsChart {
         }
     }
 
-    fn build_process_data(&self, process: &ProcessMetadata, metrics: &Archive) -> Vec<(f64, f64)> {
-        metrics.history(&self.current_label, process.pid(), self.span)
-            .expect("Could not get history of process")
-            .rev()
-            .enumerate()
-            .map(|(i, m)| (0. - i as f64, m.as_f64()))
+    fn collect_data(&self, process: &ProcessMetadata, metrics: &Archive) -> Vec<Vec<(f64, f64)>> {
+        let default = metrics.default_metric(&self.current_label)
+            .expect("Could not get default metric");
+        let mut data_vecs = Vec::new();
+
+        for i in 0..default.cardinality() {
+            data_vecs.push(metrics.history(&self.current_label, process.pid(), self.span)
+                .expect("Could not get history of process")
+                .rev()
+                .map(|m| {
+                    m.raw(i)
+                        .expect("Could not access raw metric value")
+                })
+                .enumerate()
+                .map(|(t, r)| (0. - t as f64, r))
+                .collect());
+        }
+
+        data_vecs
+    }
+
+    fn build_datasets<'a>(process: &'a ProcessMetadata, data: &'a Vec<Vec<(f64, f64)>>) -> Vec<Dataset<'a>> {
+        data.iter()
+            .map(|d| {
+                Dataset::default()
+                    .name(process.command())
+                    .marker(symbols::Marker::Braille)
+                    .graph_type(GraphType::Line)
+                    .data(d)
+            })
             .collect()
     }
 
@@ -49,20 +73,10 @@ impl MetricsChart {
     pub fn render(&self, frame: &mut Frame<TuiBackend>, chunk: Rect,
                   process_opt: Option<&ProcessMetadata>, metrics: &Archive) {
         if let Some(process) = process_opt {
-            let data = self.build_process_data(process, metrics);
-
-            let max = data.iter()
-                .map(|(_, v)| v.ceil() as u32)
-                .max()
-                .unwrap_or(0) as f64;
+            let data = self.collect_data(process, metrics);
+            let datasets = Self::build_datasets(process, &data);
+            let max = Self::retrieve_max_value_from_data_vec(&data);
             let max_repr = max.to_string();
-
-            let datasets = vec![
-                Dataset::default()
-                    .name(process.command())
-                    .marker(symbols::Marker::Braille)
-                    .graph_type(GraphType::Line)
-                    .data(&data)];
 
             let chart = Chart::new(datasets)
                 .block(Block::default()
@@ -80,15 +94,56 @@ impl MetricsChart {
             frame.render_widget(chart, chunk);
         }
     }
+
+    fn retrieve_max_value_from_data_vec(data: &Vec<Vec<(f64, f64)>>) -> f64 {
+        data.iter()
+            .map(|d| {
+                // We get the max value of each sub-vec of data
+                d.iter()
+                    .map(|(_, v)| v.ceil() as u32)
+                    .max()
+                    .unwrap_or(0)
+            })
+            .max()// and then the max value among all these sub-vec max values
+            .unwrap_or(0) as f64
+    }
 }
 
-// #[cfg(test)]
-// mod test_metrics_chart {
-//     #[fixture]
-//     fn cosinus_data() -> Vec<(f64, f64)> {
-//         (0..1000)
-//             .map(|i| (i as f64) * 0.01)
-//             .map(|i| (i, i.cos()))
-//             .collect()
-//     }
-// }
+#[cfg(test)]
+mod test_metrics_chart {
+    use std::time::Duration;
+
+    use crate::core::metrics::{Archive, ArchiveBuilder, Metric};
+    use crate::core::process_view::ProcessMetadata;
+    use crate::ui::chart::MetricsChart;
+
+    #[test]
+    fn test_retrieve_max_value_from_data_vec() {
+        let data: Vec<Vec<(f64, f64)>> = vec![
+            vec![(0., 1.), (1., 2.), (2., 3.)],
+            vec![(0., 10.), (1., 5.), (3., 7.)]];
+
+        assert_eq!(MetricsChart::retrieve_max_value_from_data_vec(&data), 10.);
+    }
+
+    #[test]
+    fn test_should_collect_all_data_with_higher_cardinality() {
+        let pm = ProcessMetadata::new(1, "cmd");
+        let mut metrics = ArchiveBuilder::new()
+            .resolution(Duration::from_secs(1))
+            .new_metric("TestMetric".to_string(), Metric::IO(0, 0))
+            .expect("Could not add TestMetric")
+            .build();
+
+        metrics.push("TestMetric", 1, Metric::IO(10, 20)).unwrap();
+        metrics.push("TestMetric", 1, Metric::IO(30, 40)).unwrap();
+
+        let chart = MetricsChart::new(Duration::from_secs(2),
+                                      "TestMetric".to_string());
+
+        assert_eq!(chart.collect_data(&pm, &metrics), vec![
+            vec![(0., 30.), (-1., 10.)],
+            vec![(0., 40.), (-1., 20.)]
+        ]);
+    }
+}

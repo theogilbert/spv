@@ -29,4 +29,6 @@ pub enum Error {
     DuplicateLabel(String),
     #[error(transparent)]
     IOError(#[from] io::Error),
+    #[error("Error accessing raw value {0:?} (cardinality: {1:?})")]
+    RawMetricAccessError(usize, usize),
 }

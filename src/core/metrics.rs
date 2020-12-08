@@ -15,10 +15,11 @@ use crate::core::Error;
 use crate::core::process_view::PID;
 
 /// A value probed from a process
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Metric {
     Percent(f64),
     Bitrate(usize),
+    IO(usize, usize),
 }
 
 
@@ -27,6 +28,7 @@ impl Metric {
         match self {
             Metric::Percent(_) => "%".to_string(),
             Metric::Bitrate(_) => "bps".to_string(),  // TODO return kbps/mbps depending on bps
+            Metric::IO(_, _) => "bps".to_string(),  // TODO return kbps/mbps depending on bps
         }
     }
 
@@ -34,13 +36,33 @@ impl Metric {
         match self {
             Metric::Percent(_) => "%",
             Metric::Bitrate(_) => "bps",
+            Metric::IO(_, _) => "bps",
         }
     }
 
-    pub fn as_f64(&self) -> f64 {
+    pub fn raw(&self, index: usize) -> Result<f64, Error> {
+        if index > self.cardinality() {
+            Err(Error::RawMetricAccessError(index, self.cardinality()))
+        } else {
+            Ok(match self {
+                Metric::Percent(pct) => *pct,
+                Metric::Bitrate(br) => *br as f64,
+                Metric::IO(input, output) => {
+                    match index {
+                        0 => *input as f64,
+                        1 => *output as f64,
+                        _ => panic!("Invalid raw value index")
+                    }
+                }
+            })
+        }
+    }
+
+    pub fn cardinality(&self) -> usize {
         match self {
-            Metric::Percent(pct) => *pct,
-            Metric::Bitrate(br) => *br as f64,
+            Metric::Percent(_) => 1,
+            Metric::Bitrate(_) => 1,
+            Metric::IO(_, _) => 2,
         }
     }
 }
@@ -48,18 +70,16 @@ impl Metric {
 impl PartialOrd for Metric {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
-            (Metric::Percent(_), Metric::Bitrate(_)) => {
-                panic!("Comparing incompatible metrics")
-            }
-            (Metric::Bitrate(_), Metric::Percent(_)) => {
-                panic!("Comparing incompatible metrics")
-            }
             (Metric::Percent(pct_self), Metric::Percent(pct_other)) => {
                 pct_self.partial_cmp(pct_other)
             }
             (Metric::Bitrate(br_self), Metric::Bitrate(br_other)) => {
                 br_self.partial_cmp(br_other)
             }
+            (Metric::IO(input_1, output_1), Metric::IO(input_2, output_2)) => {
+                (input_1 + output_1).partial_cmp(&(input_2 + output_2))
+            }
+            (_, _) => panic!("Comparing incompatible metrics"),
         }
     }
 }
@@ -70,6 +90,7 @@ impl Display for Metric {
         match self {
             Metric::Percent(pct) => write!(f, "{:.1}", pct),
             Metric::Bitrate(br) => write!(f, "{:}", br),
+            Metric::IO(input, output) => write!(f, "{:}/{:}", input, output),
         }
     }
 }
@@ -268,6 +289,7 @@ impl Archive {
         match (pm.last(pid), metric) {
             (&Metric::Percent(_), Metric::Percent(pct)) => pm.push(pid, Metric::Percent(pct)),
             (&Metric::Bitrate(_), Metric::Bitrate(br)) => pm.push(pid, Metric::Bitrate(br)),
+            (&Metric::IO(_, _), Metric::IO(input, output)) => pm.push(pid, Metric::IO(input, output)),
             (_, m) => return Err(Error::InvalidMetricVariant(label.to_string(), m))
         };
 
@@ -335,6 +357,19 @@ impl Archive {
     ///  * span: Indicates from how long ago should metrics be returned
     pub fn expected_metrics(&self, span: Duration) -> usize {
         (span.as_secs() / self.resolution.as_secs()) as usize
+    }
+
+    /// Get the default `Metric` associated to the probe with the given label
+    ///
+    /// # Arguments
+    ///  * `label`: The name of the label of the probe for which to retrieve the default `Metric`
+    ///
+    /// If `label` is invalid, returns a Error::UnexpectedLabel
+    ///
+    pub fn default_metric(&self, label: &str) -> Result<Metric, Error> {
+        self.metrics.get(label)
+            .map(|pm| pm.default())
+            .ok_or_else(|| Error::UnexpectedLabel(label.to_string()))
     }
 }
 
@@ -517,5 +552,9 @@ impl ProcessMetrics {
         self.series.get(&pid)
             .map(|v| v.len())
             .unwrap_or(0)
+    }
+
+    fn default(&self) -> Metric {
+        self.default.clone()
     }
 }
