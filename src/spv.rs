@@ -103,9 +103,8 @@ impl SpvApplication {
 
         let probes = &mut self.probes;
         let archive = &mut self.metrics_archive;
-        let current_tab = self.ui.current_tab();
         for p in probes {
-            Self::probe_metrics(p, &pids, archive, current_tab)?;
+            Self::probe_metrics(p, &pids, archive)?;
         }
 
         // TODO processes should be its own type of object, with a sort() method instead..
@@ -128,14 +127,14 @@ impl SpvApplication {
             .map_err(|e| Error::CoreError(e.to_string()))
     }
 
-    fn probe_metrics(probe: &mut Box<dyn Probe>, pids: &[PID], archive: &mut Archive, current_tab: &str) -> Result<(), Error> {
+    fn probe_metrics(probe: &mut Box<dyn Probe>, pids: &[PID], archive: &mut Archive) -> Result<(), Error> {
         let metrics = probe.probe_processes(pids)
             .map_err(|e| Error::CoreError(e.to_string()))?;
 
-        let metric_label = current_tab;
+        let metric_label = probe.name();
         for (pid, m) in metrics.into_iter() {
             archive.push(metric_label, pid, m)
-                .unwrap_or_else(|_| panic!("Error pushing {} metric for PID {}", metric_label, pid))
+                .unwrap_or_else(|e| panic!("Error pushing {} metric for PID {}: {:?}", metric_label, pid, e))
         }
 
         Ok(())
