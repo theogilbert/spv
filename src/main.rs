@@ -9,6 +9,7 @@ use simplelog::{Config, WriteLogger};
 use spv::core::metrics::Probe;
 use spv::core::process_view::ProcessView;
 use spv::procfs::cpu_probe::CpuProbe;
+use spv::procfs::net_io_probe::NetIoProbe;
 use spv::procfs::process::ProcfsScanner;
 use spv::spv::{SpvApplication, SpvContext};
 use spv::triggers::TriggersEmitter;
@@ -24,7 +25,9 @@ fn main() {
 
     let app_context = build_spv_context();
 
-    let probes = vec![Box::new(CpuProbe::new().expect("... TODO get rid of this POC")) as Box<dyn Probe>];
+    let probes = vec![
+        Box::new(CpuProbe::new().expect("... TODO get rid of this POC")) as Box<dyn Probe>,
+        Box::new(NetIoProbe::default()) as Box<dyn Probe>];
 
     let app_ret = SpvApplication::new(rx, probes, app_context,
                                       probe_period);
@@ -44,19 +47,7 @@ fn setup_panic_logging() {
     let default_hook = std::panic::take_hook();
 
     std::panic::set_hook(Box::new(move |info| {
-        let payload = match info.payload().downcast_ref::<&str>() {
-            Some(c) => *c,
-            None => "",
-        };
-
-        let formatted_location = match info.location() {
-            None => "Could not retrieve panic location".to_string(),
-            Some(loc) => format!("Location: '{}' at line '{}'",
-                                 loc.file(), loc.line()),
-        };
-
-        error!("Panic occured: '{}'. {}", payload, formatted_location);
-
+        error!("Panic occured: {:?}", info);
         default_hook(info);
     }))
 }
