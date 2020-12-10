@@ -76,7 +76,11 @@ impl SpvApplication {
                 }
                 Trigger::NextProcess => self.ui.next_process(),
                 Trigger::PreviousProcess => self.ui.previous_process(),
-                Trigger::Resize => {}
+                Trigger::Resize => {
+                    // No need to do anything, just receiving a signal will refresh UI
+                }
+                Trigger::NextTab => self.ui.next_tab(),
+                Trigger::PreviousTab => self.ui.previous_tab(),
             }
 
             self.draw_ui()?;

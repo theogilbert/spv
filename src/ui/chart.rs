@@ -15,26 +15,24 @@ pub struct MetricsChart {
     // The time span the chart covers
     span: Duration,
     axis_origin_label: String,
-    current_label: String,
 }
 
 
 impl MetricsChart {
-    pub fn new(span: Duration, current_label: String) -> Self {
+    pub fn new(span: Duration) -> Self {
         Self {
             span,
             axis_origin_label: "-1m".to_string(), // TODO fix this
-            current_label,
         }
     }
 
-    fn collect_data(&self, process: &ProcessMetadata, metrics: &Archive) -> Vec<Vec<(f64, f64)>> {
-        let default = metrics.default_metric(&self.current_label)
+    fn collect_data(&self, process: &ProcessMetadata, metrics: &Archive, current_label: &str) -> Vec<Vec<(f64, f64)>> {
+        let default = metrics.default_metric(current_label)
             .expect("Could not get default metric");
         let mut data_vecs = Vec::new();
 
         for i in 0..default.cardinality() {
-            data_vecs.push(metrics.history(&self.current_label, process.pid(), self.span)
+            data_vecs.push(metrics.history(current_label, process.pid(), self.span)
                 .expect("Could not get history of process")
                 .rev()
                 .map(|m| {
@@ -61,8 +59,8 @@ impl MetricsChart {
             .collect()
     }
 
-    fn get_label_unit(&self, metrics: &Archive) -> &'static str {
-        metrics.label_unit(&self.current_label)
+    fn get_label_unit(&self, metrics: &Archive, current_label: &str) -> &'static str {
+        metrics.label_unit(current_label)
             .map_err(|e| {
                 error!("Error while getting label unit");
                 e
@@ -71,9 +69,9 @@ impl MetricsChart {
     }
 
     pub fn render(&self, frame: &mut Frame<TuiBackend>, chunk: Rect,
-                  process_opt: Option<&ProcessMetadata>, metrics: &Archive) {
+                  process_opt: Option<&ProcessMetadata>, metrics: &Archive, current_label: &str) {
         if let Some(process) = process_opt {
-            let data = self.collect_data(process, metrics);
+            let data = self.collect_data(process, metrics, current_label);
             let datasets = Self::build_datasets(process, &data);
             let max = Self::retrieve_max_value_from_data_vec(&data);
             let max_repr = max.to_string();
@@ -86,7 +84,7 @@ impl MetricsChart {
                     .bounds([0. - metrics.expected_metrics(self.span) as f64, 0.0])// min(dataset.x) to max(dataset.x)
                     .labels([&self.axis_origin_label, "-0m"].iter().cloned().map(Span::from).collect()))
                 .y_axis(Axis::default()
-                    .title(self.get_label_unit(metrics))
+                    .title(self.get_label_unit(metrics, current_label))
                     .style(Style::default().fg(Color::White))
                     .bounds([0., 1.1 * max]) // 0 to 1.1 * max(dataset.y)
                     .labels(["0.0", &max_repr].iter().cloned().map(Span::from).collect()));
@@ -138,10 +136,9 @@ mod test_metrics_chart {
         metrics.push("TestMetric", 1, Metric::IO(10, 20)).unwrap();
         metrics.push("TestMetric", 1, Metric::IO(30, 40)).unwrap();
 
-        let chart = MetricsChart::new(Duration::from_secs(2),
-                                      "TestMetric".to_string());
+        let chart = MetricsChart::new(Duration::from_secs(2));
 
-        assert_eq!(chart.collect_data(&pm, &metrics), vec![
+        assert_eq!(chart.collect_data(&pm, &metrics, "TestMetric"), vec![
             vec![(0., 30.), (-1., 10.)],
             vec![(0., 40.), (-1., 20.)]
         ]);

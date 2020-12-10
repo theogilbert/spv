@@ -43,7 +43,7 @@ pub struct SpvUI {
 impl SpvUI {
     pub fn new(labels: impl Iterator<Item=String>) -> Result<Self, Error> {
         let tabs = MetricTabs::new(labels.collect());
-        let chart = MetricsChart::new(Duration::from_secs(60), tabs.current().to_string());
+        let chart = MetricsChart::new(Duration::from_secs(60));
 
         Ok(Self {
             terminal: Terminal::new()?,
@@ -67,7 +67,8 @@ impl SpvUI {
 
             tabs.render(&mut frame, layout.tabs_chunk());
             process_list.render(&mut frame, layout.processes_chunk(), metrics, tabs.current());
-            chart.render(&mut frame, layout.chart_chunk(), process_list.selected(), metrics);
+            chart.render(&mut frame, layout.chart_chunk(), process_list.selected(), metrics,
+                         tabs.current());
             metadata_bar.render(&mut frame, layout.metadata_chunk());
         }).map_err(|e| Error::IOError(e.to_string()))
     }
@@ -89,6 +90,14 @@ impl SpvUI {
 
     pub fn current_tab(&self) -> &str {
         self.tabs.current()
+    }
+
+    pub fn next_tab(&mut self) {
+        self.tabs.next();
+    }
+
+    pub fn previous_tab(&mut self) {
+        self.tabs.previous();
     }
 }
 

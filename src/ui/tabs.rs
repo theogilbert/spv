@@ -33,6 +33,14 @@ impl MetricTabs {
 
     pub fn current(&self) -> &str {
         self.tabs.get(self.selected_index)
-            .unwrap()
+            .expect(&format!("Invalid tab index: {}", self.selected_index))
+    }
+
+    pub fn next(&mut self) {
+        self.selected_index = (self.selected_index + 1) % self.tabs.len();
+    }
+
+    pub fn previous(&mut self) {
+        self.selected_index = (self.selected_index - 1) % self.tabs.len();
     }
 }

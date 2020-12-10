@@ -34,6 +34,8 @@ pub enum Trigger {
     NextProcess,
     PreviousProcess,
     Resize,
+    NextTab,
+    PreviousTab,
 }
 
 pub struct TriggersEmitter;

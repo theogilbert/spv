@@ -25,6 +25,8 @@ impl InputListener {
             match key {
                 Key::Ctrl(c) => self.on_ctrl_key_pressed(c),
                 Key::Char(c) => self.on_key_pressed(c),
+                Key::Left => self.send(Trigger::PreviousTab),
+                Key::Right => self.send(Trigger::NextTab),
                 Key::Up => self.send(Trigger::PreviousProcess),
                 Key::Down => self.send(Trigger::NextProcess),
                 _ => ()
