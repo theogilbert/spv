@@ -48,7 +48,7 @@ impl Probe for NetIoProbe {
     }
 
     fn default_metric(&self) -> Metric {
-        Metric::IOBps(0, 0)
+        Metric::IO(0, 0)
     }
 
     fn init_iteration(&mut self) -> Result<(), Error> {
@@ -94,7 +94,7 @@ impl Probe for NetIoProbe {
                 info!("PID: {}. Input: {} / Output: {}. Rates: Input: {} / Output: {}", pid, input, output, input_rate, output_rate);
             }
 
-            Ok(Metric::IOBps(input_rate as usize, output_rate as usize))
+            Ok(Metric::IO(input_rate as usize, output_rate as usize))
         } else {
             error!("Cannot probe net I/O: Net stats are not set.");
             Ok(self.default_metric())
