@@ -41,6 +41,7 @@ impl MetricTabs {
     }
 
     pub fn previous(&mut self) {
-        self.selected_index = (self.selected_index - 1) % self.tabs.len();
+        self.selected_index = self.selected_index.checked_sub(1)
+            .unwrap_or(self.tabs.len() - 1);
     }
 }
