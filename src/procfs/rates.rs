@@ -1,6 +1,5 @@
 use std::collections::{HashMap, VecDeque};
 use std::collections::hash_map::Entry;
-use std::ops::Sub;
 use std::time::Duration;
 #[cfg(not(test))]
 use std::time::Instant;
