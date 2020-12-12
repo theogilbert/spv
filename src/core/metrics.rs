@@ -19,6 +19,7 @@ use crate::core::process_view::PID;
 pub enum Metric {
     Percent(f64),
     Bitrate(usize),
+    /// Input / Output rates, in bytes per seconds
     IO(usize, usize),
 }
 
