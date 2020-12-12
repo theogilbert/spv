@@ -11,6 +11,7 @@ use sn_fake_clock::FakeClock as Instant;
 use crate::core::process_view::PID;
 use crate::procfs::ProcfsError;
 
+#[derive(Clone)]
 struct DatedValue
 {
     date: Instant,
@@ -20,7 +21,7 @@ struct DatedValue
 /// Keeps tracks of dated accumulative values of processes to calculate their rate
 pub struct ProcessesRates {
     acc_values: HashMap<PID, VecDeque<DatedValue>>,
-    data_retention: Duration,
+    precision: Duration,
 }
 
 
@@ -29,9 +30,10 @@ impl ProcessesRates {
     /// data covered by the given retention duration
     ///
     /// # Arguments
-    ///  * `data_retention`: Indicates from how far back to use data to calculate rates
+    ///  * `precision`: Indicates over how much time to calculate the rate. This class will always
+    ///         return rates in Hertz, but we calculate it from data over this time span.
     pub fn new(data_retention: Duration) -> Self {
-        ProcessesRates { acc_values: HashMap::new(), data_retention }
+        ProcessesRates { acc_values: HashMap::new(), precision: data_retention }
     }
 
     /// Pushes a new data associated to the given PID
@@ -40,8 +42,27 @@ impl ProcessesRates {
             Entry::Occupied(o) => o.into_mut(),
             Entry::Vacant(v) => v.insert(VecDeque::new()),
         };
+        let now = Instant::now();
 
-        values.push_back(DatedValue { date: Instant::now(), value })
+        values.push_back(DatedValue { date: now, value });
+        self.remove_outdated_values(pid, now);
+    }
+
+    /// Removes all outdated values but the latest one, for the given PID
+    pub fn remove_outdated_values(&mut self, pid: PID, now: Instant) {
+        let values = self.acc_values.get_mut(&pid).unwrap();
+        let data_retention = self.precision;
+
+        let last_outdated = values.iter()
+            .filter(|dv| dv.date < now - data_retention)
+            .max_by(|dv_1, dv_2| dv_1.date.cmp(&dv_2.date))
+            .map(|dv| dv.clone());
+
+        values.retain(|dv| (now - dv.date) <= data_retention);
+
+        if let Some(last_outdated) = last_outdated {
+            values.push_front(last_outdated);
+        }
     }
 
     /// Calculates a rate (in hertz) from the known accumulative values of the associated PID.
@@ -53,35 +74,57 @@ impl ProcessesRates {
     /// # Arguments
     ///  * `pid`: The PID of the process for which to calculate the rate
     ///
-    pub fn rate(&mut self, pid: PID) -> Result<f64, ProcfsError> {
-        let values = self.acc_values.get_mut(&pid)
+    pub fn rate(&self, pid: PID) -> Result<f64, ProcfsError> {
+        let values = self.acc_values.get(&pid)
             .ok_or(ProcfsError::UnknownPID(pid))?;
 
-        Self::clean_outdated_data(values, self.data_retention);
+        if values.len() < 2 {
+            return Ok(0.);
+        }
 
-        if values.len() > 1 {
-            let front = values.front().unwrap();
-            let back = values.back().unwrap();
+        let cur_val = values.back().unwrap();
+        let origin_val = self.estimate_origin_value(values, cur_val.date).unwrap();
 
-            let increase = back.value - front.value;
-            let span = back.date - front.date;
+        let rate = (cur_val.value as f64 - origin_val) / self.precision.as_secs_f64();
 
-            let projected_rate = increase as f64 / span.as_secs_f64();
+        Ok(rate)
+    }
 
-            Ok(projected_rate)
+    /// Estimate the value at the date `now - self.precision`
+    /// This very simple implementation estimates this value by performing a regression from the
+    /// first two values of `values`
+    fn estimate_origin_value(&self, values: &VecDeque<DatedValue>, now: Instant) -> Option<f64> {
+        let origin = now - self.precision;
+
+        if values.len() < 2 {
+            return None;  // If there is not two values
+        }
+
+        let first = values.front().unwrap();
+        let second = values.get(1).unwrap();
+
+        if first.date == second.date {
+            return None;  // If the two dates are identical, we don't want to divide by zero below
+        }
+
+        let slope = (second.value - first.value) as f64 / (second.date - first.date).as_secs_f64();
+
+        let origin_time_delta = Self::get_delta_as_secs_f64(origin, first.date);
+        let regression = first.value as f64 + slope * (origin_time_delta);
+
+        Some(regression)
+    }
+
+    /// Gets the difference, in second, between the two Instant instances, allowing negative
+    /// values
+    fn get_delta_as_secs_f64(instant_1: Instant, instant_2: Instant) -> f64 {
+        if instant_1 < instant_2 {
+            -(instant_2 - instant_1).as_secs_f64()
         } else {
-            Ok(0.)
+            (instant_1 - instant_2).as_secs_f64()
         }
     }
 
-    /// Gets rid of outdated data for the given PID
-    /// # Arguments
-    ///  * `acc_values`: The VecDeque containing all dated values associated to a process
-    ///  * `retention`: The maximum duration for which to keep values
-    fn clean_outdated_data(acc_values: &mut VecDeque<DatedValue>, retention: Duration) {
-        let now = Instant::now();
-        acc_values.retain(|dv| (now - dv.date) <= retention);
-    }
 
     // TODO Clear PID from this structure when not needed anymore
 }
@@ -98,6 +141,7 @@ mod test_process_rates {
 
     #[fixture]
     fn process_rates() -> ProcessesRates {
+        FakeClock::set_time(10000);
         ProcessesRates::new(Duration::from_secs(1))
     }
 
@@ -134,11 +178,39 @@ mod test_process_rates {
     #[rstest]
     fn test_should_ignore_outdated_values(mut process_rates: ProcessesRates) {
         process_rates.push(123, 0);
+        FakeClock::advance_time(50);
+        process_rates.push(123, 100);
         FakeClock::advance_time(2000);
         process_rates.push(123, 100);
         FakeClock::advance_time(500);
         process_rates.push(123, 100); // Over the last second, the value remained at 100
 
         assert_eq!(process_rates.rate(123).unwrap(), 0.);
+    }
+
+    #[rstest]
+    fn test_should_compute_rate_from_outdated_and_recent_value(mut process_rates: ProcessesRates) {
+        // In this test, we have one outdated data from 2s ago, and one data from 0s ago
+        process_rates.push(123, 0);
+        FakeClock::advance_time(2000);
+        process_rates.push(123, 100);
+
+        assert_eq!(process_rates.rate(123).unwrap(), 50.);  // 100 over 2s -> 50/s
+    }
+
+    #[rstest]
+    fn test_should_compute_rate_from_out_dated_and_multiple_recent_values(mut process_rates: ProcessesRates) {
+        // In this more complex test, we have:
+        // - One outdated data from 2s ago
+        process_rates.push(123, 0);
+        FakeClock::advance_time(1500);
+        // - One data from 0.5s ago
+        process_rates.push(123, 150);
+        FakeClock::advance_time(500);
+        // - One data from 0s ago
+        process_rates.push(123, 250);
+
+        // 100 in the last 0.5 sec + 150 in the previous 1.5 sec -> 100 + 150/3 -> 150/s
+        assert_eq!(process_rates.rate(123).unwrap(), 150.);
     }
 }
