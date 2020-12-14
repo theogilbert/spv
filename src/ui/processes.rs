@@ -7,11 +7,15 @@ use crate::core::metrics::Archive;
 use crate::core::process_view::{PID, ProcessMetadata};
 use crate::ui::terminal::TuiBackend;
 
+/// Maximum amount of characters to display for a command (including ".." if the cmd is too long)
+const MAX_COMMAND_LENGTH: usize = 16;
+/// Maximum amount of characters to display for a metric
+const MAX_METRICS_LENGTH: usize = 10;
+
 pub struct ProcessList {
     processes: Vec<ProcessMetadata>,
     selected_pid: Option<PID>,
     state: ListState,
-    metrics_col_len: u16,
 }
 
 impl Default for ProcessList {
@@ -20,7 +24,6 @@ impl Default for ProcessList {
             processes: vec![],
             selected_pid: None,
             state: ListState::default(),
-            metrics_col_len: 6,
         }
     }
 }
@@ -28,13 +31,13 @@ impl Default for ProcessList {
 // TODO add first row Process name - [%/bps]
 impl ProcessList {
     pub fn render(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect, metrics: &Archive,
-                      label: &str) {
+                  label: &str) {
         let columns_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints(
                 [
-                    Constraint::Min(1),  // processes names
-                    Constraint::Length(self.metrics_col_len),  // processes metrics
+                    Constraint::Min(MAX_COMMAND_LENGTH as u16 + 2),  // processes names
+                    Constraint::Length(MAX_METRICS_LENGTH as u16),  // processes metrics
                 ].as_ref()
             )
             .split(chunk);
@@ -43,9 +46,21 @@ impl ProcessList {
         self.render_metric_column(frame, columns_chunks[1], metrics, label);
     }
 
+    fn shortened_command_name(process_metadata: &ProcessMetadata) -> String {
+        if process_metadata.command().len() > MAX_COMMAND_LENGTH {
+            format!("{}..", &process_metadata.command()[0..MAX_COMMAND_LENGTH - 2])
+        } else {
+            process_metadata.command().to_string()
+        }
+    }
+
     fn render_name_column(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect) {
-        let items: Vec<ListItem> = self.processes.iter()
-            .map(|pm| ListItem::new(pm.command()))
+        let processes_names: Vec<_> = self.processes.iter()
+            .map(|pm| Self::shortened_command_name(pm))
+            .collect();
+
+        let items: Vec<ListItem> = processes_names.iter()
+            .map(|cmd| ListItem::new(cmd.as_str()))
             .collect();
 
         let list = Self::build_default_list_widget(items)
@@ -75,11 +90,11 @@ impl ProcessList {
         let m = metrics.last(label, process.pid())
             .expect("Error getting current metric");
 
-        self.align_metric_right(m.to_string())
+        self.align_metric_right(m.concise_repr())
     }
 
     fn align_metric_right(&self, text: String) -> String {
-        let indent = (self.metrics_col_len as usize).checked_sub(text.len() + 1)
+        let indent = MAX_METRICS_LENGTH.checked_sub(text.len() + 1)
             .unwrap_or(1)
             .max(1);
         format!("{:indent$}{} ", "", text, indent = indent)
