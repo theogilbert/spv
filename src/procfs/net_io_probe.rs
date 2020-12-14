@@ -5,7 +5,7 @@ use netinfo::{InoutType, Netinfo, NetStatistics, Pid};
 
 use crate::core::Error;
 use crate::core::metrics::{Metric, Probe};
-use crate::procfs::rates::ProcessesRates;
+use crate::procfs::rates::{ProcessesRates, ProcessRatesMode};
 
 const RATE_RETENTION: Duration = Duration::from_secs(5);
 
@@ -26,7 +26,7 @@ impl NetIoProbe {
             .map_err(|e| Error::ProbingError(format!("Could not initialize NetInfo"),
                                              Box::new(e)))?;
 
-        net_info.set_min_refresh_interval(Some(Duration::from_millis(20)))
+        net_info.set_min_refresh_interval(Some(Duration::from_millis(100)))
             .map_err(|e| Error::ProbingError("Could not configure net IO thread".into(),
                                              Box::new(e)))?;
         net_info.start() // stop() is automatically called on drop()
@@ -35,8 +35,8 @@ impl NetIoProbe {
 
         Ok(NetIoProbe {
             net_info,
-            input_processes_rates: ProcessesRates::new(RATE_RETENTION),
-            output_processes_rates: ProcessesRates::new(RATE_RETENTION),
+            input_processes_rates: ProcessesRates::new(ProcessRatesMode::INCREMENT, RATE_RETENTION),
+            output_processes_rates: ProcessesRates::new(ProcessRatesMode::INCREMENT, RATE_RETENTION),
             net_stats: None,
         })
     }
@@ -55,6 +55,9 @@ impl Probe for NetIoProbe {
         let net_stats = self.net_info.get_net_statistics()
             .map_err(|e| Error::ProbingError(format!("Error getting net statistics"),
                                              Box::new(e)))?;
+        self.net_info.clear();
+
+        info!("Unassigned to PID: {}", net_stats.get_bytes_by_attr(None, Some(InoutType::Incoming), None));
 
         self.net_stats = Some(net_stats);
 

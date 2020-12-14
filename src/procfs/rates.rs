@@ -1,5 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::collections::hash_map::Entry;
+use std::ops::Add;
 use std::time::Duration;
 #[cfg(not(test))]
 use std::time::Instant;
@@ -17,10 +18,17 @@ struct DatedValue
     value: usize,
 }
 
+pub enum ProcessRatesMode {
+    ACCUMULATIVE,
+    ///
+    INCREMENT,
+}
+
 /// Keeps tracks of dated accumulative values of processes to calculate their rate
 pub struct ProcessesRates {
     acc_values: HashMap<PID, VecDeque<DatedValue>>,
     precision: Duration,
+    mode: ProcessRatesMode,
 }
 
 
@@ -31,8 +39,8 @@ impl ProcessesRates {
     /// # Arguments
     ///  * `precision`: Indicates over how much time to calculate the rate. This class will always
     ///         return rates in Hertz, but we calculate it from data over this time span.
-    pub fn new(data_retention: Duration) -> Self {
-        ProcessesRates { acc_values: HashMap::new(), precision: data_retention }
+    pub fn new(mode: ProcessRatesMode, data_retention: Duration) -> Self {
+        ProcessesRates { acc_values: HashMap::new(), precision: data_retention, mode }
     }
 
     /// Pushes a new data associated to the given PID
@@ -43,7 +51,17 @@ impl ProcessesRates {
         };
         let now = Instant::now();
 
-        values.push_back(DatedValue { date: now, value });
+        let actual_value = match self.mode {
+            ProcessRatesMode::ACCUMULATIVE => value,
+            ProcessRatesMode::INCREMENT => {
+                values.back()
+                    .map(|dv| dv.value)
+                    .unwrap_or(0)
+                    .add(value)
+            }
+        };
+
+        values.push_back(DatedValue { date: now, value: actual_value });
         self.remove_outdated_values(pid, now);
     }
 
@@ -136,12 +154,13 @@ mod test_process_rates {
     use sn_fake_clock::FakeClock;
 
     use crate::procfs::ProcfsError;
-    use crate::procfs::rates::ProcessesRates;
+    use crate::procfs::rates::{ProcessesRates, ProcessRatesMode};
 
     #[fixture]
     fn process_rates() -> ProcessesRates {
         FakeClock::set_time(10000);
-        ProcessesRates::new(Duration::from_secs(1))
+        ProcessesRates::new(ProcessRatesMode::ACCUMULATIVE,
+                            Duration::from_secs(1))
     }
 
     #[rstest]
