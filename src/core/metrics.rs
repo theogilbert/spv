@@ -563,7 +563,7 @@ struct ProcessMetrics {
 
 impl ProcessMetrics {
     fn new(default: Metric) -> Self {
-        Self { default, series: hashmap!() }
+        Self { default, series: HashMap::new() }
     }
 
     fn push(&mut self, pid: PID, metric: Metric) {

@@ -7,13 +7,15 @@ use thiserror::Error;
 use crate::core::process_view::PID;
 
 mod parsers;
-mod rates;
 
 pub mod process;
 
 pub mod cpu_probe;
+
 #[cfg(feature = "netio")]
 pub mod net_io_probe;
+#[cfg(feature = "netio")]
+mod rates;
 
 #[derive(Error, Debug)]
 pub enum ProcfsError {
@@ -26,5 +28,5 @@ pub enum ProcfsError {
     #[error("PID is not known: '{0:?}'")]
     UnknownPID(PID),
     #[error("Not enough data to estimate rate")]
-    NotEnoughData
+    NotEnoughData,
 }

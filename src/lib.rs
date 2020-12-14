@@ -1,6 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::fmt;
 
+#[cfg(test)]
 #[macro_use]
 mod macros;
 
