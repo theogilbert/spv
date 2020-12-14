@@ -36,7 +36,7 @@ impl MetricsChart {
                 .expect("Could not get history of process")
                 .rev()
                 .map(|m| {
-                    m.raw(i)
+                    m.raw_as_f64(i)
                         .expect("Could not access raw metric value")
                 })
                 .enumerate()

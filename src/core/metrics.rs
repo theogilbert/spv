@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::fmt;
 use std::iter::Skip;
+use std::ops::Sub;
 use std::slice::Iter;
 use std::time::Duration;
 
@@ -25,24 +26,25 @@ pub enum Metric {
 
 
 impl Metric {
-    pub fn unit(&self) -> String {
-        match self {
-            Metric::Percent(_) => "%".to_string(),
-            Metric::Bitrate(_) => "bps".to_string(),  // TODO return kbps/mbps depending on bps
-            Metric::IO(_, _) => "bps".to_string(),  // TODO return kbps/mbps depending on bps
-        }
-    }
-
-    pub fn base_unit(&self) -> &'static str {
+    /// Returns the base unit of the metric
+    pub fn unit(&self) -> &'static str {
         match self {
             Metric::Percent(_) => "%",
-            Metric::Bitrate(_) => "bps",
-            Metric::IO(_, _) => "bps",
+            Metric::Bitrate(_) => "B/s",
+            Metric::IO(_, _) => "B/s"
         }
     }
 
-    pub fn raw(&self, index: usize) -> Result<f64, Error> {
-        if index > self.cardinality() {
+    /// Returns a raw value from the metric, as f64
+    ///
+    /// # Arguments
+    ///   * `index`: The value to retrieve from the Metric. Must not be greater than or equal to
+    ///         `Metric::cardinality()`
+    ///
+    /// If the metric is the variant `Metric::IO`, `index=0` will return the input rate, whereas
+    ///   `index=1` will return the output rate.
+    pub fn raw_as_f64(&self, index: usize) -> Result<f64, Error> {
+        if index >= self.cardinality() {
             Err(Error::RawMetricAccessError(index, self.cardinality()))
         } else {
             Ok(match self {
@@ -59,11 +61,45 @@ impl Metric {
         }
     }
 
+    /// Indicates how many value the metric is composed of
     pub fn cardinality(&self) -> usize {
         match self {
             Metric::Percent(_) => 1,
             Metric::Bitrate(_) => 1,
             Metric::IO(_, _) => 2,
+        }
+    }
+
+    /// Returns a more readable version of `bytes_val`
+    /// `formatted_bytes(1294221)` -> 1.2M
+    fn formatted_bytes(bytes_val: usize) -> String {
+        if bytes_val == 0 {
+            return "0".to_string()
+        }
+
+        const METRIC_PREFIXES: [&'static str; 4] = ["", "k", "M", "G"];
+
+        let log = (bytes_val as f64).log(1024.)
+            .sub(1.).max(0.).ceil() as usize;
+
+        let prefix_index = log.min(METRIC_PREFIXES.len() - 1);
+
+        let simplified = bytes_val as f64 / (1024_usize.pow(log as u32) as f64);
+
+        format!("{:.1}{}", simplified, METRIC_PREFIXES[prefix_index])
+    }
+
+    /// An alternative to to_string(), but more concise to fit in places where space is important
+    pub fn concise_repr(&self) -> String {
+        match self {
+            Metric::Percent(pct) => format!("{:.1}", pct),
+            Metric::Bitrate(br) => {
+                Self::formatted_bytes(*br)
+            }
+            Metric::IO(input, output) => {
+                let reported_metric = input.max(output);
+                Self::formatted_bytes(*reported_metric)
+            }
         }
     }
 }
@@ -90,8 +126,14 @@ impl Display for Metric {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Metric::Percent(pct) => write!(f, "{:.1}", pct),
-            Metric::Bitrate(br) => write!(f, "{:}", br),
-            Metric::IO(input, output) => write!(f, "{:}/{:}", input, output),
+            Metric::Bitrate(br) => {
+                write!(f, "{:}", Self::formatted_bytes(*br))
+            }
+            Metric::IO(input, output) => {
+                write!(f, "{:}/{:}",
+                       Self::formatted_bytes(*input),
+                       Self::formatted_bytes(*output))
+            }
         }
     }
 }
@@ -540,7 +582,7 @@ impl ProcessMetrics {
     }
 
     fn unit(&self) -> &'static str {
-        self.default.base_unit()
+        self.default.unit()
     }
 
     fn iter_process(&self, pid: PID) -> Result<Iter<Metric>, Error> {
