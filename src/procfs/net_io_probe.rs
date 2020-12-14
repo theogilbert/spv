@@ -55,7 +55,9 @@ impl Probe for NetIoProbe {
         let net_stats = self.net_info.get_net_statistics()
             .map_err(|e| Error::ProbingError(format!("Error getting net statistics"),
                                              Box::new(e)))?;
-        self.net_info.clear();
+        self.net_info.clear()
+            .map_err(|e| Error::ProbingError(format!("Error clearing net io cache"),
+                                             Box::new(e)))?;
 
         info!("Unassigned to PID: {}", net_stats.get_bytes_by_attr(None, Some(InoutType::Incoming), None));
 
