@@ -42,7 +42,7 @@ impl Probe for CpuProbe {
     }
 
     fn default_metric(&self) -> Metric {
-        Metric::Percent(f64::NAN)
+        Metric::PercentUsage(f64::NAN)
     }
 
     fn init_iteration(&mut self) -> Result<(), Error> {
@@ -66,7 +66,7 @@ impl Probe for CpuProbe {
             })?;
 
         let percent = self.calculator.calculate_pid_usage(pid, pid_stat);
-        Ok(Metric::Percent(percent))
+        Ok(Metric::PercentUsage(percent))
     }
 }
 
@@ -139,7 +139,7 @@ mod test_cpu_probe {
         probe.probe_processes(&vec![1]); // First calibration probing
 
         assert_eq!(probe.probe_processes(&vec![1]).unwrap(),
-                   hashmap!(1 => Metric::Percent(50.)));
+                   hashmap!(1 => Metric::PercentUsage(50.)));
     }
 
 
@@ -162,8 +162,8 @@ mod test_cpu_probe {
 
         let metrics = probe.probe_processes(&vec!(1, 2)).unwrap();
         assert_eq!(metrics,
-                   hashmap!(1 => Metric::Percent(25.),
-                   2 => Metric::Percent(25.)));
+                   hashmap!(1 => Metric::PercentUsage(25.),
+                   2 => Metric::PercentUsage(25.)));
     }
 
 
@@ -184,7 +184,7 @@ mod test_cpu_probe {
                                                Box::new(pid_stat_reader))
             .expect("Could not create procfs");
 
-        let map = hashmap!(1 => Metric::Percent(25.));
+        let map = hashmap!(1 => Metric::PercentUsage(25.));
         assert!(matches!(probe.probe_processes(&vec![1, 2]), Ok(map)));
     }
 }

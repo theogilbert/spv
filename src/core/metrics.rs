@@ -3,8 +3,6 @@
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
-use std::fmt;
 use std::iter::Skip;
 use std::ops::Sub;
 use std::slice::Iter;
@@ -18,28 +16,28 @@ use crate::core::process_view::PID;
 /// A value probed from a process
 #[derive(Debug, PartialEq, Clone)]
 pub enum Metric {
-    Percent(f64),
+    PercentUsage(f64),
     Bitrate(usize),
     /// Input / Output rates, in bytes per seconds
-    IO(usize, usize),
+    IO { input: usize, output: usize },
 }
 
 
 impl Metric {
-    /// Returns the base unit of the metric
-    pub fn unit(&self) -> &'static str {
+    /// Indicates how many value the metric is composed of
+    pub fn cardinality(&self) -> usize {
         match self {
-            Metric::Percent(_) => "%",
-            Metric::Bitrate(_) => "B/s",
-            Metric::IO(_, _) => "B/s"
+            Metric::PercentUsage(_) => 1,
+            Metric::Bitrate(_) => 1,
+            Metric::IO { input: _, output: _ } => 2,
         }
     }
 
     /// Returns a raw value from the metric, as f64
     ///
     /// # Arguments
-    ///   * `index`: The value to retrieve from the Metric. Must not be greater than or equal to
-    ///         `Metric::cardinality()`
+    ///   * `index`: The dimension from which to retrieve the value of the Metric.
+    ///         Must be less than `Metric::cardinality()`
     ///
     /// If the metric is the variant `Metric::IO`, `index=0` will return the input rate, whereas
     ///   `index=1` will return the output rate.
@@ -48,9 +46,9 @@ impl Metric {
             Err(Error::RawMetricAccessError(index, self.cardinality()))
         } else {
             Ok(match self {
-                Metric::Percent(pct) => *pct,
+                Metric::PercentUsage(pct) => *pct,
                 Metric::Bitrate(br) => *br as f64,
-                Metric::IO(input, output) => {
+                Metric::IO { input, output } => {
                     match index {
                         0 => *input as f64,
                         1 => *output as f64,
@@ -61,20 +59,55 @@ impl Metric {
         }
     }
 
-    /// Indicates how many value the metric is composed of
-    pub fn cardinality(&self) -> usize {
+    /// Returns the base unit of the metric
+    pub fn unit(&self) -> &'static str {
         match self {
-            Metric::Percent(_) => 1,
-            Metric::Bitrate(_) => 1,
-            Metric::IO(_, _) => 2,
+            Metric::PercentUsage(_) => "%",
+            Metric::Bitrate(_) => "B/s",
+            Metric::IO { input: _, output: _ } => "B/s"
+        }
+    }
+
+    /// A very concise representation of the metric
+    pub fn concise_repr(&self) -> String {
+        match self {
+            Metric::PercentUsage(pct) => format!("{:.1}", pct),
+            Metric::Bitrate(br) => {
+                Self::formatted_bytes(*br, 1)
+            }
+            Metric::IO { input, output } => {
+                let reported_metric = input.max(output);
+                Self::formatted_bytes(*reported_metric, 1)
+            }
+        }
+    }
+
+    /// An explicit representation of a dimension of the metric
+    pub fn explicit_repr(&self, index: usize) -> Result<String, Error> {
+        if index >= self.cardinality() {
+            Err(Error::RawMetricAccessError(index, self.cardinality()))
+        } else {
+            Ok(match self {
+                Metric::PercentUsage(pct) => format!("Usage {:.2}%", pct),
+                Metric::Bitrate(br) => {
+                    format!("{}B/s", Self::formatted_bytes(*br, 2))
+                }
+                Metric::IO { input, output } => {
+                    match index {
+                        0 => format!("Input:  {}B/s", Self::formatted_bytes(*input, 2)),
+                        1 => format!("Output: {}B/s", Self::formatted_bytes(*output, 2)),
+                        _ => panic!("Invalid raw value index")
+                    }
+                }
+            })
         }
     }
 
     /// Returns a more readable version of `bytes_val`
     /// `formatted_bytes(1294221)` -> 1.2M
-    fn formatted_bytes(bytes_val: usize) -> String {
+    fn formatted_bytes(bytes_val: usize, precision: usize) -> String {
         if bytes_val == 0 {
-            return "0".to_string()
+            return "0".to_string();
         }
 
         const METRIC_PREFIXES: [&'static str; 4] = ["", "k", "M", "G"];
@@ -86,57 +119,27 @@ impl Metric {
 
         let simplified = bytes_val as f64 / (1024_usize.pow(log as u32) as f64);
 
-        format!("{:.1}{}", simplified, METRIC_PREFIXES[prefix_index])
-    }
-
-    /// An alternative to to_string(), but more concise to fit in places where space is important
-    pub fn concise_repr(&self) -> String {
-        match self {
-            Metric::Percent(pct) => format!("{:.1}", pct),
-            Metric::Bitrate(br) => {
-                Self::formatted_bytes(*br)
-            }
-            Metric::IO(input, output) => {
-                let reported_metric = input.max(output);
-                Self::formatted_bytes(*reported_metric)
-            }
-        }
+        format!("{:.precision$}{}", simplified, METRIC_PREFIXES[prefix_index], precision = precision)
     }
 }
 
 impl PartialOrd for Metric {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
-            (Metric::Percent(pct_self), Metric::Percent(pct_other)) => {
+            (Metric::PercentUsage(pct_self), Metric::PercentUsage(pct_other)) => {
                 pct_self.partial_cmp(pct_other)
             }
             (Metric::Bitrate(br_self), Metric::Bitrate(br_other)) => {
                 br_self.partial_cmp(br_other)
             }
-            (Metric::IO(input_1, output_1), Metric::IO(input_2, output_2)) => {
-                (input_1 + output_1).partial_cmp(&(input_2 + output_2))
+            (Metric::IO { input: i1, output: o1 }, Metric::IO { input: i2, output: o2 }) => {
+                i1.max(o1).partial_cmp(&i2.max(o2))
             }
             (_, _) => panic!("Comparing incompatible metrics"),
         }
     }
 }
 
-
-impl Display for Metric {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Metric::Percent(pct) => write!(f, "{:.1}", pct),
-            Metric::Bitrate(br) => {
-                write!(f, "{:}", Self::formatted_bytes(*br))
-            }
-            Metric::IO(input, output) => {
-                write!(f, "{:}/{:}",
-                       Self::formatted_bytes(*input),
-                       Self::formatted_bytes(*output))
-            }
-        }
-    }
-}
 
 /// Types which can probe processes for a specific kind of [`Metric`](enum.Metric)
 pub trait Probe {
@@ -330,9 +333,9 @@ impl Archive {
         }?;
 
         match (pm.last(pid), metric) {
-            (&Metric::Percent(_), Metric::Percent(pct)) => pm.push(pid, Metric::Percent(pct)),
+            (&Metric::PercentUsage(_), Metric::PercentUsage(pct)) => pm.push(pid, Metric::PercentUsage(pct)),
             (&Metric::Bitrate(_), Metric::Bitrate(br)) => pm.push(pid, Metric::Bitrate(br)),
-            (&Metric::IO(_, _), Metric::IO(input, output)) => pm.push(pid, Metric::IO(input, output)),
+            (&Metric::IO { input: _, output: _ }, Metric::IO { input, output }) => pm.push(pid, Metric::IO { input, output }),
             (_, m) => return Err(Error::InvalidMetricVariant(label.to_string(), m))
         };
 
@@ -491,7 +494,7 @@ mod test_archive {
     fn test_push_should_fail_when_first_variant_is_invalid(mut archive: Archive) {
         let label = "label".to_string();
 
-        assert!(matches!(archive.push(&label, 123, Metric::Percent(45.1)),
+        assert!(matches!(archive.push(&label, 123, Metric::PercentUsage(45.1)),
                          Err(Error::InvalidMetricVariant(label, _))));
     }
 
@@ -501,7 +504,7 @@ mod test_archive {
         archive.push(&label, 123, Metric::Bitrate(45))
             .unwrap();
 
-        assert!(matches!(archive.push(&label, 123, Metric::Percent(50.)),
+        assert!(matches!(archive.push(&label, 123, Metric::PercentUsage(50.)),
                          Err(Error::InvalidMetricVariant(label, _))));
     }
 
