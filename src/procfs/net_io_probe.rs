@@ -48,7 +48,7 @@ impl Probe for NetIoProbe {
     }
 
     fn default_metric(&self) -> Metric {
-        Metric::IO(0, 0)
+        Metric::IO { input: 0, output: 0 }
     }
 
     fn init_iteration(&mut self) -> Result<(), Error> {
@@ -58,8 +58,6 @@ impl Probe for NetIoProbe {
         self.net_info.clear()
             .map_err(|e| Error::ProbingError(format!("Error clearing net io cache"),
                                              Box::new(e)))?;
-
-        info!("Unassigned to PID: {}", net_stats.get_bytes_by_attr(None, Some(InoutType::Incoming), None));
 
         self.net_stats = Some(net_stats);
 
@@ -94,12 +92,7 @@ impl Probe for NetIoProbe {
                 .map_err(|e| Error::ProbingError("Error calculating output rate".into(),
                                                  Box::new(e)))?;
 
-
-            if input > 0 || output > 0 {
-                info!("PID: {}. Input: {} / Output: {}. Rates: Input: {} / Output: {}", pid, input, output, input_rate, output_rate);
-            }
-
-            Ok(Metric::IO(input_rate as usize, output_rate as usize))
+            Ok(Metric::IO { input: input_rate as usize, output: output_rate as usize })
         } else {
             error!("Cannot probe net I/O: Net stats are not set.");
             Ok(self.default_metric())
