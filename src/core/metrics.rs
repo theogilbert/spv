@@ -13,12 +13,14 @@ use log::warn;
 use crate::core::Error;
 use crate::core::process_view::PID;
 
-/// A value probed from a process
+/// A quantified information probed from a process
 #[derive(Debug, PartialEq, Clone)]
 pub enum Metric {
+    /// A percent usage. 100% -> `PercentUsage(100.)`
     PercentUsage(f64),
+    /// A bitrate, in bytes per second
     Bitrate(usize),
-    /// Input / Output rates, in bytes per seconds
+    /// Input / Output rates, in bytes per second
     IO { input: usize, output: usize },
 }
 
@@ -39,8 +41,11 @@ impl Metric {
     ///   * `index`: The dimension from which to retrieve the value of the Metric.
     ///         Must be less than `Metric::cardinality()`
     ///
+    /// Returns Error::RawMetricAccessError if `index` is not less than `Metric::cardinality()`
+    ///
     /// If the metric is the variant `Metric::IO`, `index=0` will return the input rate, whereas
     ///   `index=1` will return the output rate.
+    ///
     pub fn raw_as_f64(&self, index: usize) -> Result<f64, Error> {
         if index >= self.cardinality() {
             Err(Error::RawMetricAccessError(index, self.cardinality()))
@@ -57,6 +62,21 @@ impl Metric {
                 }
             })
         }
+    }
+
+    /// Returns an iterator over the dimensions of the metric
+    ///
+    /// ```
+    /// use spv::core::metrics::Metric;
+    ///
+    /// let io_metric = Metric::IO {input: 10, output: 100};
+    /// assert_eq!(&io_metric.raw_iter().collect::<Vec<f64>>(), &[10., 100.]);
+    ///
+    /// let percent_metric = Metric::PercentUsage(55.);
+    /// assert_eq!(&percent_metric.raw_iter().collect::<Vec<f64>>(), &[55.]);
+    /// ```
+    pub fn raw_iter(&self) -> RawMetricIter {
+        RawMetricIter { metric: self, cur_index: 0 }
     }
 
     /// Returns the base unit of the metric
@@ -140,6 +160,23 @@ impl PartialOrd for Metric {
     }
 }
 
+/// An iterator over the raw value(s) of a [`Metric`](enum.Metric.html) instance
+pub struct RawMetricIter<'a> {
+    metric: &'a Metric,
+    cur_index: usize,
+}
+
+impl<'a> Iterator for RawMetricIter<'a> {
+    type Item = f64;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let raw = self.metric.raw_as_f64(self.cur_index).ok();
+        self.cur_index += 1;
+
+        raw
+    }
+}
+
 
 /// Types which can probe processes for a specific kind of [`Metric`](enum.Metric)
 pub trait Probe {
@@ -181,55 +218,6 @@ pub trait Probe {
     }
 }
 
-#[cfg(test)]
-mod test_probe_trait {
-    use std::collections::HashMap;
-
-    use rstest::*;
-
-    use crate::core::Error;
-    use crate::core::metrics::{Metric, Probe};
-    use crate::core::process_view::PID;
-
-    struct FakeProbe {
-        probe_responses: HashMap<PID, Metric>
-    }
-
-    impl Probe for FakeProbe {
-        fn name(&self) -> &'static str { "fake-probe" }
-
-        fn default_metric(&self) -> Metric { Metric::Bitrate(0) }
-
-        fn probe(&mut self, pid: u32) -> Result<Metric, Error> {
-            self.probe_responses.remove(&pid)
-                .ok_or(Error::InvalidPID(pid))
-        }
-    }
-
-    #[rstest]
-    fn test_should_return_all_probed_values() {
-        let mut probe = FakeProbe {
-            probe_responses: hashmap!(1 => Metric::Bitrate(10), 2 => Metric::Bitrate(20))
-        };
-
-        let results = probe.probe_processes(&[1, 2]).unwrap();
-
-        assert_eq!(results.len(), 2);
-        assert_eq!(results.get(&1), Some(&Metric::Bitrate(10)));
-        assert_eq!(results.get(&2), Some(&Metric::Bitrate(20)));
-    }
-
-    #[rstest]
-    fn test_should_return_default_value_if_probing_fails() {
-        let mut probe = FakeProbe { probe_responses: hashmap!(1 => Metric::Bitrate(10)) };
-
-        let results = probe.probe_processes(&[1, 2]).unwrap();
-
-        assert_eq!(results.len(), 2);
-        assert_eq!(results.get(&1), Some(&Metric::Bitrate(10)));
-        assert_eq!(results.get(&2), Some(&probe.default_metric()));
-    }
-}
 
 /// Builder class to initialize an [`Archive`](struct.Archive.html)
 pub struct ArchiveBuilder {
@@ -268,39 +256,6 @@ impl ArchiveBuilder {
 
     pub fn build(self) -> Archive {
         self.archive
-    }
-}
-
-
-#[cfg(test)]
-mod test_archive_builder {
-    use std::time::Duration;
-
-    use crate::core::Error;
-    use crate::core::metrics::ArchiveBuilder;
-    use crate::core::metrics::Metric;
-
-    #[test]
-    fn test_should_return_error_on_duplicate_label() {
-        let err_ret = ArchiveBuilder::new()
-            .new_metric("label".to_string(), Metric::Bitrate(123))
-            .unwrap()
-            .new_metric("label".to_string(), Metric::Bitrate(123));
-
-        match err_ret {
-            Ok(_) => panic!("Should have failed"),
-            Err(Error::DuplicateLabel(_)) => (),
-            Err(_) => panic!("Should have been duplicate error"),
-        };
-    }
-
-    #[test]
-    fn test_set_archive_resolution() {
-        let archive = ArchiveBuilder::new()
-            .resolution(Duration::from_secs(123))
-            .build();
-
-        assert_eq!(archive.resolution, Duration::from_secs(123));
     }
 }
 
@@ -438,6 +393,138 @@ impl DoubleEndedIterator for MetricIter<'_> {
     }
 }
 
+
+struct ProcessMetrics {
+    default: Metric,
+    series: HashMap<PID, Vec<Metric>>,
+}
+
+impl ProcessMetrics {
+    fn new(default: Metric) -> Self {
+        Self { default, series: HashMap::new() }
+    }
+
+    fn push(&mut self, pid: PID, metric: Metric) {
+        let process_series = match self.series.entry(pid) {
+            Entry::Occupied(o) => o.into_mut(),
+            Entry::Vacant(v) => v.insert(Vec::new())
+        };
+
+        process_series.push(metric);
+    }
+
+    fn last(&self, pid: PID) -> &Metric {
+        self.series.get(&pid)
+            .and_then(|v| v.last())
+            .unwrap_or(&self.default)
+    }
+
+    fn unit(&self) -> &'static str {
+        self.default.unit()
+    }
+
+    fn iter_process(&self, pid: PID) -> Result<Iter<Metric>, Error> {
+        Ok(self.series.get(&pid)
+            .ok_or(Error::InvalidPID(pid))?
+            .iter())
+    }
+
+    fn count(&self, pid: PID) -> usize {
+        self.series.get(&pid)
+            .map(|v| v.len())
+            .unwrap_or(0)
+    }
+
+    fn default(&self) -> Metric {
+        self.default.clone()
+    }
+}
+
+
+#[cfg(test)]
+mod test_probe_trait {
+    use std::collections::HashMap;
+
+    use rstest::*;
+
+    use crate::core::Error;
+    use crate::core::metrics::{Metric, Probe};
+    use crate::core::process_view::PID;
+
+    struct FakeProbe {
+        probe_responses: HashMap<PID, Metric>
+    }
+
+    impl Probe for FakeProbe {
+        fn name(&self) -> &'static str { "fake-probe" }
+
+        fn default_metric(&self) -> Metric { Metric::Bitrate(0) }
+
+        fn probe(&mut self, pid: u32) -> Result<Metric, Error> {
+            self.probe_responses.remove(&pid)
+                .ok_or(Error::InvalidPID(pid))
+        }
+    }
+
+    #[rstest]
+    fn test_should_return_all_probed_values() {
+        let mut probe = FakeProbe {
+            probe_responses: hashmap!(1 => Metric::Bitrate(10), 2 => Metric::Bitrate(20))
+        };
+
+        let results = probe.probe_processes(&[1, 2]).unwrap();
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results.get(&1), Some(&Metric::Bitrate(10)));
+        assert_eq!(results.get(&2), Some(&Metric::Bitrate(20)));
+    }
+
+    #[rstest]
+    fn test_should_return_default_value_if_probing_fails() {
+        let mut probe = FakeProbe { probe_responses: hashmap!(1 => Metric::Bitrate(10)) };
+
+        let results = probe.probe_processes(&[1, 2]).unwrap();
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results.get(&1), Some(&Metric::Bitrate(10)));
+        assert_eq!(results.get(&2), Some(&probe.default_metric()));
+    }
+}
+
+
+#[cfg(test)]
+mod test_archive_builder {
+    use std::time::Duration;
+
+    use crate::core::Error;
+    use crate::core::metrics::ArchiveBuilder;
+    use crate::core::metrics::Metric;
+
+    #[test]
+    fn test_should_return_error_on_duplicate_label() {
+        let err_ret = ArchiveBuilder::new()
+            .new_metric("label".to_string(), Metric::Bitrate(123))
+            .unwrap()
+            .new_metric("label".to_string(), Metric::Bitrate(123));
+
+        match err_ret {
+            Ok(_) => panic!("Should have failed"),
+            Err(Error::DuplicateLabel(_)) => (),
+            Err(_) => panic!("Should have been duplicate error"),
+        };
+    }
+
+    #[test]
+    fn test_set_archive_resolution() {
+        let archive = ArchiveBuilder::new()
+            .resolution(Duration::from_secs(123))
+            .build();
+
+        assert_eq!(archive.resolution, Duration::from_secs(123));
+    }
+}
+
+
 #[cfg(test)]
 mod test_archive {
     use std::time::Duration;
@@ -556,51 +643,5 @@ mod test_archive {
 
         assert_eq!(iter.collect::<Vec<&Metric>>(),
                    metrics.iter().rev().take(2).rev().collect::<Vec<&Metric>>())
-    }
-}
-
-struct ProcessMetrics {
-    default: Metric,
-    series: HashMap<PID, Vec<Metric>>,
-}
-
-impl ProcessMetrics {
-    fn new(default: Metric) -> Self {
-        Self { default, series: HashMap::new() }
-    }
-
-    fn push(&mut self, pid: PID, metric: Metric) {
-        let process_series = match self.series.entry(pid) {
-            Entry::Occupied(o) => o.into_mut(),
-            Entry::Vacant(v) => v.insert(Vec::new())
-        };
-
-        process_series.push(metric);
-    }
-
-    fn last(&self, pid: PID) -> &Metric {
-        self.series.get(&pid)
-            .and_then(|v| v.last())
-            .unwrap_or(&self.default)
-    }
-
-    fn unit(&self) -> &'static str {
-        self.default.unit()
-    }
-
-    fn iter_process(&self, pid: PID) -> Result<Iter<Metric>, Error> {
-        Ok(self.series.get(&pid)
-            .ok_or(Error::InvalidPID(pid))?
-            .iter())
-    }
-
-    fn count(&self, pid: PID) -> usize {
-        self.series.get(&pid)
-            .map(|v| v.len())
-            .unwrap_or(0)
-    }
-
-    fn default(&self) -> Metric {
-        self.default.clone()
     }
 }
