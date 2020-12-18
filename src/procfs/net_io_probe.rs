@@ -99,8 +99,3 @@ impl Probe for NetIoProbe {
         }
     }
 }
-
-#[cfg(test)]
-mod test_net_io_probe {
-    // TODO
-}
