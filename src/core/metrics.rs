@@ -3,9 +3,7 @@
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::iter::Skip;
 use std::ops::Sub;
-use std::slice::Iter;
 use std::time::Duration;
 
 use log::warn;
@@ -26,7 +24,7 @@ pub enum Metric {
 
 
 impl Metric {
-    /// Indicates how many value the metric is composed of
+    /// Indicates the amount of dimensions the metric is composed of
     pub fn cardinality(&self) -> usize {
         match self {
             Metric::PercentUsage(_) => 1,
@@ -43,9 +41,16 @@ impl Metric {
     ///
     /// Returns Error::RawMetricAccessError if `index` is not less than `Metric::cardinality()`
     ///
-    /// If the metric is the variant `Metric::IO`, `index=0` will return the input rate, whereas
-    ///   `index=1` will return the output rate.
+    /// ```
+    /// use spv::core::metrics::Metric;
     ///
+    /// let io_metric = Metric::IO {input: 10, output: 100};
+    /// assert_eq!(io_metric.raw_as_f64(0).unwrap() as u32, 10);
+    /// assert_eq!(io_metric.raw_as_f64(1).unwrap() as u32, 100);
+    ///
+    /// let percent_metric = Metric::PercentUsage(55.);
+    /// assert_eq!(percent_metric.raw_as_f64(0).unwrap() as u32, 55);
+    /// ```
     pub fn raw_as_f64(&self, index: usize) -> Result<f64, Error> {
         if index >= self.cardinality() {
             Err(Error::RawMetricAccessError(index, self.cardinality()))
@@ -70,16 +75,18 @@ impl Metric {
     /// use spv::core::metrics::Metric;
     ///
     /// let io_metric = Metric::IO {input: 10, output: 100};
-    /// assert_eq!(&io_metric.raw_iter().collect::<Vec<f64>>(), &[10., 100.]);
+    /// let mut iter = io_metric.raw_iter();
     ///
-    /// let percent_metric = Metric::PercentUsage(55.);
-    /// assert_eq!(&percent_metric.raw_iter().collect::<Vec<f64>>(), &[55.]);
+    /// assert_eq!(iter.next().map(|v| v as u32), Some(10));
+    /// assert_eq!(iter.next().map(|v| v as u32), Some(100));
+    /// assert_eq!(iter.next(), None);
+    ///
     /// ```
     pub fn raw_iter(&self) -> RawMetricIter {
         RawMetricIter { metric: self, cur_index: 0 }
     }
 
-    /// Returns the base unit of the metric
+    /// Returns a representation of the base unit of the metric (e.g. `B/s` for bitrates)
     pub fn unit(&self) -> &'static str {
         match self {
             Metric::PercentUsage(_) => "%",
@@ -89,6 +96,13 @@ impl Metric {
     }
 
     /// A very concise representation of the metric
+    /// For multi-dimensional metrics, only displays the greatest raw value
+    /// ```
+    /// use spv::core::metrics::Metric;
+    ///
+    /// let io_metric = Metric::IO {input: 10, output: 1024};
+    /// assert_eq!(io_metric.concise_repr(), "1.0k");
+    /// ```
     pub fn concise_repr(&self) -> String {
         match self {
             Metric::PercentUsage(pct) => format!("{:.1}", pct),
@@ -102,7 +116,20 @@ impl Metric {
         }
     }
 
-    /// An explicit representation of a dimension of the metric
+    /// An explicit representation one raw value of the metric
+    ///
+    /// # Arguments
+    ///   * `index`: The dimension of the raw value for which to get an explicit representation.
+    ///
+    /// If `index` is not less than [`Metric::cardinality()`](enum.Metric.html#method.cardinality),
+    /// this method will raise a `Error::RawMetricAccessError`
+    /// ```
+    /// use spv::core::metrics::Metric;
+    ///
+    /// let io_metric = Metric::IO {input: 10, output: 1024 * 1024};
+    /// assert_eq!(&io_metric.explicit_repr(0).unwrap(), "Input:  10.00B/s");
+    /// assert_eq!(&io_metric.explicit_repr(1).unwrap(), "Output: 1.00MB/s");
+    /// ```
     pub fn explicit_repr(&self, index: usize) -> Result<String, Error> {
         if index >= self.cardinality() {
             Err(Error::RawMetricAccessError(index, self.cardinality()))
@@ -133,7 +160,7 @@ impl Metric {
         const METRIC_PREFIXES: [&'static str; 4] = ["", "k", "M", "G"];
 
         let log = (bytes_val as f64).log(1024.)
-            .sub(1.).max(0.).ceil() as usize;
+            .max(0.).floor() as usize;
 
         let prefix_index = log.min(METRIC_PREFIXES.len() - 1);
 
@@ -160,7 +187,7 @@ impl PartialOrd for Metric {
     }
 }
 
-/// An iterator over the raw value(s) of a [`Metric`](enum.Metric.html) instance
+/// An iterator over the raw value(s) of a [`Metric`](enum.Metric.html) variant
 pub struct RawMetricIter<'a> {
     metric: &'a Metric,
     cur_index: usize,
@@ -180,17 +207,21 @@ impl<'a> Iterator for RawMetricIter<'a> {
 
 /// Types which can probe processes for a specific kind of [`Metric`](enum.Metric)
 pub trait Probe {
+    /// The name of the probe, as displayed in the application tab
     fn name(&self) -> &'static str;
 
+    /// An acceptable default metric returned by this probe
     fn default_metric(&self) -> Metric;
 
+    /// Called on each probe refresh, before all processes are probed
     fn init_iteration(&mut self) -> Result<(), Error> {
         Ok(())
     }
 
+    /// Probe a given process for a [`Metric`](enum.Metric)
     fn probe(&mut self, pid: PID) -> Result<Metric, Error>;
 
-    /// Returns a map associating a `Metric` instance to each PID
+    /// Returns a map associating a [`Metric`](enum.Metric) instance to each PID
     ///
     /// If a process is not probed correctly, a default value for the given probe is returned
     /// and a WARNING level log is produced
@@ -268,16 +299,16 @@ pub struct Archive {
 
 
 impl Archive {
-    /// Pushes a new `Metric` to the archive
+    /// Pushes a new [`Metric`](enum.Metric) to the archive
     /// If the label is invalid, `Error::UnexpectedLabel` will be returned
     /// If the metric variant is incompatible with the label, `Error::InvalidMetricVariant` will be
     ///  returned
     ///
     /// # Arguments
     ///  * `label` The name of the label of the metric
-    ///  * `pid` The ID of the process from which comes the `Metric`
+    ///  * `pid` The ID of the process from which comes the [`Metric`](enum.Metric)
     ///  * `metric` The new metric to associate to the given process and label
-    ///                 Only one variant of `Metric` is allowed per label
+    ///                 Only one variant of [`Metric`](enum.Metric) is allowed per label
     ///
     /// If `label` is invalid, returns a Error::UnexpectedLabel
     ///
@@ -325,7 +356,7 @@ impl Archive {
             .ok_or_else(|| Error::UnexpectedLabel(label.to_string()))
     }
 
-    /// Returns an iterator over `Metric` for the given probe label and process ID.
+    /// Returns an iterator over [`Metric`](enum.Metric) for the given probe label and process ID.
     /// The iterator only contains metrics in the given span
     ///
     /// # Arguments
@@ -362,10 +393,10 @@ impl Archive {
         (span.as_secs() / self.resolution.as_secs()) as usize
     }
 
-    /// Get the default `Metric` associated to the probe with the given label
+    /// Get the default [`Metric`](enum.Metric) associated to the probe with the given label
     ///
     /// # Arguments
-    ///  * `label`: The name of the label of the probe for which to retrieve the default `Metric`
+    ///  * `label`: The name of the label of the probe for which to retrieve the default [`Metric`](enum.Metric)
     ///
     /// If `label` is invalid, returns a Error::UnexpectedLabel
     ///
@@ -618,7 +649,7 @@ mod test_archive {
     fn test_history_with_double_span_than_resolution(filled_archive: Archive,
                                                      metrics: Vec<Metric>) {
         let history = filled_archive.history("label", 123,
-                                          filled_archive.resolution * 2)
+                                             filled_archive.resolution * 2)
             .unwrap();
 
         assert_eq!(history.len(), 2);
