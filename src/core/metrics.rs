@@ -336,18 +336,20 @@ impl Archive {
     ///
     /// If `label` is invalid, returns a Error::UnexpectedLabel
     ///
-    pub fn history(&self, label: &str, pid: PID, span: Duration) -> Result<MetricIter, Error> {
-        let metrics = self.metrics.get(label)
+    pub fn history(&self, label: &str, pid: PID, span: Duration) -> Result<&[Metric], Error> {
+        let proc_metrics = self.metrics.get(label)
             .ok_or_else(|| Error::UnexpectedLabel(label.to_string()))?;
 
-        let metrics_count = metrics.count(pid);
+        let metrics_count = proc_metrics.count(pid);
         let collected_metrics = self.expected_metrics(span);
         let skipped_metrics = metrics_count.saturating_sub(collected_metrics);
 
-        Ok(MetricIter {
-            iter: metrics.iter_process(pid)?
-                .skip(skipped_metrics)
-        })
+        Ok(&proc_metrics.metrics(pid)?[skipped_metrics..])
+    }
+
+    /// Returns the expected step between each metric
+    pub fn step(&self) -> Duration {
+        self.resolution.clone()
     }
 
     /// Indicates how many metrics should be returned by history() with the given span, according
@@ -371,25 +373,6 @@ impl Archive {
         self.metrics.get(label)
             .map(|pm| pm.default())
             .ok_or_else(|| Error::UnexpectedLabel(label.to_string()))
-    }
-}
-
-/// An iterator over [`Metric`](enum.Metric.html)
-pub struct MetricIter<'a> {
-    iter: Skip<Iter<'a, Metric>>
-}
-
-impl<'a> Iterator for MetricIter<'a> {
-    type Item = &'a Metric;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
-    }
-}
-
-impl DoubleEndedIterator for MetricIter<'_> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.iter.next_back()
     }
 }
 
@@ -423,10 +406,9 @@ impl ProcessMetrics {
         self.default.unit()
     }
 
-    fn iter_process(&self, pid: PID) -> Result<Iter<Metric>, Error> {
+    fn metrics(&self, pid: PID) -> Result<&[Metric], Error> {
         Ok(self.series.get(&pid)
-            .ok_or(Error::InvalidPID(pid))?
-            .iter())
+            .ok_or(Error::InvalidPID(pid))?)
     }
 
     fn count(&self, pid: PID) -> usize {
@@ -617,31 +599,30 @@ mod test_archive {
             expected_metrics.push(Metric::Bitrate(i));
         });
 
-        let iter = archive.history("label", 123, Duration::from_secs(60))
+        let history = archive.history("label", 123, Duration::from_secs(60))
             .unwrap();
 
-        assert_eq!(iter.collect::<Vec<&Metric>>(),
-                   expected_metrics.iter().collect::<Vec<&Metric>>());
+        assert_eq!(&history, &expected_metrics);
     }
 
     #[rstest]
     fn test_history_with_same_span_and_resolution(filled_archive: Archive, metrics: Vec<Metric>) {
-        let iter = filled_archive.history("label", 123,
-                                          filled_archive.resolution)
+        let history = filled_archive.history("label", 123,
+                                             filled_archive.resolution)
             .unwrap();
 
-        assert_eq!(iter.collect::<Vec<&Metric>>(),
-                   vec![metrics.last().unwrap()])
+        assert_eq!(history, &[metrics.last().unwrap().clone()]);
     }
 
     #[rstest]
     fn test_history_with_double_span_than_resolution(filled_archive: Archive,
                                                      metrics: Vec<Metric>) {
-        let iter = filled_archive.history("label", 123,
+        let history = filled_archive.history("label", 123,
                                           filled_archive.resolution * 2)
             .unwrap();
 
-        assert_eq!(iter.collect::<Vec<&Metric>>(),
-                   metrics.iter().rev().take(2).rev().collect::<Vec<&Metric>>())
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0], metrics[metrics.len() - 2]);
+        assert_eq!(history[1], metrics[metrics.len() - 1]);
     }
 }
