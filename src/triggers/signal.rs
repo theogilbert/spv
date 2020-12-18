@@ -1,6 +1,5 @@
 use std::sync::mpsc::Sender;
 
-use libc::c_int;
 use signal_hook::{SIGINT, SIGQUIT, SIGTERM, SIGWINCH};
 use signal_hook::iterator::Signals;
 
@@ -19,12 +18,12 @@ impl SignalListener {
     }
 
     pub fn listen(mut self) -> Result<(), Error> {
-        let signals = Signals::new(&[SIGINT, SIGTERM, SIGQUIT, SIGWINCH])
+        let mut signals = Signals::new(&[SIGINT, SIGTERM, SIGQUIT, SIGWINCH])
             .map_err(|e| Error::SignalError(e.to_string()))?;
 
         while !self.exit {
             for signal in signals.wait() {
-                match signal as c_int {
+                match signal as i32 {
                     signal_hook::SIGTERM | signal_hook::SIGINT | signal_hook::SIGQUIT => {
                         self.send_exit();
                     }
