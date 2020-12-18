@@ -174,13 +174,11 @@ impl ProcessList {
 mod test_align_right {
     use rstest::*;
 
-    use crate::ui::processes::ProcessList;
+    use crate::ui::processes::{ProcessList, MAX_METRICS_LENGTH};
 
     #[fixture]
     fn process_list() -> ProcessList {
-        let mut pl = ProcessList::default();
-        pl.metrics_col_len = 10;
-        pl
+        ProcessList::default()
     }
 
     #[rstest(input,
@@ -197,7 +195,7 @@ mod test_align_right {
         let aligned = process_list.align_metric_right(input.to_string());
 
         assert!(aligned.ends_with(&format!("{} ", input)));
-        assert_eq!(aligned.len(), process_list.metrics_col_len as usize)
+        assert_eq!(aligned.len(), MAX_METRICS_LENGTH)
     }
 
     #[rstest]
