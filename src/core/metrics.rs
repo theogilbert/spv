@@ -362,8 +362,7 @@ impl Archive {
     /// # Arguments
     ///  * `label`: The name of the label of the probe for which to retrieve the unit
     ///  * `pid`: The ID of the process for which to retrieve the history
-    ///  * `span`: Indicates from how long back to retrieve metrics. To see how many metrics can
-    ///         be contained in the iterator based on this argument, see `expected_metrics()`
+    ///  * `span`: Indicates metrics over how long to return
     ///
     /// If `label` is invalid, returns a Error::UnexpectedLabel
     ///
