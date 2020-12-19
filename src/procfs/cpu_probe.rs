@@ -8,6 +8,11 @@ use crate::core::process_view::PID;
 use crate::procfs::parsers;
 use crate::procfs::parsers::{PidStat, ProcessDataReader, ReadProcessData, ReadSystemData, Stat, SystemDataReader};
 
+
+// TODO When a process CPU usage is low, some iterations will detect a CPU usage of 0%, causing a
+// fluctuating usage value between each iterations. Fix this, maybe by calculating CPU usage based
+// on an average
+
 /// Probe implementation to measure the CPU usage (in percent) of processes
 pub struct CpuProbe {
     stat_reader: Box<dyn ReadSystemData<Stat>>,
@@ -69,6 +74,64 @@ impl Probe for CpuProbe {
         Ok(Metric::PercentUsage(percent))
     }
 }
+
+
+struct UsageCalculator {
+    processes_prev_stats: HashMap<PID, parsers::PidStat>,
+    prev_global_stat: parsers::Stat,
+    global_runtime_diff: f64,
+}
+
+impl Default for UsageCalculator {
+    fn default() -> Self {
+        UsageCalculator {
+            processes_prev_stats: HashMap::new(),
+            prev_global_stat: parsers::Stat::new(0, 0, 0, 0, 0, 0),
+            global_runtime_diff: 0.,
+        }
+    }
+}
+
+impl UsageCalculator {
+    ///
+    /// Given new content of /proc/stat and the last known content of /proc/stat, calculates the
+    /// elapsed ticks corresponding to global CPU runtime in this lapse of time
+    ///
+    /// # Arguments
+    ///  * `stat_data` The new content of /proc/stat
+    ///
+    pub fn compute_new_runtime_diff(&mut self, stat_data: Stat) {
+        let cur_runtime = stat_data.running_time();
+        let prev_runtime = self.prev_global_stat.running_time();
+
+        self.global_runtime_diff = (cur_runtime - prev_runtime) as f64;
+        self.prev_global_stat = stat_data;
+    }
+
+    ///
+    /// Given new content of /proc/[pid]/stat and its last known content, calculates the elapsed
+    /// ticks corresponding to CPU runtime related to this process
+    ///
+    /// Then given a recently calculated global CPU runtime lapse (see [compute_new_runtime_diff()]),
+    /// calculates the portion of this runtime that was dedicated to the given process in percent
+    ///
+    /// # Arguments
+    ///  * `pid` The ID of a process
+    ///  * `pid_stat_data`: The new content of the stat file of the process with ID [pid]
+    ///
+    pub fn calculate_pid_usage(&mut self, pid: PID, pid_stat_data: PidStat) -> f64 {
+        let last_iter_runtime = match self.processes_prev_stats.get(&pid) {
+            Some(stat_data) => stat_data.running_time(),
+            None => 0
+        };
+
+        let pid_runtime_diff = pid_stat_data.running_time() - last_iter_runtime;
+        self.processes_prev_stats.insert(pid, pid_stat_data);
+
+        100. * pid_runtime_diff as f64 / self.global_runtime_diff
+    }
+}
+
 
 #[cfg(test)]
 mod test_cpu_probe {
@@ -186,62 +249,6 @@ mod test_cpu_probe {
 
         let map = hashmap!(1 => Metric::PercentUsage(25.));
         assert!(matches!(probe.probe_processes(&vec![1, 2]), Ok(map)));
-    }
-}
-
-struct UsageCalculator {
-    processes_prev_stats: HashMap<PID, parsers::PidStat>,
-    prev_global_stat: parsers::Stat,
-    global_runtime_diff: f64,
-}
-
-impl Default for UsageCalculator {
-    fn default() -> Self {
-        UsageCalculator {
-            processes_prev_stats: HashMap::new(),
-            prev_global_stat: parsers::Stat::new(0, 0, 0, 0, 0, 0),
-            global_runtime_diff: 0.,
-        }
-    }
-}
-
-impl UsageCalculator {
-    ///
-    /// Given new content of /proc/stat and the last known content of /proc/stat, calculates the
-    /// elapsed ticks corresponding to global CPU runtime in this lapse of time
-    ///
-    /// # Arguments
-    ///  * `stat_data` The new content of /proc/stat
-    ///
-    pub fn compute_new_runtime_diff(&mut self, stat_data: Stat) {
-        let cur_runtime = stat_data.running_time();
-        let prev_runtime = self.prev_global_stat.running_time();
-
-        self.global_runtime_diff = (cur_runtime - prev_runtime) as f64;
-        self.prev_global_stat = stat_data;
-    }
-
-    ///
-    /// Given new content of /proc/[pid]/stat and its last known content, calculates the elapsed
-    /// ticks corresponding to CPU runtime related to this process
-    ///
-    /// Then given a recently calculated global CPU runtime lapse (see [compute_new_runtime_diff()]),
-    /// calculates the portion of this runtime that was dedicated to the given process in percent
-    ///
-    /// # Arguments
-    ///  * `pid` The ID of a process
-    ///  * `pid_stat_data`: The new content of the stat file of the process with ID [pid]
-    ///
-    pub fn calculate_pid_usage(&mut self, pid: PID, pid_stat_data: PidStat) -> f64 {
-        let last_iter_runtime = match self.processes_prev_stats.get(&pid) {
-            Some(stat_data) => stat_data.running_time(),
-            None => 0
-        };
-
-        let pid_runtime_diff = pid_stat_data.running_time() - last_iter_runtime;
-        self.processes_prev_stats.insert(pid, pid_stat_data);
-
-        100. * pid_runtime_diff as f64 / self.global_runtime_diff
     }
 }
 

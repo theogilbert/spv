@@ -8,11 +8,28 @@ use std::path::{Path, PathBuf};
 use crate::core::process_view::PID;
 use crate::procfs::ProcfsError;
 
+/// Type which can be parsed from a `TokenParser`
+pub trait Data: Sized {
+    fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError>;
+}
+
+/// Specialization of a `Data` type which is not associated to a process
+pub trait SystemData: Data {
+    fn filepath() -> PathBuf;
+}
+
+/// Specialization of a `Data` type which is associated to a process
+pub trait ProcessData: Data {
+    fn filepath(pid: PID) -> PathBuf;
+}
+
+
+/// Type which can read a `SystemData`
 pub trait ReadSystemData<D> where D: SystemData + Sized {
     fn read(&mut self) -> Result<D, ProcfsError>;
 }
 
-
+/// Type which can read a `ProcessData`
 pub trait ReadProcessData<D> where D: ProcessData + Sized {
     fn read(&mut self, pid: PID) -> Result<D, ProcfsError>;
 }
@@ -111,38 +128,6 @@ impl<R, D> DataReader<R, D> where R: Read + Seek, D: Data + Sized {
 }
 
 
-#[cfg(test)]
-mod test_data_reader {
-    use std::io::Cursor;
-
-    use crate::procfs::parsers::{Data, DataReader, ProcfsError, TokenParser};
-
-    #[derive(PartialEq, Debug)]
-    struct TestSystemData {
-        field_1: u8,
-        field_2: i16,
-    }
-
-    impl Data for TestSystemData {
-        fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
-            Ok(TestSystemData {
-                field_1: token_parser.token(0, 0)?,
-                field_2: token_parser.token(0, 1)?,
-            })
-        }
-    }
-
-    #[test]
-    fn test_load_correctly_data() {
-        let data_src = Cursor::new(b"12 -92 abc");
-
-        let mut data_reader = DataReader::new(data_src);
-
-        assert!(matches!(data_reader.read(), Ok(TestSystemData { field_1: 12, field_2: -92 })));
-    }
-}
-
-
 /// Parses space-separated token from a given multi-line string slice
 pub struct TokenParser<'a> {
     lines: Vec<Vec<&'a str>>
@@ -192,6 +177,38 @@ impl<'a> TokenParser<'a> {
     }
 }
 
+
+#[cfg(test)]
+mod test_data_reader {
+    use std::io::Cursor;
+
+    use crate::procfs::parsers::{Data, DataReader, ProcfsError, TokenParser};
+
+    #[derive(PartialEq, Debug)]
+    struct TestSystemData {
+        field_1: u8,
+        field_2: i16,
+    }
+
+    impl Data for TestSystemData {
+        fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
+            Ok(TestSystemData {
+                field_1: token_parser.token(0, 0)?,
+                field_2: token_parser.token(0, 1)?,
+            })
+        }
+    }
+
+    #[test]
+    fn test_load_correctly_data() {
+        let data_src = Cursor::new(b"12 -92 abc");
+
+        let mut data_reader = DataReader::new(data_src);
+
+        assert!(matches!(data_reader.read(), Ok(TestSystemData { field_1: 12, field_2: -92 })));
+    }
+}
+
 #[cfg(test)]
 mod test_token_parser {
     use super::*;
@@ -226,117 +243,10 @@ mod test_token_parser {
 }
 
 
-/// Represents data from `/proc/[PID]/stat`
-#[derive(Eq, PartialEq, Debug, Copy, Clone)]
-pub struct PidStat {
-    /// Time spent by the process in user mode
-    // scanf format: %lu
-    utime: u32,
-    /// Time spent by the process in kernel mode
-    // scanf format: %lu
-    stime: u32,
-    /// Time spent by the process waiting for children processes in user mode
-    // scanf format: %ld
-    cutime: i32,
-    /// Time spent by the process waiting for children processes in kernel mode
-    // scanf format: %ld
-    cstime: i32,
-}
+/// --------------------
+/// Data implementations
+/// --------------------
 
-
-pub trait Data: Sized {
-    fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError>;
-}
-
-pub trait SystemData: Data {
-    fn filepath() -> PathBuf;
-}
-
-pub trait ProcessData: Data {
-    fn filepath(pid: PID) -> PathBuf;
-}
-
-///
-///    Implementations of Data
-///
-
-impl PidStat {
-    pub fn new(utime: u32, stime: u32, cutime: i32, cstime: i32) -> Self {
-        PidStat { utime, stime, cutime, cstime }
-    }
-
-    pub fn running_time(&self) -> i64 {
-        self.utime as i64 + self.stime as i64 + self.cutime as i64 + self.cstime as i64
-    }
-}
-
-impl Data for PidStat {
-    fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
-        Ok(PidStat {
-            utime: token_parser.token(0, 12)?,
-            stime: token_parser.token(0, 13)?,
-            cutime: token_parser.token(0, 14)?,
-            cstime: token_parser.token(0, 15)?,
-        })
-    }
-}
-
-impl ProcessData for PidStat {
-    fn filepath(pid: u32) -> PathBuf {
-        let mut path = PathBuf::new();
-
-        path.push("/proc");
-        path.push(pid.to_string());
-        path.push("stat");
-
-        path
-    }
-}
-
-#[cfg(test)]
-mod test_pid_stat {
-    use std::string::ToString;
-
-    use super::*;
-
-    #[test]
-    fn test_parse_stat_file() {
-        let content = "1905 (python3) S 1877 1905 1877 34822 1905 4194304 1096 0 0 \
-13 42 11 10 0 20 0 1 0 487679 13963264 2541 18446744073709551615 4194304 7010805 \
-140731882007344 0 0 0 0 16781312 134217730 1 0 0 17 0 0 0 0 0 0 9362864 9653016 \
-10731520 140731882009319 140731882009327 140731882009327 140731882012647 0".to_string();
-
-        let token_parser = TokenParser::new(&content);
-
-        let pid_stat = PidStat::parse(&token_parser)
-            .expect("Could not read PidStat");
-
-        assert_eq!(pid_stat, PidStat {
-            utime: 13,
-            stime: 42,
-            cutime: 11,
-            cstime: 10,
-        });
-    }
-
-    #[test]
-    fn test_running_time() {
-        let pid_stat = PidStat {
-            utime: 1,
-            stime: 2,
-            cutime: 4,
-            cstime: 8,
-        };
-
-        assert_eq!(15, pid_stat.running_time())
-    }
-
-    #[test]
-    fn filepath_should_contain_pid() {
-        assert_eq!(PidStat::filepath(456),
-                   PathBuf::from("/proc/456/stat"))
-    }
-}
 
 /// Represents data and additional computed data from `/proc/stat`
 #[derive(Eq, PartialEq, Debug)]
@@ -387,6 +297,53 @@ impl SystemData for Stat {
     }
 }
 
+
+/// Represents data from `/proc/[PID]/stat`
+#[derive(Eq, PartialEq, Debug, Copy, Clone)]
+pub struct PidStat {
+    /// Time spent by the process in user mode
+    // scanf format: %lu
+    utime: u32,
+    /// Time spent by the process in kernel mode
+    // scanf format: %lu
+    stime: u32,
+    /// Time spent by the process waiting for children processes in user mode
+    // scanf format: %ld
+    cutime: i32,
+    /// Time spent by the process waiting for children processes in kernel mode
+    // scanf format: %ld
+    cstime: i32,
+}
+
+impl PidStat {
+    pub fn running_time(&self) -> i64 {
+        self.utime as i64 + self.stime as i64 + self.cutime as i64 + self.cstime as i64
+    }
+}
+
+impl Data for PidStat {
+    fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
+        Ok(PidStat {
+            utime: token_parser.token(0, 12)?,
+            stime: token_parser.token(0, 13)?,
+            cutime: token_parser.token(0, 14)?,
+            cstime: token_parser.token(0, 15)?,
+        })
+    }
+}
+
+impl ProcessData for PidStat {
+    fn filepath(pid: u32) -> PathBuf {
+        let mut path = PathBuf::new();
+
+        path.push("/proc");
+        path.push(pid.to_string());
+        path.push("stat");
+
+        path
+    }
+}
+
 #[cfg(test)]
 mod test_stat {
     use std::string::ToString;
@@ -425,5 +382,59 @@ cpu0 1393280 32966 572056 13343292 6130 0 17875 0 23933 0".to_string();
         };
 
         assert_eq!(63, stat.running_time())
+    }
+}
+
+
+#[cfg(test)]
+impl PidStat {
+    /// PidStat constructor for test purposes
+    pub fn new(utime: u32, stime: u32, cutime: i32, cstime: i32) -> Self {
+        PidStat { utime, stime, cutime, cstime }
+    }
+}
+
+#[cfg(test)]
+mod test_pid_stat {
+    use std::string::ToString;
+
+    use super::*;
+
+    #[test]
+    fn test_parse_stat_file() {
+        let content = "1905 (python3) S 1877 1905 1877 34822 1905 4194304 1096 0 0 \
+13 42 11 10 0 20 0 1 0 487679 13963264 2541 18446744073709551615 4194304 7010805 \
+140731882007344 0 0 0 0 16781312 134217730 1 0 0 17 0 0 0 0 0 0 9362864 9653016 \
+10731520 140731882009319 140731882009327 140731882009327 140731882012647 0".to_string();
+
+        let token_parser = TokenParser::new(&content);
+
+        let pid_stat = PidStat::parse(&token_parser)
+            .expect("Could not read PidStat");
+
+        assert_eq!(pid_stat, PidStat {
+            utime: 13,
+            stime: 42,
+            cutime: 11,
+            cstime: 10,
+        });
+    }
+
+    #[test]
+    fn test_running_time() {
+        let pid_stat = PidStat {
+            utime: 1,
+            stime: 2,
+            cutime: 4,
+            cstime: 8,
+        };
+
+        assert_eq!(15, pid_stat.running_time())
+    }
+
+    #[test]
+    fn filepath_should_contain_pid() {
+        assert_eq!(PidStat::filepath(456),
+                   PathBuf::from("/proc/456/stat"))
     }
 }
