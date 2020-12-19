@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-use std::result::Iter;
 use std::time::Duration;
 
 use tui::{Frame, symbols};
@@ -9,7 +8,7 @@ use tui::text::Span;
 use tui::widgets::{Axis, Block, Borders, Chart, Dataset, GraphType};
 
 use crate::core::metrics::{Archive, Metric};
-use crate::core::process_view::{PID, ProcessMetadata};
+use crate::core::process_view::ProcessMetadata;
 use crate::ui::terminal::TuiBackend;
 
 pub struct MetricsChart {

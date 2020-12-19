@@ -26,8 +26,8 @@ impl CpuProbe {
         Self::from_readers(Box::new(stat_reader), Box::new(ProcessDataReader::new()))
     }
 
-    pub fn from_readers(stat_reader: Box<dyn ReadSystemData<Stat>>,
-                        pid_stat_reader: Box<dyn ReadProcessData<PidStat>>) -> Result<Self, Error> {
+    fn from_readers(stat_reader: Box<dyn ReadSystemData<Stat>>,
+                    pid_stat_reader: Box<dyn ReadProcessData<PidStat>>) -> Result<Self, Error> {
         Ok(CpuProbe {
             pid_stat_reader,
             stat_reader,

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use log::{error, info};
+use log::error;
 use netinfo::{InoutType, Netinfo, NetStatistics, Pid};
 
 use crate::core::Error;
