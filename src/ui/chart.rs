@@ -17,6 +17,8 @@ pub struct MetricsChart {
     axis_origin_label: String,
 }
 
+
+// TODO Keep displaying "dead" processes if they are covered by `span`
 impl MetricsChart {
     pub fn new(span: Duration) -> Self {
         Self {
