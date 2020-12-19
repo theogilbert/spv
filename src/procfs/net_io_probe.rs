@@ -9,7 +9,7 @@ use crate::procfs::rates::{ProcessesRates, ProcessRatesMode};
 
 const RATE_RETENTION: Duration = Duration::from_secs(5);
 
-// TODO can press key to configure to show only input/only output
+
 pub struct NetIoProbe {
     net_info: Netinfo,
     input_processes_rates: ProcessesRates,
