@@ -41,19 +41,19 @@ pub enum Trigger {
 pub struct TriggersEmitter;
 
 impl TriggersEmitter {
-    pub fn launch_async(sender: Sender<Trigger>, impulse_period: Duration) {
+    pub fn launch_async(sender: Sender<Trigger>, refresh_period: Duration) {
         let impulse_sender = sender.clone();
         let input_sender = sender.clone();
         let signal_sender = sender;
 
-        Self::start_impulse_thread(impulse_sender, impulse_period);
+        Self::start_impulse_thread(impulse_sender, refresh_period);
         Self::start_input_thread(input_sender);
         Self::start_signal_thread(signal_sender);
     }
 
-    fn start_impulse_thread(sender: Sender<Trigger>, impulse_period: Duration) {
+    fn start_impulse_thread(sender: Sender<Trigger>, refresh_period: Duration) {
         thread::spawn(move || {
-            let mut pulse = Pulse::new(impulse_period);
+            let mut pulse = Pulse::new(refresh_period);
 
             loop {
                 if sender.send(Trigger::Impulse).is_err() {

@@ -32,7 +32,7 @@ pub struct SpvApplication {
 
 
 impl SpvApplication {
-    pub fn new(receiver: Receiver<Trigger>, probes: Vec<Box<dyn Probe>>, context: SpvContext, probe_period: Duration) -> Result<Self, Error> {
+    pub fn new(receiver: Receiver<Trigger>, probes: Vec<Box<dyn Probe>>, context: SpvContext, refresh_period: Duration) -> Result<Self, Error> {
         let mut builder = ArchiveBuilder::new();
 
         for p in probes.iter() {
@@ -41,7 +41,7 @@ impl SpvApplication {
         }
 
         let archive = builder
-            .resolution(probe_period)
+            .resolution(refresh_period)
             .build();
 
         let ui = SpvUI::new(probes.iter()

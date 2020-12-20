@@ -20,8 +20,8 @@ fn main() {
 
     let (tx, rx) = channel();
 
-    let probe_period = Duration::from_secs(1);
-    TriggersEmitter::launch_async(tx, probe_period);
+    let refresh_period = Duration::from_secs(1);
+    TriggersEmitter::launch_async(tx, refresh_period);
 
     let app_context = build_spv_context();
 
