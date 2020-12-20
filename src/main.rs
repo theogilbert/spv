@@ -6,15 +6,18 @@ use log::error;
 use log::LevelFilter;
 use simplelog::{Config, WriteLogger};
 
+#[cfg(feature = "netio")]
+use {
+    spv::procfs::net_io_probe::NetIoProbe
+};
 use spv::core::metrics::Probe;
 use spv::core::process_view::ProcessView;
 use spv::procfs::cpu_probe::CpuProbe;
-use spv::procfs::net_io_probe::NetIoProbe;
 use spv::procfs::process::ProcfsScanner;
 use spv::spv::{SpvApplication, SpvContext};
 use spv::triggers::TriggersEmitter;
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     setup_panic_logging();
     init_logging();
 
@@ -25,21 +28,20 @@ fn main() {
 
     let app_context = build_spv_context();
 
-    let probes = vec![
-        Box::new(CpuProbe::new().expect("... TODO get rid of this POC")) as Box<dyn Probe>,
-        Box::new(NetIoProbe::default()) as Box<dyn Probe>];
+    // TODO make this cleaner
+    let mut probes = vec![
+        Box::new(CpuProbe::new()?) as Box<dyn Probe>
+    ];
 
-    let app_ret = SpvApplication::new(rx, probes, app_context,
-                                      probe_period);
-
-    match app_ret {
-        Err(e) => error!("{:?}", e),
-        Ok(app) => {
-            if let Err(e) = app.run() {
-                error!("{:?}", e);
-            }
+    #[cfg(feature = "netio")]
+        {
+            probes.push(Box::new(NetIoProbe::new()?) as Box<dyn Probe>);
         }
-    };
+
+    let app = SpvApplication::new(rx, probes, app_context, refresh_period)?;
+    app.run()?;
+
+    Ok(())
 }
 
 fn setup_panic_logging() {

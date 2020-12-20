@@ -26,12 +26,7 @@ enum Error {
 
 impl From<Error> for CoreError {
     fn from(e: Error) -> Self {
-        match e {
-            Error::ProcessScanningFailure(s, e) => {
-                CoreError::ScanProcessesError(Box::new(Error::ProcessScanningFailure(s, e)))
-            }
-            e => CoreError::ReadMetadataError(Box::new(e)),
-        }
+        CoreError::ScanProcessesError(e.into())
     }
 }
 
@@ -284,6 +279,6 @@ mod test_pid_scanner {
 
         let process_metadata_ret = proc_scanner.fetch_metadata(123);
 
-        assert!(matches!(process_metadata_ret, Err(CoreError::ReadMetadataError(_))));
+        assert!(matches!(process_metadata_ret, Err(CoreError::ScanProcessesError(_))));
     }
 }

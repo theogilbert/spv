@@ -3,6 +3,7 @@
 use std::io;
 
 use thiserror::Error;
+use anyhow;
 
 use crate::core::metrics::Metric;
 use crate::core::process_view::PID;
@@ -13,12 +14,10 @@ pub mod metrics;
 #[derive(Error, Debug)]
 pub enum Error {
     // Error raised from trait implementors
-    #[error("Error scanning process")]
-    ScanProcessesError(#[source] Box<dyn std::error::Error>),
-    #[error("Error reading process metadata")]
-    ReadMetadataError(#[source] Box<dyn std::error::Error>),
-    #[error("Probe error: {0}")]
-    ProbingError(String, #[source] Box<dyn std::error::Error>),
+    #[error("Error scanning process: {0}")]
+    ScanProcessesError(#[source] anyhow::Error),
+    #[error("Error while probing metrics")]
+    ProbingError(String, #[source] anyhow::Error),
     #[error("Unexpected label: '{0:?}'")]
     UnexpectedLabel(String),
     #[error("Invalid PID: '{0:?}'")]

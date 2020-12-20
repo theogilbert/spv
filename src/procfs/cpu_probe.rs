@@ -10,8 +10,8 @@ use crate::procfs::parsers::{PidStat, ProcessDataReader, ReadProcessData, ReadSy
 
 
 // TODO When a process CPU usage is low, some iterations will detect a CPU usage of 0%, causing a
-// fluctuating usage value between each iterations. Fix this, maybe by calculating CPU usage based
-// on an average
+//   fluctuating value between each iterations. Fix this, maybe by averaging reported values over
+//   last N probed iterations
 
 /// Probe implementation to measure the CPU usage (in percent) of processes
 pub struct CpuProbe {
@@ -24,7 +24,7 @@ impl CpuProbe {
     pub fn new() -> Result<Self, Error> {
         let stat_reader = SystemDataReader::new()
             .map_err(|e| {
-                Error::ProbingError("Error initializing SystemDataReader".to_string(), Box::new(e))
+                Error::ProbingError("Error initializing SystemDataReader".to_string(), e.into())
             })?;
 
 
@@ -54,7 +54,7 @@ impl Probe for CpuProbe {
         let new_stat: Stat = self.stat_reader
             .read()
             .map_err(|e| {
-                Error::ProbingError("Error reading global CPU stats".to_string(), Box::new(e))
+                Error::ProbingError("Error reading global CPU stats".to_string(), e.into())
             })?;
 
         self.calculator.compute_new_runtime_diff(new_stat);
@@ -67,7 +67,7 @@ impl Probe for CpuProbe {
             .read(pid)
             .map_err(|e| {
                 Error::ProbingError(format!("Error probing CPU stats for PID {}", pid),
-                                    Box::new(e))
+                                    e.into())
             })?;
 
         let percent = self.calculator.calculate_pid_usage(pid, pid_stat);
@@ -237,7 +237,7 @@ mod test_cpu_probe {
         };
         let first_pid_stat_seq = vecdeque!(Ok(create_pid_stat(0)), Ok(create_pid_stat(50)));
         let second_pid_stat_seq = vecdeque!(Ok(create_pid_stat(0)),
-            Err(ProcfsError::IoError(io::Error::new(io::ErrorKind::Other, "oh no!"))));
+            Err(ProcfsError::IOError(io::Error::new(io::ErrorKind::Other, "oh no!"))));
         let pid_stat_reader = MemoryPidStatReader {
             pid_stats_seq: hashmap!(1 => first_pid_stat_seq, 2 => second_pid_stat_seq)
         };

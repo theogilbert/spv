@@ -1,13 +1,40 @@
+use std::error::Error as StdError;
 use std::time::Duration;
 
 use log::error;
 use netinfo::{InoutType, Netinfo, NetStatistics, Pid};
+use thiserror::Error;
 
 use crate::core::Error;
 use crate::core::metrics::{Metric, Probe};
 use crate::procfs::rates::{ProcessesRates, ProcessRatesMode};
 
 const RATE_RETENTION: Duration = Duration::from_secs(5);
+
+
+/// netinfo uses error-chain, which is an unmaintained library not compatible with anyhow
+/// To be able to return netinfo error information, we convert it to this NetinfoError type
+#[derive(Error, Debug)]
+#[error("{msg}")]
+struct NetinfoError {
+    // As a netinfo::Error's source can also be a netinfo::Error, the soruces are recursively
+    // converted to a NetInfoError
+    #[source]
+    source: Option<Box<NetinfoError>>,
+    msg: String,
+}
+
+impl NetinfoError {
+    /// Convert any trait object of std::error::Error to a `NetinfoError`
+    /// We do not implement From<&dyn StdError> -> Self for this because it conflicts with From<T> -> T
+    fn from_std_error(e: &dyn StdError) -> Self {
+        let source = match e.source().take() {
+            None => None,
+            Some(src) => Some(Box::new(Self::from_std_error(src)))
+        };
+        NetinfoError { source, msg: e.to_string() }
+    }
+}
 
 
 pub struct NetIoProbe {
@@ -20,18 +47,22 @@ pub struct NetIoProbe {
 impl NetIoProbe {
     pub fn new() -> Result<Self, Error> {
         let net_ifs = Netinfo::list_net_interfaces()
+            .map_err(|e| NetinfoError::from_std_error(&e))
             .map_err(|e| Error::ProbingError(format!("Error listing net interfaces"),
-                                             Box::new(e)))?;
+                                             e.into()))?;
         let mut net_info = Netinfo::new(&net_ifs)
+            .map_err(|e| NetinfoError::from_std_error(&e))
             .map_err(|e| Error::ProbingError(format!("Could not initialize NetInfo"),
-                                             Box::new(e)))?;
+                                             e.into()))?;
 
         net_info.set_min_refresh_interval(Some(Duration::from_millis(100)))
+            .map_err(|e| NetinfoError::from_std_error(&e))
             .map_err(|e| Error::ProbingError("Could not configure net IO thread".into(),
-                                             Box::new(e)))?;
+                                             e.into()))?;
         net_info.start() // stop() is automatically called on drop()
+            .map_err(|e| NetinfoError::from_std_error(&e))
             .map_err(|e| Error::ProbingError("Could not start net IO thread".into(),
-                                             Box::new(e)))?;
+                                             e.into()))?;
 
         Ok(NetIoProbe {
             net_info,
@@ -53,17 +84,20 @@ impl Probe for NetIoProbe {
 
     fn init_iteration(&mut self) -> Result<(), Error> {
         let net_stats = self.net_info.get_net_statistics()
+            .map_err(|e| NetinfoError::from_std_error(&e))
             .map_err(|e| Error::ProbingError(format!("Error getting net statistics"),
-                                             Box::new(e)))?;
+                                             e.into()))?;
         self.net_info.clear()
+            .map_err(|e| NetinfoError::from_std_error(&e))
             .map_err(|e| Error::ProbingError(format!("Error clearing net io cache"),
-                                             Box::new(e)))?;
+                                             e.into()))?;
 
         self.net_stats = Some(net_stats);
 
         let errors = self.net_info.pop_thread_errors()
+            .map_err(|e| NetinfoError::from_std_error(&e))
             .map_err(|e| {
-                Error::ProbingError("Could not fetch net io thread errors".into(), Box::new(e))
+                Error::ProbingError("Could not fetch net io thread errors".into(), e.into())
             })?;
         errors.iter()
             .for_each(|e| {
@@ -87,10 +121,10 @@ impl Probe for NetIoProbe {
 
             let input_rate = self.input_processes_rates.rate(pid)
                 .map_err(|e| Error::ProbingError("Error calculating input rate".into(),
-                                                 Box::new(e)))?;
+                                                 e.into()))?;
             let output_rate = self.output_processes_rates.rate(pid)
                 .map_err(|e| Error::ProbingError("Error calculating output rate".into(),
-                                                 Box::new(e)))?;
+                                                 e.into()))?;
 
             Ok(Metric::IO { input: input_rate as usize, output: output_rate as usize })
         } else {
