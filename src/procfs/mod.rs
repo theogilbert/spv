@@ -24,7 +24,7 @@ pub enum ProcfsError {
     #[error("Invalid file format: '{0:?}'")]
     InvalidFileFormat(String),
     #[error(transparent)]
-    IoError(#[from] io::Error),
+    IOError(#[from] io::Error),
     #[error("PID is not known: '{0:?}'")]
     UnknownPID(PID),
     #[error("Not enough data to estimate rate")]

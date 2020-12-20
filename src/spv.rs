@@ -36,8 +36,7 @@ impl SpvApplication {
         let mut builder = ArchiveBuilder::new();
 
         for p in probes.iter() {
-            builder = builder.new_metric(p.name().to_string(), p.default_metric())
-                .map_err(|e| Error::CoreError(e))?;
+            builder = builder.new_metric(p.name().to_string(), p.default_metric())?;
         }
 
         let archive = builder
@@ -45,8 +44,7 @@ impl SpvApplication {
             .build();
 
         let ui = SpvUI::new(probes.iter()
-            .map(|p| p.name().to_string()))
-            .map_err(|e| Error::UiError(e))?;
+            .map(|p| p.name().to_string()))?;
 
         let mut spv_app = Self {
             receiver,
@@ -66,8 +64,7 @@ impl SpvApplication {
         self.dispatch_probes()?;
 
         loop {
-            let trigger = self.receiver.recv()
-                .map_err(|e| Error::MpscError(e))?;
+            let trigger = self.receiver.recv()?;
 
             match trigger {
                 Trigger::Exit => break,
@@ -94,8 +91,7 @@ impl SpvApplication {
         let pids = SpvApplication::extract_processes_pids(&processes);
 
         for p in &mut self.probes {
-            p.probe_processes(&pids)
-                .map_err(|e| Error::CoreError(e))?;
+            p.probe_processes(&pids)?;
         }
 
         Ok(())
@@ -132,8 +128,7 @@ impl SpvApplication {
     }
 
     fn probe_metrics(probe: &mut Box<dyn Probe>, pids: &[PID], archive: &mut Archive) -> Result<(), Error> {
-        let metrics = probe.probe_processes(pids)
-            .map_err(|e| Error::CoreError(e))?;
+        let metrics = probe.probe_processes(pids)?;
 
         let metric_label = probe.name();
         for (pid, m) in metrics.into_iter() {

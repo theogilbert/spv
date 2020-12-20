@@ -18,12 +18,10 @@ pub struct Terminal {
 impl Terminal {
     pub fn new() -> Result<Self, Error> {
         let stdout = io::stdout()
-            .into_raw_mode()
-            .map_err(|e| Error::IOError(e))?;
+            .into_raw_mode()?;
         let backend = TermionBackend::new(stdout);
 
-        let mut tui_terminal = TuiTerminal::new(backend)
-            .map_err(|e| Error::IOError(e))?;
+        let mut tui_terminal = TuiTerminal::new(backend)?;
 
         Self::generate_empty_frame(&mut tui_terminal);
 
