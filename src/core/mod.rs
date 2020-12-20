@@ -17,7 +17,7 @@ pub enum Error {
     ScanProcessesError(#[source] Box<dyn std::error::Error>),
     #[error("Error reading process metadata")]
     ReadMetadataError(#[source] Box<dyn std::error::Error>),
-    #[error("Probing error: '{0:?}'")]
+    #[error("Probe error: {0}")]
     ProbingError(String, #[source] Box<dyn std::error::Error>),
     #[error("Unexpected label: '{0:?}'")]
     UnexpectedLabel(String),

@@ -20,7 +20,7 @@ impl InputListener {
         let stdin = stdin();
 
         for key_ret in stdin.keys() {
-            let key = key_ret.map_err(|e| Error::InputError(e.to_string()))?;
+            let key = key_ret.map_err(|e| Error::InputError(e))?;
 
             match key {
                 Key::Ctrl(c) => self.on_ctrl_key_pressed(c),

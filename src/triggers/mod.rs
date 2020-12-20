@@ -1,11 +1,10 @@
-use std::fmt::{Display, Formatter};
 use std::sync::mpsc::Sender;
-use std::thread;
+use std::{thread, io};
 use std::time::Duration;
 
+use thiserror::Error;
 use log::error;
 
-use crate::fmt;
 use crate::triggers::input::InputListener;
 use crate::triggers::pulse::Pulse;
 use crate::triggers::signal::SignalListener;
@@ -14,18 +13,12 @@ mod pulse;
 mod input;
 mod signal;
 
+#[derive(Error, Debug)]
 pub enum Error {
-    InputError(String),
-    SignalError(String),
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Error::InputError(s) => write!(f, "InputError: {}", s),
-            Error::SignalError(s) => write!(f, "SignalError: {}", s),
-        }
-    }
+    #[error("Error reading user input")]
+    InputError(#[source] io::Error),
+    #[error("Error reading signal")]
+    SignalError(#[source] io::Error),
 }
 
 pub enum Trigger {
@@ -67,7 +60,7 @@ impl TriggersEmitter {
     fn start_input_thread(sender: Sender<Trigger>) {
         thread::spawn(move || {
             if let Err(e) = InputListener::new(sender).listen() {
-                error!("Trigger error: {}", e);
+                error!("Trigger error: {:?}", e);
             }
         });
     }
@@ -75,7 +68,7 @@ impl TriggersEmitter {
     fn start_signal_thread(sender: Sender<Trigger>) {
         thread::spawn(move || {
             if let Err(e) = SignalListener::new(sender).listen() {
-                error!("Trigger errors: {}", e);
+                error!("Trigger errors: {:?}", e);
             }
         });
     }

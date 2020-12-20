@@ -1,6 +1,7 @@
-use std::fmt::{Display, Formatter};
-use std::fmt;
 use std::time::Duration;
+use std::io;
+
+use thiserror::Error;
 
 use crate::core::metrics::Archive;
 use crate::core::process_view::ProcessMetadata;
@@ -18,18 +19,10 @@ mod chart;
 mod metadata;
 mod terminal;
 
+#[derive(Error, Debug)]
 pub enum Error {
-    IOError(String),
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let repr = match self {
-            Error::IOError(e) => format!("IOError: {}", e),
-        };
-
-        write!(f, "{}", repr)
-    }
+    #[error(transparent)]
+    IOError(#[from] io::Error),
 }
 
 pub struct SpvUI {
@@ -70,7 +63,7 @@ impl SpvUI {
             chart.render(&mut frame, layout.chart_chunk(), process_list.selected(), metrics,
                          tabs.current());
             metadata_bar.render(&mut frame, layout.metadata_chunk());
-        }).map_err(|e| Error::IOError(e.to_string()))
+        })
     }
 
     pub fn set_processes(&mut self, processes: Vec<ProcessMetadata>) {

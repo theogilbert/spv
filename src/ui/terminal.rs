@@ -19,11 +19,11 @@ impl Terminal {
     pub fn new() -> Result<Self, Error> {
         let stdout = io::stdout()
             .into_raw_mode()
-            .map_err(|e| Error::IOError(e.to_string()))?;
+            .map_err(|e| Error::IOError(e))?;
         let backend = TermionBackend::new(stdout);
 
         let mut tui_terminal = TuiTerminal::new(backend)
-            .map_err(|e| Error::IOError(e.to_string()))?;
+            .map_err(|e| Error::IOError(e))?;
 
         Self::generate_empty_frame(&mut tui_terminal);
 
@@ -41,7 +41,7 @@ impl Terminal {
         where F: FnOnce(&mut Frame<TuiBackend>),
     {
         self.tui_terminal.draw(f)
-            .map_err(|e| Error::IOError(e.to_string()))
+            .map_err(|e| Error::IOError(e))
     }
 }
 

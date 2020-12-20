@@ -37,7 +37,7 @@ impl SpvApplication {
 
         for p in probes.iter() {
             builder = builder.new_metric(p.name().to_string(), p.default_metric())
-                .map_err(|ce| Error::CoreError(ce.to_string()))?;
+                .map_err(|e| Error::CoreError(e))?;
         }
 
         let archive = builder
@@ -46,7 +46,7 @@ impl SpvApplication {
 
         let ui = SpvUI::new(probes.iter()
             .map(|p| p.name().to_string()))
-            .map_err(|e| Error::UiError(e.to_string()))?;
+            .map_err(|e| Error::UiError(e))?;
 
         let mut spv_app = Self {
             receiver,
@@ -67,7 +67,7 @@ impl SpvApplication {
 
         loop {
             let trigger = self.receiver.recv()
-                .map_err(|e| Error::MpscError(e.to_string()))?;
+                .map_err(|e| Error::MpscError(e))?;
 
             match trigger {
                 Trigger::Exit => break,
@@ -95,7 +95,7 @@ impl SpvApplication {
 
         for p in &mut self.probes {
             p.probe_processes(&pids)
-                .map_err(|e| Error::CoreError(e.to_string()))?;
+                .map_err(|e| Error::CoreError(e))?;
         }
 
         Ok(())
@@ -128,12 +128,12 @@ impl SpvApplication {
 
     fn collect_processes(&mut self) -> Result<Vec<ProcessMetadata>, Error> {
         self.process_view.processes()
-            .map_err(|e| Error::CoreError(e.to_string()))
+            .map_err(|e| Error::CoreError(e))
     }
 
     fn probe_metrics(probe: &mut Box<dyn Probe>, pids: &[PID], archive: &mut Archive) -> Result<(), Error> {
         let metrics = probe.probe_processes(pids)
-            .map_err(|e| Error::CoreError(e.to_string()))?;
+            .map_err(|e| Error::CoreError(e))?;
 
         let metric_label = probe.name();
         for (pid, m) in metrics.into_iter() {
@@ -146,6 +146,6 @@ impl SpvApplication {
 
     fn draw_ui(&mut self) -> Result<(), Error> {
         self.ui.render(&self.metrics_archive)
-            .map_err(|e| Error::UiError(e.to_string()))
+            .map_err(|e| Error::UiError(e))
     }
 }
