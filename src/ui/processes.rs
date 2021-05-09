@@ -1,7 +1,6 @@
 use tui::Frame;
 use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
-use tui::text::Span;
 use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 
 use crate::core::metrics::Archive;
@@ -203,10 +202,12 @@ impl ProcessList {
                                 label: &str) -> String {
         let m = metrics.last(label, process.pid())
             .expect("Error getting current metric");
-
-        format!("{:>width$} ", m.concise_repr(), width = METRICS_COL_WIDTH - 1)  // - 1 because of the trailing space
+        self.justify_metric_repr(m.concise_repr())
     }
 
+    fn justify_metric_repr(&self, metric_repr: String) -> String {
+        format!("{:>width$} ", metric_repr, width = METRICS_COL_WIDTH - 1) // - 1 because of the trailing space
+    }
 
     fn build_default_list_widget(items: Vec<ListItem>) -> List {
         List::new(items)
@@ -217,7 +218,7 @@ impl ProcessList {
 
 
 #[cfg(test)]
-mod test_align_right {
+mod test_justify_right {
     use rstest::*;
 
     use crate::ui::processes::{METRICS_COL_WIDTH, ProcessList};
@@ -227,26 +228,35 @@ mod test_align_right {
         ProcessList::default()
     }
 
+    #[fixture]
+    fn short_metric_repr() -> String {
+        std::iter::repeat('0')
+            .take(METRICS_COL_WIDTH / 2)
+            .collect()
+    }
+
     #[rstest(input,
     case("a"),
-    case("ab"),
-    case("abc"),
-    case("abcd"),
-    case("abcde"),
-    case("abcdef"),
-    case("abcdefg"),
     case("abcdefgh"),
     )]
     fn test_should_align_right_with_right_padding(process_list: ProcessList, input: &str) {
-        let aligned = process_list.align_metric_right(input.to_string());
+        let aligned = process_list.justify_metric_repr(input.to_string());
 
         assert!(aligned.ends_with(&format!("{} ", input)));
         assert_eq!(aligned.len(), METRICS_COL_WIDTH)
     }
 
     #[rstest]
-    fn test_should_contain_one_extra_space_in_front_of_long_text(process_list: ProcessList) {
-        let aligned = process_list.align_metric_right("012345678910".to_string());
-        assert_eq!(aligned, " 012345678910 ");
+    fn test_should_contain_one_extra_space_in_front_of_short_text(process_list: ProcessList,
+                                                                  short_metric_repr: String) {
+        let justified_repr = process_list.justify_metric_repr(short_metric_repr);
+        assert!(justified_repr.starts_with(" "));
+    }
+
+    #[rstest]
+    fn test_should_add_trailing_space_on_short_repr(process_list: ProcessList,
+                                                    short_metric_repr: String) {
+        let justified_repr = process_list.justify_metric_repr(short_metric_repr);
+        assert!(justified_repr.ends_with(" "));
     }
 }
