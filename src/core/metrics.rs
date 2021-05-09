@@ -278,7 +278,7 @@ impl ArchiveBuilder {
         match self.archive.metrics.entry(label.to_string()) {
             Entry::Occupied(_) => Err(Error::DuplicateLabel(label)),
             Entry::Vacant(entry) => {
-                entry.insert(ProcessMetrics::new(default));
+                entry.insert(MetricHistory::new(default));
                 Ok(self)
             }
         }
@@ -292,7 +292,7 @@ impl ArchiveBuilder {
 
 /// Container for all collected metrics
 pub struct Archive {
-    metrics: HashMap<String, ProcessMetrics>,
+    metrics: HashMap<String, MetricHistory>,
     resolution: Duration,
 }
 
@@ -406,12 +406,14 @@ impl Archive {
 }
 
 
-struct ProcessMetrics {
+
+/// For a given Metric, keep an history of all metric values for all processes
+struct MetricHistory {
     default: Metric,
     series: HashMap<PID, Vec<Metric>>,
 }
 
-impl ProcessMetrics {
+impl MetricHistory {
     fn new(default: Metric) -> Self {
         Self { default, series: HashMap::new() }
     }
