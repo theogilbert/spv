@@ -8,7 +8,7 @@ use crate::core::Error;
 use crate::core::metrics::{Archive, Metric};
 
 /// On Linux 64 bits, the maximum value for a PID is 4194304, hence u32
-pub type PID = u32;
+pub type PID = u32; // TODO add new type UPID (Unique PID) through the entire execution of spv
 
 /// Basic metadata of a process (PID, command, etc...)
 #[derive(Eq, PartialEq, Debug, Clone)]
