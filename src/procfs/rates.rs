@@ -18,17 +18,16 @@ struct DatedValue
     value: usize,
 }
 
-pub enum ProcessRatesMode {
+pub enum PushMode {
     ACCUMULATIVE,
-    ///
     INCREMENT,
 }
 
 /// Keeps tracks of dated accumulative values of processes to calculate their rate
 pub struct ProcessesRates {
     acc_values: HashMap<Pid, VecDeque<DatedValue>>,
-    precision: Duration,
-    mode: ProcessRatesMode,
+    range: Duration,
+    mode: PushMode,
 }
 
 
@@ -37,38 +36,42 @@ impl ProcessesRates {
     /// data covered by the given retention duration
     ///
     /// # Arguments
-    ///  * `precision`: Indicates over how much time to calculate the rate. This class will always
-    ///         return rates in Hertz, but we calculate it from data over this time span.
-    pub fn new(mode: ProcessRatesMode, data_retention: Duration) -> Self {
-        ProcessesRates { acc_values: HashMap::new(), precision: data_retention, mode }
+    ///  * `mode`: Indicates how pushed values should be handled:
+    ///     - PushMode.ACCUMULATIVE indicates that the value should be handled as-is
+    ///     - PushMode.INCREMENT indicates that the given value is the difference with the last
+    ///         pushed value
+    ///  * `data_retention`: Indicates over how much time to calculate the rate.
+    pub fn new(mode: PushMode, data_retention: Duration) -> Self {
+        ProcessesRates { acc_values: HashMap::new(), range: data_retention, mode }
     }
 
     /// Pushes a new data associated to the given PID
     pub fn push(&mut self, pid: Pid, value: usize) {
-        let values = match self.acc_values.entry(pid) {
+        let existing_values = match self.acc_values.entry(pid) {
             Entry::Occupied(o) => o.into_mut(),
             Entry::Vacant(v) => v.insert(VecDeque::new()),
         };
-        let now = Instant::now();
 
-        let actual_value = match self.mode {
-            ProcessRatesMode::ACCUMULATIVE => value,
-            ProcessRatesMode::INCREMENT => {
-                values.back()
+        let new_value = match self.mode {
+            PushMode::ACCUMULATIVE => value,
+            PushMode::INCREMENT => {
+                existing_values.back()
                     .map(|dv| dv.value)
                     .unwrap_or(0)
                     .add(value)
             }
         };
 
-        values.push_back(DatedValue { date: now, value: actual_value });
+        let now = Instant::now();
+        existing_values.push_back(DatedValue { date: now, value: new_value });
         self.remove_outdated_values(pid, now);
     }
 
-    /// Removes all outdated values but the latest one, for the given PID
-    pub fn remove_outdated_values(&mut self, pid: Pid, now: Instant) {
+    /// Removes all values associated to a timestamp earlier than `now - self.range`, except the
+    /// last one (c.f. self.estimate_origin_value())
+    fn remove_outdated_values(&mut self, pid: Pid, now: Instant) {
         let values = self.acc_values.get_mut(&pid).unwrap();
-        let data_retention = self.precision;
+        let data_retention = self.range;
 
         let last_outdated = values.iter()
             .filter(|dv| dv.date < now - data_retention)
@@ -82,11 +85,11 @@ impl ProcessesRates {
         }
     }
 
-    /// Calculates a rate (in hertz) from the known accumulative values of the associated PID.
+    /// Calculates a rate (per second) using the values of the associated PID.
     ///
     /// This value is computed by calculating the increment between the first and last values within
-    /// the span of the given retention. The projected rate over one second is then normalized over
-    /// 1 second.
+    /// the span of the given retention. The difference is divided by self.range to get a rate per
+    /// second.
     ///
     /// # Arguments
     ///  * `pid`: The PID of the process for which to calculate the rate
@@ -99,19 +102,19 @@ impl ProcessesRates {
             return Ok(0.);
         }
 
-        let cur_val = values.back().unwrap();
-        let origin_val = self.estimate_origin_value(values, cur_val.date).unwrap();
+        let last_value = values.back().unwrap();
+        let first_value = self.estimate_origin_value(values, last_value.date).unwrap();
 
-        let rate = (cur_val.value as f64 - origin_val) / self.precision.as_secs_f64();
+        let rate = (last_value.value as f64 - first_value) / self.range.as_secs_f64();
 
         Ok(rate)
     }
 
-    /// Estimate the value at the date `now - self.precision`
+    /// Estimate the value at the date `now - self.range`
     /// This very simple implementation estimates this value by performing a regression from the
     /// first two values of `values`
     fn estimate_origin_value(&self, values: &VecDeque<DatedValue>, now: Instant) -> Option<f64> {
-        let origin = now - self.precision;
+        let origin = now - self.range;
 
         if values.len() < 2 {
             return None;  // If there is not two values
@@ -143,7 +146,7 @@ impl ProcessesRates {
     }
 
 
-    // TODO Clear PID from this structure when not needed anymore
+    // TODO Clear process values when the process has died
 }
 
 #[cfg(test)]
@@ -154,12 +157,12 @@ mod test_process_rates {
     use sn_fake_clock::FakeClock;
 
     use crate::procfs::ProcfsError;
-    use crate::procfs::rates::{ProcessesRates, ProcessRatesMode};
+    use crate::procfs::rates::{ProcessesRates, PushMode};
 
     #[fixture]
     fn process_rates() -> ProcessesRates {
         FakeClock::set_time(10000);
-        ProcessesRates::new(ProcessRatesMode::ACCUMULATIVE,
+        ProcessesRates::new(PushMode::ACCUMULATIVE,
                             Duration::from_secs(1))
     }
 

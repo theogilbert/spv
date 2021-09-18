@@ -7,7 +7,7 @@ use thiserror::Error;
 
 use crate::core::Error;
 use crate::core::metrics::{Metric, Probe};
-use crate::procfs::rates::{ProcessesRates, ProcessRatesMode};
+use crate::procfs::rates::{ProcessesRates, PushMode};
 
 const RATE_RETENTION: Duration = Duration::from_secs(5);
 
@@ -66,8 +66,8 @@ impl NetIoProbe {
 
         Ok(NetIoProbe {
             net_info,
-            input_processes_rates: ProcessesRates::new(ProcessRatesMode::INCREMENT, RATE_RETENTION),
-            output_processes_rates: ProcessesRates::new(ProcessRatesMode::INCREMENT, RATE_RETENTION),
+            input_processes_rates: ProcessesRates::new(PushMode::INCREMENT, RATE_RETENTION),
+            output_processes_rates: ProcessesRates::new(PushMode::INCREMENT, RATE_RETENTION),
             net_stats: None,
         })
     }
