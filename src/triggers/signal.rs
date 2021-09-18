@@ -1,9 +1,9 @@
 use std::sync::mpsc::Sender;
 
-use signal_hook::{SIGINT, SIGQUIT, SIGTERM, SIGWINCH};
 use signal_hook::iterator::Signals;
 
 use crate::triggers::{Error, Trigger};
+use signal_hook::consts::{SIGTERM, SIGINT, SIGQUIT, SIGWINCH};
 
 pub struct SignalListener {
     sender: Sender<Trigger>,
@@ -24,10 +24,10 @@ impl SignalListener {
         while !self.exit {
             for signal in signals.wait() {
                 match signal as i32 {
-                    signal_hook::SIGTERM | signal_hook::SIGINT | signal_hook::SIGQUIT => {
+                    SIGTERM | SIGINT | SIGQUIT => {
                         self.send_exit();
                     }
-                    signal_hook::SIGWINCH => self.send(Trigger::Resize),
+                    SIGWINCH => self.send(Trigger::Resize),
                     _ => unreachable!()
                 }
             }

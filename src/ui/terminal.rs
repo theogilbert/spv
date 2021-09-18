@@ -39,6 +39,7 @@ impl Terminal {
         where F: FnOnce(&mut Frame<TuiBackend>),
     {
         self.tui_terminal.draw(f)
+            .map(|_frame| ())
             .map_err(Error::IOError)
     }
 }
