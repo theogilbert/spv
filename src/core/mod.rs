@@ -3,7 +3,6 @@
 use std::io;
 
 use thiserror::Error;
-use anyhow;
 
 use crate::core::metrics::Metric;
 use crate::core::process_view::Pid;
