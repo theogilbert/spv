@@ -17,12 +17,12 @@ impl MetricTabs {
     }
 
     pub fn render(&self, frame: &mut Frame<TuiBackend>, chunk: Rect) {
-        let tabs = self.tabs.iter()
+        let tabs_spans = self.tabs.iter()
             .cloned()
             .map(Spans::from)
             .collect();
 
-        let tabs = Tabs::new(tabs)
+        let tabs = Tabs::new(tabs_spans)
             .style(Style::default().fg(Color::White))
             .highlight_style(Style::default().bg(Color::White).fg(Color::Black))
             .divider("|")

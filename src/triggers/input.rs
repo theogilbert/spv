@@ -42,8 +42,7 @@ impl InputListener {
 
     fn on_ctrl_key_pressed(&mut self, key: char) {
         match key {
-            'c' => self.send_exit(),
-            'd' => self.send_exit(),
+            'c' | 'd' => self.send_exit(),
             _ => ()
         }
     }

@@ -6,8 +6,8 @@ pub struct Pulse {
     refresh_period: Duration,
 }
 
-/// Drives the cadency of the application, using the blocking pulse method which releases on given
-/// interval
+/// Drives the cadency of the application, using the blocking pulse method which sleeps for the
+/// given refresh period
 impl Pulse {
     pub fn new(refresh_period: Duration) -> Self {
         Pulse { last_tick: Instant::now(), refresh_period }
