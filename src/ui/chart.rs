@@ -115,7 +115,7 @@ impl<'a> DataFrame<'a> {
             .enumerate()
             .map(|(index, data)| {
                 let name = self.metrics.last()
-                    .unwrap_or(&&self.default) // fails if self.metrics is empty
+                    .unwrap_or(&self.default) // fails if self.metrics is empty
                     .explicit_repr(index)
                     // panic should never happen as index should never be greater than cardinality:
                     .unwrap();
@@ -136,7 +136,7 @@ impl<'a> DataFrame<'a> {
     fn max_metric(&self) -> &Metric {
         self.metrics.iter()
             .max_by(|m1, m2| m1.partial_cmp(m2).unwrap_or(Ordering::Equal))
-            .unwrap_or(&&self.default)
+            .unwrap_or(&self.default)
     }
 
     pub fn max_value(&self) -> f64 {

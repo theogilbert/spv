@@ -179,7 +179,7 @@ impl PartialOrd for Metric {
                 br_self.partial_cmp(br_other)
             }
             (Metric::IO { input: i1, output: o1 }, Metric::IO { input: i2, output: o2 }) => {
-                i1.max(o1).partial_cmp(&i2.max(o2))
+                i1.max(o1).partial_cmp(i2.max(o2))
             }
             (_, _) => panic!("Comparing incompatible metrics"),
         }
