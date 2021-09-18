@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::core::Error;
 use crate::core::metrics::{Metric, Probe};
-use crate::core::process_view::PID;
+use crate::core::process_view::Pid;
 use crate::procfs::parsers;
 use crate::procfs::parsers::{PidStat, ProcessDataReader, ReadProcessData, ReadSystemData, Stat, SystemDataReader};
 
@@ -62,7 +62,7 @@ impl Probe for CpuProbe {
         Ok(())
     }
 
-    fn probe(&mut self, pid: PID) -> Result<Metric, Error> {
+    fn probe(&mut self, pid: Pid) -> Result<Metric, Error> {
         let pid_stat = self.pid_stat_reader
             .read(pid)
             .map_err(|e| {
@@ -77,7 +77,7 @@ impl Probe for CpuProbe {
 
 
 struct UsageCalculator {
-    processes_prev_stats: HashMap<PID, parsers::PidStat>,
+    processes_prev_stats: HashMap<Pid, parsers::PidStat>,
     prev_global_stat: parsers::Stat,
     global_runtime_diff: f64,
 }
@@ -119,7 +119,7 @@ impl UsageCalculator {
     ///  * `pid` The ID of a process
     ///  * `pid_stat_data`: The new content of the stat file of the process with ID [pid]
     ///
-    pub fn calculate_pid_usage(&mut self, pid: PID, pid_stat_data: PidStat) -> f64 {
+    pub fn calculate_pid_usage(&mut self, pid: Pid, pid_stat_data: PidStat) -> f64 {
         let last_iter_runtime = match self.processes_prev_stats.get(&pid) {
             Some(stat_data) => stat_data.running_time(),
             None => 0
@@ -139,14 +139,14 @@ mod test_cpu_probe {
     use std::io;
 
     use crate::core::metrics::{Metric, Probe};
-    use crate::core::process_view::PID;
+    use crate::core::process_view::Pid;
     use crate::procfs::cpu_probe::common_test_utils::{create_pid_stat, create_stat};
     use crate::procfs::cpu_probe::CpuProbe;
     use crate::procfs::parsers::{PidStat, ReadProcessData, ReadSystemData, Stat};
     use crate::procfs::ProcfsError;
 
     struct MemoryPidStatReader {
-        pid_stats_seq: HashMap<PID, VecDeque<Result<PidStat, ProcfsError>>>
+        pid_stats_seq: HashMap<Pid, VecDeque<Result<PidStat, ProcfsError>>>
     }
 
     impl ReadProcessData<PidStat> for MemoryPidStatReader {
@@ -179,7 +179,7 @@ mod test_cpu_probe {
                                                Box::new(pid_stat_reader))
             .expect("Could not create procfs");
 
-        let empty_map: HashMap<PID, Metric> = HashMap::new();
+        let empty_map: HashMap<Pid, Metric> = HashMap::new();
         assert!(matches!(probe.probe_processes(&vec![]), Ok(empty_map)));
     }
 

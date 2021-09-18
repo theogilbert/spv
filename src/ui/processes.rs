@@ -4,7 +4,7 @@ use tui::style::{Color, Modifier, Style};
 use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 
 use crate::core::metrics::Archive;
-use crate::core::process_view::{PID, ProcessMetadata};
+use crate::core::process_view::{Pid, ProcessMetadata};
 use crate::ui::terminal::TuiBackend;
 
 /// Width of the process name column
@@ -14,7 +14,7 @@ const METRICS_COL_WIDTH: usize = 10;
 
 pub struct ProcessList {
     processes: Vec<ProcessMetadata>,
-    selected_pid: Option<PID>,
+    selected_pid: Option<Pid>,
     state: ListState,
 }
 
@@ -112,7 +112,7 @@ impl ProcessList {
     /// From one frame to the other, the same process may have a different position in the list
     /// This function returns the new position of the selected process in the given `processes` list
     fn retrieve_index_of_previously_selected_pid(processes: &[ProcessMetadata],
-                                                 selected_pid: Option<PID>) -> usize {
+                                                 selected_pid: Option<Pid>) -> usize {
         match selected_pid {
             Some(selected_pid) => {
                 processes.iter()

@@ -4,7 +4,7 @@ use std::io;
 
 use thiserror::Error;
 
-use crate::core::process_view::PID;
+use crate::core::process_view::Pid;
 
 mod parsers;
 
@@ -26,7 +26,7 @@ pub enum ProcfsError {
     #[error(transparent)]
     IOError(#[from] io::Error),
     #[error("PID is not known: '{0:?}'")]
-    UnknownPID(PID),
+    UnknownPID(Pid),
     #[error("Not enough data to estimate rate")]
     NotEnoughData,
 }

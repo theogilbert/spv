@@ -2,7 +2,7 @@ use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
 use crate::core::metrics::{Archive, ArchiveBuilder, Probe};
-use crate::core::process_view::{PID, ProcessMetadata, ProcessView};
+use crate::core::process_view::{Pid, ProcessMetadata, ProcessView};
 use crate::Error;
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
@@ -127,7 +127,7 @@ impl SpvApplication {
             .map_err(|e| Error::CoreError(e))
     }
 
-    fn probe_metrics(probe: &mut Box<dyn Probe>, pids: &[PID], archive: &mut Archive) -> Result<(), Error> {
+    fn probe_metrics(probe: &mut Box<dyn Probe>, pids: &[Pid], archive: &mut Archive) -> Result<(), Error> {
         let metrics = probe.probe_processes(pids)?;
 
         let metric_label = probe.name();

@@ -8,7 +8,7 @@ use std::time::Duration;
 use log::warn;
 
 use crate::core::Error;
-use crate::core::process_view::PID;
+use crate::core::process_view::Pid;
 
 /// A quantified information probed from a process
 #[derive(Debug, PartialEq, Clone)]
@@ -218,7 +218,7 @@ pub trait Probe {
     }
 
     /// Probe a given process for a [`Metric`](enum.Metric)
-    fn probe(&mut self, pid: PID) -> Result<Metric, Error>;
+    fn probe(&mut self, pid: Pid) -> Result<Metric, Error>;
 
     /// Returns a map associating a [`Metric`](enum.Metric) instance to each PID
     ///
@@ -228,7 +228,7 @@ pub trait Probe {
     /// # Arguments
     ///  * `pids`: A set of `PIDs` to monitor
     ///
-    fn probe_processes(&mut self, pids: &[PID]) -> Result<HashMap<PID, Metric>, Error> {
+    fn probe_processes(&mut self, pids: &[Pid]) -> Result<HashMap<Pid, Metric>, Error> {
         self.init_iteration()?;
 
         let metrics = pids.iter()
@@ -311,7 +311,7 @@ impl Archive {
     ///
     /// If `label` is invalid, returns a Error::UnexpectedLabel
     ///
-    pub fn push(&mut self, label: &str, pid: PID, metric: Metric) -> Result<(), Error> {
+    pub fn push(&mut self, label: &str, pid: Pid, metric: Metric) -> Result<(), Error> {
         let pm = match self.metrics.get_mut(label) {
             Some(pm) => Ok(pm),
             None => Err(Error::UnexpectedLabel(label.to_string()))
@@ -335,7 +335,7 @@ impl Archive {
     ///
     /// If `label` is invalid, returns a Error::UnexpectedLabel
     ///
-    pub fn last(&self, label: &str, pid: PID) -> Result<&Metric, Error> {
+    pub fn last(&self, label: &str, pid: Pid) -> Result<&Metric, Error> {
         self.metrics.get(label)
             .map(|pm| pm.last(pid))
             .ok_or_else(|| Error::UnexpectedLabel(label.to_string()))
@@ -365,7 +365,7 @@ impl Archive {
     ///
     /// If `label` is invalid, returns a Error::UnexpectedLabel
     ///
-    pub fn history(&self, label: &str, pid: PID, span: Duration) -> Result<&[Metric], Error> {
+    pub fn history(&self, label: &str, pid: Pid, span: Duration) -> Result<&[Metric], Error> {
         let proc_metrics = self.metrics.get(label)
             .ok_or_else(|| Error::UnexpectedLabel(label.to_string()))?;
 
@@ -410,7 +410,7 @@ impl Archive {
 /// For a given Metric, keep an history of all metric values for all processes
 struct MetricHistory {
     default: Metric,
-    series: HashMap<PID, Vec<Metric>>,
+    series: HashMap<Pid, Vec<Metric>>,
 }
 
 impl MetricHistory {
@@ -418,7 +418,7 @@ impl MetricHistory {
         Self { default, series: HashMap::new() }
     }
 
-    fn push(&mut self, pid: PID, metric: Metric) {
+    fn push(&mut self, pid: Pid, metric: Metric) {
         let process_series = match self.series.entry(pid) {
             Entry::Occupied(o) => o.into_mut(),
             Entry::Vacant(v) => v.insert(Vec::new())
@@ -427,7 +427,7 @@ impl MetricHistory {
         process_series.push(metric);
     }
 
-    fn last(&self, pid: PID) -> &Metric {
+    fn last(&self, pid: Pid) -> &Metric {
         self.series.get(&pid)
             .and_then(|v| v.last())
             .unwrap_or(&self.default)
@@ -437,12 +437,12 @@ impl MetricHistory {
         self.default.unit()
     }
 
-    fn metrics(&self, pid: PID) -> Result<&[Metric], Error> {
+    fn metrics(&self, pid: Pid) -> Result<&[Metric], Error> {
         Ok(self.series.get(&pid)
             .ok_or(Error::InvalidPID(pid))?)
     }
 
-    fn count(&self, pid: PID) -> usize {
+    fn count(&self, pid: Pid) -> usize {
         self.series.get(&pid)
             .map(|v| v.len())
             .unwrap_or(0)
@@ -462,10 +462,10 @@ mod test_probe_trait {
 
     use crate::core::Error;
     use crate::core::metrics::{Metric, Probe};
-    use crate::core::process_view::PID;
+    use crate::core::process_view::Pid;
 
     struct FakeProbe {
-        probe_responses: HashMap<PID, Metric>
+        probe_responses: HashMap<Pid, Metric>
     }
 
     impl Probe for FakeProbe {

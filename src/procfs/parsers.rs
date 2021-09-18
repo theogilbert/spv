@@ -5,7 +5,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
-use crate::core::process_view::PID;
+use crate::core::process_view::Pid;
 use crate::procfs::ProcfsError;
 
 /// Type which can be parsed from a `TokenParser`
@@ -20,7 +20,7 @@ pub trait SystemData: Data {
 
 /// Specialization of a `Data` type which is associated to a process
 pub trait ProcessData: Data {
-    fn filepath(pid: PID) -> PathBuf;
+    fn filepath(pid: Pid) -> PathBuf;
 }
 
 
@@ -31,7 +31,7 @@ pub trait ReadSystemData<D> where D: SystemData + Sized {
 
 /// Type which can read a `ProcessData`
 pub trait ReadProcessData<D> where D: ProcessData + Sized {
-    fn read(&mut self, pid: PID) -> Result<D, ProcfsError>;
+    fn read(&mut self, pid: Pid) -> Result<D, ProcfsError>;
 }
 
 
@@ -55,7 +55,7 @@ impl<D> ReadSystemData<D> for SystemDataReader<D> where D: SystemData + Sized {
 
 /// Reads data from procfs files bound to a PID (in `/proc/[pid]/`)
 pub struct ProcessDataReader<D> where D: ProcessData + Sized {
-    readers: HashMap<PID, ProcfsReader<D>>,
+    readers: HashMap<Pid, ProcfsReader<D>>,
 }
 
 impl<D> ProcessDataReader<D> where D: ProcessData + Sized {
@@ -63,7 +63,7 @@ impl<D> ProcessDataReader<D> where D: ProcessData + Sized {
         ProcessDataReader { readers: HashMap::new() }
     }
 
-    fn get_process_reader(&mut self, pid: PID) -> Result<&mut ProcfsReader<D>, ProcfsError> {
+    fn get_process_reader(&mut self, pid: Pid) -> Result<&mut ProcfsReader<D>, ProcfsError> {
         Ok(match self.readers.entry(pid) {
             Entry::Occupied(o) => o.into_mut(),
             Entry::Vacant(v) => v.insert({

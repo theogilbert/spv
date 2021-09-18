@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 use crate::core::Error as CoreError;
-use crate::core::process_view::{PID, ProcessMetadata, ProcessScanner};
+use crate::core::process_view::{Pid, ProcessMetadata, ProcessScanner};
 
 /// Errors internal to the process module
 #[derive(Error, Debug)]
@@ -21,7 +21,7 @@ enum Error {
     #[error("Error while parsing process directory '{0:?}'")]
     ProcessParsing(PathBuf, #[source] io::Error),
     #[error("PID is invalid: '{0:?}'")]
-    InvalidPID(PID),
+    InvalidPID(Pid),
 }
 
 impl From<Error> for CoreError {
@@ -50,9 +50,9 @@ impl ProcfsScanner {
     /// # Arguments
     /// * `dir_name` - An optional string slice that holds the name of a directory
     ///
-    fn extract_pid_from_proc_dir(dir_name_opt: Option<&str>) -> std::result::Result<PID, Error> {
+    fn extract_pid_from_proc_dir(dir_name_opt: Option<&str>) -> std::result::Result<Pid, Error> {
         match dir_name_opt {
-            Some(dir_name) => dir_name.parse::<PID>()
+            Some(dir_name) => dir_name.parse::<Pid>()
                 .map_err(|_| Error::NotProcessDir(dir_name.to_string())),
             None => Err(Error::NotProcessDir("".to_string()))
         }
@@ -62,7 +62,7 @@ impl ProcfsScanner {
 
 impl ProcessScanner for ProcfsScanner {
     /// Returns the PIDs of currently running processes
-    fn scan(&self) -> std::result::Result<Vec<PID>, CoreError> {
+    fn scan(&self) -> std::result::Result<Vec<Pid>, CoreError> {
         let path = self.proc_dir.as_path();
 
         let dir_iter = read_dir(path)
@@ -86,7 +86,7 @@ impl ProcessScanner for ProcfsScanner {
     ///
     /// # Arguments
     ///  * `pid`: The identifier of the process for which to retrieve metadata
-    fn fetch_metadata(&self, pid: PID) -> std::result::Result<ProcessMetadata, CoreError> {
+    fn fetch_metadata(&self, pid: Pid) -> std::result::Result<ProcessMetadata, CoreError> {
         let mut command = String::new();
         let comm_file_path = self.proc_dir
             .join(pid.to_string())

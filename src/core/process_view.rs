@@ -8,19 +8,19 @@ use crate::core::Error;
 use crate::core::metrics::{Archive, Metric};
 
 /// On Linux 64 bits, the maximum value for a PID is 4194304, hence u32
-pub type PID = u32; // TODO add new type UPID (Unique PID) through the entire execution of spv
+pub type Pid = u32; // TODO add new type UPID (Unique PID) through the entire execution of spv
 
 /// Basic metadata of a process (PID, command, etc...)
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub struct ProcessMetadata {
-    pid: PID,
+    pid: Pid,
     command: String,
 }
 
 /// Describes a process
 impl ProcessMetadata {
     /// Returns a new instance of a ProcessMetadata
-    pub fn new<T>(pid: PID, command: T) -> ProcessMetadata
+    pub fn new<T>(pid: Pid, command: T) -> ProcessMetadata
         where T: Into<String> {
         ProcessMetadata { pid, command: command.into() }
     }
@@ -28,7 +28,7 @@ impl ProcessMetadata {
     /// Returns the process identifier assigned to the process by the OS
     ///
     /// Whilst a PID can be recycled, two running processes can not share the same PID
-    pub fn pid(&self) -> PID {
+    pub fn pid(&self) -> Pid {
         self.pid
     }
 
@@ -96,12 +96,12 @@ impl ProcessView {
 /// Trait with methods to retrieve basic information about running processes
 pub trait ProcessScanner {
     /// Returns a list containing the PIDs of all currently running processes
-    fn scan(&self) -> Result<Vec<PID>, Error>;
+    fn scan(&self) -> Result<Vec<Pid>, Error>;
 
     /// Returns The ProcessMetadata of the currently running process with the given PID
     ///
     /// # Arguments
     ///
     /// * `pid`: The process identifier of the currently running process
-    fn fetch_metadata(&self, pid: PID) -> Result<ProcessMetadata, Error>;
+    fn fetch_metadata(&self, pid: Pid) -> Result<ProcessMetadata, Error>;
 }

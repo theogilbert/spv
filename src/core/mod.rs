@@ -6,7 +6,7 @@ use thiserror::Error;
 use anyhow;
 
 use crate::core::metrics::Metric;
-use crate::core::process_view::PID;
+use crate::core::process_view::Pid;
 
 pub mod process_view;
 pub mod metrics;
@@ -21,7 +21,7 @@ pub enum Error {
     #[error("Unexpected label: '{0:?}'")]
     UnexpectedLabel(String),
     #[error("Invalid PID: '{0:?}'")]
-    InvalidPID(PID),
+    InvalidPID(Pid),
     #[error("Invalid metric variant for label {0:?}: {1:?}")]
     InvalidMetricVariant(String, Metric),
     #[error("Metric label has already been defined: '{0:?}'")]

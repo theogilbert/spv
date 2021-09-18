@@ -8,7 +8,7 @@ use std::time::Instant;
 #[cfg(test)]
 use sn_fake_clock::FakeClock as Instant;
 
-use crate::core::process_view::PID;
+use crate::core::process_view::Pid;
 use crate::procfs::ProcfsError;
 
 #[derive(Clone)]
@@ -26,7 +26,7 @@ pub enum ProcessRatesMode {
 
 /// Keeps tracks of dated accumulative values of processes to calculate their rate
 pub struct ProcessesRates {
-    acc_values: HashMap<PID, VecDeque<DatedValue>>,
+    acc_values: HashMap<Pid, VecDeque<DatedValue>>,
     precision: Duration,
     mode: ProcessRatesMode,
 }
@@ -44,7 +44,7 @@ impl ProcessesRates {
     }
 
     /// Pushes a new data associated to the given PID
-    pub fn push(&mut self, pid: PID, value: usize) {
+    pub fn push(&mut self, pid: Pid, value: usize) {
         let values = match self.acc_values.entry(pid) {
             Entry::Occupied(o) => o.into_mut(),
             Entry::Vacant(v) => v.insert(VecDeque::new()),
@@ -66,7 +66,7 @@ impl ProcessesRates {
     }
 
     /// Removes all outdated values but the latest one, for the given PID
-    pub fn remove_outdated_values(&mut self, pid: PID, now: Instant) {
+    pub fn remove_outdated_values(&mut self, pid: Pid, now: Instant) {
         let values = self.acc_values.get_mut(&pid).unwrap();
         let data_retention = self.precision;
 
@@ -91,7 +91,7 @@ impl ProcessesRates {
     /// # Arguments
     ///  * `pid`: The PID of the process for which to calculate the rate
     ///
-    pub fn rate(&self, pid: PID) -> Result<f64, ProcfsError> {
+    pub fn rate(&self, pid: Pid) -> Result<f64, ProcfsError> {
         let values = self.acc_values.get(&pid)
             .ok_or(ProcfsError::UnknownPID(pid))?;
 
