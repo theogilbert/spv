@@ -4,12 +4,10 @@ use std::time::Duration;
 
 use log::error;
 use log::LevelFilter;
-use simplelog::{Config, WriteLogger};
+use simplelog::{Config, ConfigBuilder, WriteLogger};
 
 #[cfg(feature = "netio")]
-use {
-    spv::procfs::net_io_probe::NetIoProbe
-};
+use spv::procfs::net_io_probe::NetIoProbe;
 use spv::core::metrics::Probe;
 use spv::core::process_view::ProcessView;
 use spv::procfs::cpu_probe::CpuProbe;
@@ -62,7 +60,11 @@ fn init_logging() {
         .open("spv.log")
         .expect("Could not open log file");
 
-    WriteLogger::init(LevelFilter::Debug, Config::default(), log_file)
+    let log_config = ConfigBuilder::default()
+        .set_time_format_str("%Y-%m-%d %H:%M:%S%.3f")
+        .build();
+
+    WriteLogger::init(LevelFilter::Debug, log_config, log_file)
         .expect("Could not initialize logging");
 }
 
