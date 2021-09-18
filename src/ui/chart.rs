@@ -78,7 +78,7 @@ impl<'a> DataFrame<'a> {
     pub fn new(metrics: &'a [Metric], default: Metric, step: Duration) -> Self {
         let data = Self::extract_raw_from_metrics(metrics, step);
 
-        Self { metrics, data, default }
+        Self { metrics, default, data }
     }
 
     /// Extract raw data from a collection of metrics
