@@ -19,7 +19,7 @@ impl SignalListener {
 
     pub fn listen(mut self) -> Result<(), Error> {
         let mut signals = Signals::new(&[SIGINT, SIGTERM, SIGQUIT, SIGWINCH])
-            .map_err(|e| Error::SignalError(e))?;
+            .map_err(Error::SignalError)?;
 
         while !self.exit {
             for signal in signals.wait() {

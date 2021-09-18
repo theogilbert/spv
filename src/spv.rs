@@ -116,7 +116,7 @@ impl SpvApplication {
         Ok(())
     }
 
-    fn extract_processes_pids(processes: &Vec<ProcessMetadata>) -> Vec<u32> {
+    fn extract_processes_pids(processes: &[ProcessMetadata]) -> Vec<u32> {
         processes.iter()
             .map(|p| p.pid())
             .collect()
@@ -124,7 +124,7 @@ impl SpvApplication {
 
     fn collect_processes(&mut self) -> Result<Vec<ProcessMetadata>, Error> {
         self.process_view.processes()
-            .map_err(|e| Error::CoreError(e))
+            .map_err(Error::CoreError)
     }
 
     fn probe_metrics(probe: &mut Box<dyn Probe>, pids: &[Pid], archive: &mut Archive) -> Result<(), Error> {
@@ -141,6 +141,6 @@ impl SpvApplication {
 
     fn draw_ui(&mut self) -> Result<(), Error> {
         self.ui.render(&self.metrics_archive)
-            .map_err(|e| Error::UiError(e))
+            .map_err(Error::UiError)
     }
 }

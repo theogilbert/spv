@@ -12,7 +12,7 @@ pub type TuiBackend = TermionBackend<RawTerminal<Stdout>>;
 
 
 pub struct Terminal {
-    tui_terminal: TuiTerminal<TuiBackend>
+    tui_terminal: TuiTerminal<TuiBackend>,
 }
 
 impl Terminal {
@@ -39,7 +39,7 @@ impl Terminal {
         where F: FnOnce(&mut Frame<TuiBackend>),
     {
         self.tui_terminal.draw(f)
-            .map_err(|e| Error::IOError(e))
+            .map_err(Error::IOError)
     }
 }
 

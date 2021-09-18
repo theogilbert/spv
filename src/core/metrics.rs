@@ -156,7 +156,7 @@ impl Metric {
             return "0".to_string();
         }
 
-        const METRIC_PREFIXES: [&'static str; 4] = ["", "k", "M", "G"];
+        const METRIC_PREFIXES: [&str; 4] = ["", "k", "M", "G"];
 
         let log = (bytes_val as f64).log(1024.)
             .max(0.).floor() as usize;
@@ -378,7 +378,7 @@ impl Archive {
 
     /// Returns the expected step between each metric
     pub fn step(&self) -> Duration {
-        self.resolution.clone()
+        self.resolution
     }
 
     /// Indicates how many metrics should be returned by history() with the given span, according

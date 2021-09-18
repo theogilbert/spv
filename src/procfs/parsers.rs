@@ -130,7 +130,7 @@ impl<R, D> DataReader<R, D> where R: Read + Seek, D: Data + Sized {
 
 /// Parses space-separated token from a given multi-line string slice
 pub struct TokenParser<'a> {
-    lines: Vec<Vec<&'a str>>
+    lines: Vec<Vec<&'a str>>,
 }
 
 impl<'a> TokenParser<'a> {
@@ -156,7 +156,7 @@ impl<'a> TokenParser<'a> {
     ///  * `pos`: The position of the token in the line (e.g. 1 for token 'b' in line 'a b c')
     fn token<T>(&self, line_no: usize, pos: usize) -> Result<T, ProcfsError>
         where T: std::str::FromStr {
-        Ok(self.lines.get(line_no)
+        self.lines.get(line_no)
             .ok_or({
                 let err_msg = format!("Could not get data at line {} and position {}",
                                       line_no, pos);
@@ -173,7 +173,7 @@ impl<'a> TokenParser<'a> {
                 let err_msg = format!("The token at line {} and position {} \
                                                 could not be parsed", line_no, pos);
                 Err(ProcfsError::InvalidFileContent(err_msg))
-            })?)
+            })
     }
 }
 
