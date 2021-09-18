@@ -27,41 +27,59 @@ impl MetricsChart {
         }
     }
 
+    pub fn render(&self, frame: &mut Frame<TuiBackend>, chunk: Rect,
+                  process: &ProcessMetadata, archive: &Archive, current_label: &str) {
+        let history = self.metrics_history(archive, process, current_label);
+        let data_frame = DataFrame::new(history,
+                                        archive.default_metric(current_label).unwrap(),
+                                        archive.step());
+
+        let chart = Chart::new(data_frame.datasets())
+            .block(Block::default().borders(Borders::ALL))
+            .x_axis(self.define_x_axis())
+            .y_axis(self.define_y_axis(archive, &data_frame, current_label));
+
+        frame.render_widget(chart, chunk);
+    }
+
     fn metrics_history<'a>(&self, archive: &'a Archive, process: &ProcessMetadata, current_label: &str) -> &'a [Metric] {
         archive.history(current_label, process.pid(), self.span)
             .expect("Error getting history of process")
     }
 
+    fn define_x_axis(&self) -> Axis {
+        let labels = [&self.axis_origin_label, "-0m"].iter()
+            .cloned()
+            .map(Span::from)
+            .collect();
+
+        Axis::default()
+            .style(Style::default().fg(Color::White))
+            .bounds([0. - self.span.as_secs_f64(), 0.0])
+            .labels(labels)
+    }
+
+    fn define_y_axis(&self, archive: &Archive, data_frame: &DataFrame, current_label: &str) -> Axis {
+        const MINIMUM_UPPER_BOUND: f64 = 10.;
+        let upper_bound = (1.1 * data_frame.max_value()).max(MINIMUM_UPPER_BOUND);
+
+        Axis::default()
+            .title(self.get_label_unit(archive, current_label))
+            .style(Style::default().fg(Color::White))
+            .bounds([0., upper_bound]) // 0 to 1.1 * max(dataset.y)
+            .labels(MetricsChart::build_y_axis_labels(upper_bound))
+    }
+
+    fn build_y_axis_labels<'a>(upper_bound: f64) -> Vec<Span<'a>> {
+        return vec! {
+            Span::from("0.0"),
+            Span::from((upper_bound as i32).to_string())
+        };
+    }
+
     fn get_label_unit(&self, archive: &Archive, current_label: &str) -> &'static str {
         archive.label_unit(current_label)
             .expect("Error while getting label unit")
-    }
-
-    pub fn render(&self, frame: &mut Frame<TuiBackend>, chunk: Rect,
-                  process_opt: Option<&ProcessMetadata>, archive: &Archive, current_label: &str) {
-        if let Some(process) = process_opt {
-            let history = self.metrics_history(archive, process, current_label);
-            let data_frame = DataFrame::new(history,
-                                            archive.default_metric(current_label).unwrap(),
-                                            archive.step());
-
-            let max_repr = data_frame.max_repr();
-
-            let chart = Chart::new(data_frame.datasets())
-                .block(Block::default()
-                    .borders(Borders::ALL))
-                .x_axis(Axis::default()
-                    .style(Style::default().fg(Color::White))
-                    .bounds([0. - self.span.as_secs_f64(), 0.0])
-                    .labels([&self.axis_origin_label, "-0m"].iter().cloned().map(Span::from).collect()))
-                .y_axis(Axis::default()
-                    .title(self.get_label_unit(archive, current_label))
-                    .style(Style::default().fg(Color::White))
-                    .bounds([0., 1.1 * data_frame.max_value()]) // 0 to 1.1 * max(dataset.y)
-                    .labels(["0.0", &max_repr].iter().cloned().map(Span::from).collect()));
-
-            frame.render_widget(chart, chunk);
-        }
     }
 }
 
@@ -145,11 +163,6 @@ impl<'a> DataFrame<'a> {
             .max_by(|m1, m2| m1.partial_cmp(m2).unwrap_or(Ordering::Equal))
             .unwrap()
     }
-
-    pub fn max_repr(&self) -> String {
-        self.max_metric()
-            .concise_repr()
-    }
 }
 
 
@@ -164,7 +177,7 @@ mod test_data_frame {
     fn test_max_metric() {
         let metrics = vec![
             Metric::IO { input: 20, output: 40 },
-            Metric::IO { input: 5, output: 50 }
+            Metric::IO { input: 5, output: 50 },
         ];
         let df = DataFrame::new(&metrics,
                                 Metric::IO { input: 0, output: 0 },

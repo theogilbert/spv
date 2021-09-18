@@ -60,8 +60,11 @@ impl SpvUI {
 
             tabs.render(&mut frame, layout.tabs_chunk());
             process_list.render(&mut frame, layout.processes_chunk(), metrics, tabs.current());
-            chart.render(&mut frame, layout.chart_chunk(), process_list.selected(), metrics,
-                         tabs.current());
+
+            if let Some(process) = process_list.selected() {
+                chart.render(&mut frame, layout.chart_chunk(), process, metrics,
+                             tabs.current());
+            }
             metadata_bar.render(&mut frame, layout.metadata_chunk());
         })
     }
