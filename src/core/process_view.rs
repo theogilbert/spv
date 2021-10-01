@@ -1,11 +1,8 @@
 //! Process discovery
 
-use std::cmp::Ordering;
-
 use log::warn;
 
 use crate::core::Error;
-use crate::core::metrics::{Archive, Metric};
 
 /// On Linux 64 bits, the maximum value for a PID is 4194304, hence u32
 pub type Pid = u32; // TODO add new type UPID (Unique PID) through the entire execution of spv
@@ -43,7 +40,7 @@ impl ProcessMetadata {
 
 /// Lists the running processes
 pub struct ProcessView {
-    scanner: Box<dyn ProcessScanner>
+    scanner: Box<dyn ProcessScanner>,
 }
 
 impl ProcessView {
@@ -65,31 +62,6 @@ impl ProcessView {
                 }
             })
             .collect())
-    }
-
-    pub fn sort_processes(processes: &mut Vec<ProcessMetadata>, archive: &Archive,
-                          label: &str) {
-        processes.sort_by(|pm_a, pm_b| {
-            let metric_b = Self::current_metric(pm_b, archive, label)
-                .expect("Error getting current metric"); // TODO replace with clean error
-
-            let metric_a = Self::current_metric(pm_a, archive, label)
-                .expect("Error getting current metric");
-
-            let mut ordering = metric_a.partial_cmp(metric_b)
-                .unwrap_or(Ordering::Greater)
-                .reverse();
-
-            if ordering == Ordering::Equal {
-                ordering = pm_a.pid.cmp(&pm_b.pid);
-            }
-
-            ordering
-        });
-    }
-
-    fn current_metric<'a>(process: &ProcessMetadata, archive: &'a Archive, label: &str) -> Result<&'a Metric, Error> {
-        archive.last(label, process.pid())
     }
 }
 

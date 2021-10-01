@@ -3,8 +3,8 @@ use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 
-use crate::core::metrics::Archive;
 use crate::core::process_view::{Pid, ProcessMetadata};
+use crate::core::view::MetricsOverview;
 use crate::ui::terminal::TuiBackend;
 
 /// Width of the process name column
@@ -38,8 +38,7 @@ impl ProcessList {
     ///   * `chunk`: The region within the `frame` reserved for this widget
     ///   * `archive`: The metrics archive, to display the current metric of each process
     ///   * `label`: The name of the metric to display
-    pub fn render(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect, archive: &Archive,
-                  label: &str) {
+    pub fn render(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect, metrics_overview: &MetricsOverview) {
         let rows_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(2), Constraint::Min(1)])
@@ -47,9 +46,9 @@ impl ProcessList {
 
         let (proc_chunk, metric_chunk) = Self::split_column_chunks(rows_chunks[1]);
 
-        Self::render_title_row(frame, rows_chunks[0], archive, label);
+        Self::render_title_row(frame, rows_chunks[0], metrics_overview.unit());
         self.render_name_column(frame, proc_chunk);
-        self.render_metric_column(frame, metric_chunk, archive, label);
+        self.render_metric_column(frame, metric_chunk, metrics_overview);
     }
 
     /// Define the processes to render in the process list
@@ -140,14 +139,14 @@ impl ProcessList {
         (columns_chunks[0], columns_chunks[1])
     }
 
-    fn render_title_row(frame: &mut Frame<TuiBackend>, chunk: Rect, archive: &Archive, label: &str) {
+    fn render_title_row(frame: &mut Frame<TuiBackend>, chunk: Rect, metric_unit: &'static str) {
         let (proc_chunk, metric_chunk) = Self::split_column_chunks(chunk);
 
         let proc_paragraph = Paragraph::new("Process name")
             .block(Block::default().borders(Borders::LEFT | Borders::TOP))
             .alignment(Alignment::Center);
 
-        let metric_text = format!("{} ", archive.label_unit(label).unwrap());
+        let metric_text = format!("{} ", metric_unit);
         let metric_title = Paragraph::new(metric_text)
             .block(Block::default().borders(Borders::TOP))
             .alignment(Alignment::Right);
@@ -183,9 +182,9 @@ impl ProcessList {
         }
     }
 
-    fn render_metric_column(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect, archive: &Archive, label: &str) {
+    fn render_metric_column(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect, metrics_overview: &MetricsOverview) {
         let str_metrics: Vec<String> = self.processes.iter()
-            .map(|pm| self.formatted_process_metric(pm, archive, label))
+            .map(|pm| self.formatted_process_metric(pm, metrics_overview))
             .collect();
 
         let items: Vec<ListItem> = str_metrics.iter()
@@ -198,10 +197,8 @@ impl ProcessList {
         frame.render_stateful_widget(list, chunk, &mut self.state);
     }
 
-    fn formatted_process_metric(&self, process: &ProcessMetadata, metrics: &Archive,
-                                label: &str) -> String {
-        let m = metrics.last(label, process.pid())
-            .expect("Error getting current metric");
+    fn formatted_process_metric(&self, process: &ProcessMetadata, metrics_overview: &MetricsOverview) -> String {
+        let m = metrics_overview.last_or_default(process.pid());
         self.justify_metric_repr(m.concise_repr())
     }
 

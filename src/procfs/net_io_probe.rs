@@ -6,7 +6,8 @@ use netinfo::{InoutType, Netinfo, NetStatistics, Pid};
 use thiserror::Error;
 
 use crate::core::Error;
-use crate::core::metrics::{Metric, Probe};
+use crate::core::metrics::IOMetric;
+use crate::core::probe::Probe;
 use crate::procfs::rates::{ProcessesRates, PushMode};
 
 const RATE_RETENTION: Duration = Duration::from_secs(5);
@@ -28,11 +29,14 @@ impl NetinfoError {
     /// Convert any trait object of std::error::Error to a `NetinfoError`
     /// We do not implement From<&dyn StdError> -> Self for this because it conflicts with From<T> -> T
     fn from_std_error(e: &dyn StdError) -> Self {
-        let source = match e.source().take() {
-            None => None,
-            Some(src) => Some(Box::new(Self::from_std_error(src)))
-        };
+        let source = e.source().take()
+            .map(|src| Box::new(Self::from_std_error(src)));
+
         NetinfoError { source, msg: e.to_string() }
+    }
+
+    fn from_string(msg: String) -> Self {
+        NetinfoError { source: None, msg }
     }
 }
 
@@ -48,48 +52,48 @@ impl NetIoProbe {
     pub fn new() -> Result<Self, Error> {
         let net_ifs = Netinfo::list_net_interfaces()
             .map_err(|e| NetinfoError::from_std_error(&e))
-            .map_err(|e| Error::ProbingError(format!("Error listing net interfaces"),
+            .map_err(|e| Error::ProbingError("Error listing net interfaces".to_string(),
                                              e.into()))?;
         let mut net_info = Netinfo::new(&net_ifs)
             .map_err(|e| NetinfoError::from_std_error(&e))
-            .map_err(|e| Error::ProbingError(format!("Could not initialize NetInfo"),
+            .map_err(|e| Error::ProbingError("Could not initialize NetInfo".to_string(),
                                              e.into()))?;
 
         net_info.set_min_refresh_interval(Some(Duration::from_millis(100)))
             .map_err(|e| NetinfoError::from_std_error(&e))
-            .map_err(|e| Error::ProbingError("Could not configure net IO thread".into(),
+            .map_err(|e| Error::ProbingError("Could not configure net IO thread".to_string(),
                                              e.into()))?;
         net_info.start() // stop() is automatically called on drop()
             .map_err(|e| NetinfoError::from_std_error(&e))
-            .map_err(|e| Error::ProbingError("Could not start net IO thread".into(),
+            .map_err(|e| Error::ProbingError("Could not start net IO thread".to_string(),
                                              e.into()))?;
 
         Ok(NetIoProbe {
             net_info,
-            input_processes_rates: ProcessesRates::new(PushMode::INCREMENT, RATE_RETENTION),
-            output_processes_rates: ProcessesRates::new(PushMode::INCREMENT, RATE_RETENTION),
+            input_processes_rates: ProcessesRates::new(PushMode::Increment, RATE_RETENTION),
+            output_processes_rates: ProcessesRates::new(PushMode::Increment, RATE_RETENTION),
             net_stats: None,
         })
     }
 }
 
-impl Probe for NetIoProbe {
+impl Probe<IOMetric> for NetIoProbe {
     fn name(&self) -> &'static str {
         "Net I/O"
     }
 
-    fn default_metric(&self) -> Metric {
-        Metric::IO { input: 0, output: 0 }
+    fn default_metric(&self) -> IOMetric {
+        IOMetric::new(0, 0)
     }
 
     fn init_iteration(&mut self) -> Result<(), Error> {
         let net_stats = self.net_info.get_net_statistics()
             .map_err(|e| NetinfoError::from_std_error(&e))
-            .map_err(|e| Error::ProbingError(format!("Error getting net statistics"),
+            .map_err(|e| Error::ProbingError("Error getting net statistics".to_string(),
                                              e.into()))?;
         self.net_info.clear()
             .map_err(|e| NetinfoError::from_std_error(&e))
-            .map_err(|e| Error::ProbingError(format!("Error clearing net io cache"),
+            .map_err(|e| Error::ProbingError("Error clearing net io cache".to_string(),
                                              e.into()))?;
 
         self.net_stats = Some(net_stats);
@@ -107,7 +111,7 @@ impl Probe for NetIoProbe {
         Ok(())
     }
 
-    fn probe(&mut self, pid: u32) -> Result<Metric, Error> {
+    fn probe(&mut self, pid: u32) -> Result<IOMetric, Error> {
         if let Some(net_stats) = &self.net_stats {
             let input = net_stats.get_bytes_by_attr(Some(pid as Pid),
                                                     Some(InoutType::Incoming),
@@ -126,10 +130,12 @@ impl Probe for NetIoProbe {
                 .map_err(|e| Error::ProbingError("Error calculating output rate".into(),
                                                  e.into()))?;
 
-            Ok(Metric::IO { input: input_rate as usize, output: output_rate as usize })
+            Ok(IOMetric::new(input_rate as usize, output_rate as usize))
         } else {
-            error!("Cannot probe net I/O: Net stats are not set.");
-            Ok(self.default_metric())
+            let error_msg = "Cannot probe net I/O: Net stats are not set.".to_string();
+
+            Err(Error::ProbingError("Error listing net interfaces".to_string(),
+                                    NetinfoError::from_string(error_msg).into()))
         }
     }
 }

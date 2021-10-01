@@ -19,8 +19,8 @@ struct DatedValue
 }
 
 pub enum PushMode {
-    ACCUMULATIVE,
-    INCREMENT,
+    Accumulative,
+    Increment,
 }
 
 /// Keeps tracks of dated accumulative values of processes to calculate their rate
@@ -53,8 +53,8 @@ impl ProcessesRates {
         };
 
         let new_value = match self.mode {
-            PushMode::ACCUMULATIVE => value,
-            PushMode::INCREMENT => {
+            PushMode::Accumulative => value,
+            PushMode::Increment => {
                 existing_values.back()
                     .map(|dv| dv.value)
                     .unwrap_or(0)
@@ -76,7 +76,7 @@ impl ProcessesRates {
         let last_outdated = values.iter()
             .filter(|dv| dv.date < now - data_retention)
             .max_by(|dv_1, dv_2| dv_1.date.cmp(&dv_2.date))
-            .map(|dv| dv.clone());
+            .cloned();
 
         values.retain(|dv| (now - dv.date) <= data_retention);
 
@@ -162,7 +162,7 @@ mod test_process_rates {
     #[fixture]
     fn process_rates() -> ProcessesRates {
         FakeClock::set_time(10000);
-        ProcessesRates::new(PushMode::ACCUMULATIVE,
+        ProcessesRates::new(PushMode::Accumulative,
                             Duration::from_secs(1))
     }
 

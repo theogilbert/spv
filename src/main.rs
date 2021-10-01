@@ -4,15 +4,16 @@ use std::time::Duration;
 
 use log::error;
 use log::LevelFilter;
-use simplelog::{Config, ConfigBuilder, WriteLogger};
+use simplelog::{ConfigBuilder, WriteLogger};
 
+use spv::core::collection::{MetricCollector, ProbeCollector};
+use spv::core::process_view::ProcessView;
+use spv::Error;
+use spv::procfs::cpu_probe::CpuProbe;
 #[cfg(feature = "netio")]
 use spv::procfs::net_io_probe::NetIoProbe;
-use spv::core::metrics::Probe;
-use spv::core::process_view::ProcessView;
-use spv::procfs::cpu_probe::CpuProbe;
 use spv::procfs::process::ProcfsScanner;
-use spv::spv::{SpvApplication, SpvContext};
+use spv::spv::SpvApplication;
 use spv::triggers::TriggersEmitter;
 
 fn main() -> anyhow::Result<()> {
@@ -24,19 +25,12 @@ fn main() -> anyhow::Result<()> {
     let refresh_period = Duration::from_secs(1);
     TriggersEmitter::launch_async(tx, refresh_period);
 
-    let app_context = build_spv_context();
+    let process_scanner = ProcfsScanner::new();
+    let process_view = ProcessView::new(Box::new(process_scanner));
 
-    // TODO make this cleaner
-    let mut probes = vec![
-        Box::new(CpuProbe::new()?) as Box<dyn Probe>
-    ];
+    let collectors = build_collectors()?;
 
-    #[cfg(feature = "netio")]
-        {
-            probes.push(Box::new(NetIoProbe::new()?) as Box<dyn Probe>);
-        }
-
-    let app = SpvApplication::new(rx, probes, app_context, refresh_period)?;
+    let app = SpvApplication::new(rx, collectors, process_view, refresh_period)?;
     app.run()?;
 
     Ok(())
@@ -69,9 +63,20 @@ fn init_logging() {
 }
 
 
-fn build_spv_context() -> SpvContext {
-    let process_scanner = ProcfsScanner::new();
-    let process_view = ProcessView::new(Box::new(process_scanner));
+fn build_collectors() -> Result<Vec<Box<dyn MetricCollector>>, Error> {
+    let cpu_probe = CpuProbe::new().map_err(Error::CoreError)?;
+    let cpu_collector = ProbeCollector::new(cpu_probe);
 
-    SpvContext::new(process_view)
+    let mut collectors = vec![
+        Box::new(cpu_collector) as Box<dyn MetricCollector>
+    ];
+
+    #[cfg(feature = "netio")]
+        {
+            let netio_probe = NetIoProbe::new().map_err(Error::CoreError)?;
+            let net_collector = ProbeCollector::new(netio_probe);
+            collectors.push(Box::new(net_collector) as Box<dyn MetricCollector>);
+        }
+
+    Ok(collectors)
 }

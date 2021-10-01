@@ -1,67 +1,50 @@
+use std::collections::HashMap;
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
-use crate::core::metrics::{Archive, ArchiveBuilder, Probe};
-use crate::core::process_view::{Pid, ProcessMetadata, ProcessView};
+use log::warn;
+
+use crate::core::collection::MetricCollector;
+use crate::core::process_view::{ProcessMetadata, ProcessView};
 use crate::Error;
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
 
-pub struct SpvContext {
-    process_view: ProcessView
-}
-
-impl SpvContext {
-    pub fn new(process_view: ProcessView) -> Self {
-        Self { process_view }
-    }
-
-    pub fn unpack(self) -> ProcessView {
-        self.process_view
-    }
-}
-
-
 pub struct SpvApplication {
     receiver: Receiver<Trigger>,
     process_view: ProcessView,
-    metrics_archive: Archive,
     ui: SpvUI,
-    probes: Vec<Box<dyn Probe>>,
+    collectors: HashMap<String, Box<dyn MetricCollector>>,
+    resolution: Duration,
 }
 
 
 impl SpvApplication {
-    pub fn new(receiver: Receiver<Trigger>, probes: Vec<Box<dyn Probe>>, context: SpvContext, refresh_period: Duration) -> Result<Self, Error> {
-        let mut builder = ArchiveBuilder::new();
-
-        for p in probes.iter() {
-            builder = builder.new_metric(p.name().to_string(), p.default_metric())?;
-        }
-
-        let archive = builder
-            .resolution(refresh_period)
-            .build();
-
-        let ui = SpvUI::new(probes.iter()
+    pub fn new(receiver: Receiver<Trigger>, collectors: Vec<Box<dyn MetricCollector>>,
+               process_view: ProcessView, step: Duration) -> Result<Self, Error> {
+        let ui = SpvUI::new(collectors.iter()
             .map(|p| p.name().to_string()))?;
+
+        let collectors_map = collectors.into_iter()
+            .map(|mc| (mc.name().to_string(), mc))
+            .collect();
 
         let mut spv_app = Self {
             receiver,
-            process_view: context.unpack(),
-            metrics_archive: archive,
+            process_view,
             ui,
-            probes,
+            collectors: collectors_map,
+            resolution: step,
         };
 
         spv_app.calibrate_probes()?;
-        spv_app.dispatch_probes()?;
+        spv_app.collect_metrics()?;
 
         Ok(spv_app)
     }
 
     pub fn run(mut self) -> Result<(), Error> {
-        self.dispatch_probes()?;
+        self.collect_metrics()?;
 
         loop {
             let trigger = self.receiver.recv()?;
@@ -69,7 +52,7 @@ impl SpvApplication {
             match trigger {
                 Trigger::Exit => break,
                 Trigger::Impulse => {
-                    self.dispatch_probes()?
+                    self.collect_metrics()?
                 }
                 Trigger::NextProcess => self.ui.next_process(),
                 Trigger::PreviousProcess => self.ui.previous_process(),
@@ -90,36 +73,32 @@ impl SpvApplication {
         let processes = self.collect_processes()?;
         let pids = SpvApplication::extract_processes_pids(&processes);
 
-        for p in &mut self.probes {
-            p.probe_processes(&pids)?;
+        for c in self.collectors.values_mut() {
+            c.calibrate(&pids)?;
         }
 
         Ok(())
     }
 
-    fn dispatch_probes(&mut self) -> Result<(), Error> {
+    fn collect_metrics(&mut self) -> Result<(), Error> {
         let mut processes = self.collect_processes()?;
         let pids = SpvApplication::extract_processes_pids(&processes);
 
-        let probes = &mut self.probes;
-        let archive = &mut self.metrics_archive;
-        for p in probes {
-            Self::probe_metrics(p, &pids, archive)?;
+        for collector in self.collectors.values_mut() {
+            collector.collect(&pids)
+                .unwrap_or_else(|e| {
+                    warn!("Error reading from collector {}: {}", collector.name(), e);
+                });
         }
 
-        // TODO processes should be its own type of object, with a sort() method instead..
-        //  Or should it ?
-        ProcessView::sort_processes(&mut processes, &self.metrics_archive,
-                                    self.ui.current_tab());
+        processes.sort_by(|pm1, pm2| {
+            self.current_collector(&self.collectors)
+                .compare_pids_by_last_metrics(pm1.pid(), pm2.pid())
+                .reverse()
+        });
         self.ui.set_processes(processes);
 
         Ok(())
-    }
-
-    fn extract_processes_pids(processes: &[ProcessMetadata]) -> Vec<u32> {
-        processes.iter()
-            .map(|p| p.pid())
-            .collect()
     }
 
     fn collect_processes(&mut self) -> Result<Vec<ProcessMetadata>, Error> {
@@ -127,20 +106,27 @@ impl SpvApplication {
             .map_err(Error::CoreError)
     }
 
-    fn probe_metrics(probe: &mut Box<dyn Probe>, pids: &[Pid], archive: &mut Archive) -> Result<(), Error> {
-        let metrics = probe.probe_processes(pids)?;
-
-        let metric_label = probe.name();
-        for (pid, m) in metrics.into_iter() {
-            archive.push(metric_label, pid, m)
-                .unwrap_or_else(|e| panic!("Error pushing {} metric for PID {}: {:?}", metric_label, pid, e))
-        }
-
-        Ok(())
+    fn extract_processes_pids(processes: &[ProcessMetadata]) -> Vec<u32> {
+        processes.iter()
+            .map(|pm| pm.pid())
+            .collect()
     }
 
     fn draw_ui(&mut self) -> Result<(), Error> {
-        self.ui.render(&self.metrics_archive)
+        let selected_pid = self.ui.current_process()
+            .map_or(0, |pm| pm.pid());
+
+        let current_collector = self.current_collector(&self.collectors);
+
+        self.ui.render(&current_collector.overview(),
+                       &current_collector.view(selected_pid, self.resolution))
             .map_err(Error::UiError)
+    }
+
+    fn current_collector<'a>(&self, collectors: &'a HashMap<String, Box<dyn MetricCollector>>) -> &'a Box<dyn MetricCollector> {
+        // The collectors attribute has to be passed as parameters. Otherwise the compiler thinks that
+        // this function borrows the whole &self reference immutably (preventing further mutable borrowing)
+        collectors.get(self.ui.current_tab())
+            .expect("No collector is selected")
     }
 }

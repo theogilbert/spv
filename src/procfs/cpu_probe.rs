@@ -3,11 +3,11 @@
 use std::collections::HashMap;
 
 use crate::core::Error;
-use crate::core::metrics::{Metric, Probe};
+use crate::core::metrics::PercentMetric;
+use crate::core::probe::Probe;
 use crate::core::process_view::Pid;
 use crate::procfs::parsers;
 use crate::procfs::parsers::{PidStat, ProcessDataReader, ReadProcessData, ReadSystemData, Stat, SystemDataReader};
-
 
 // TODO When a process CPU usage is low, some iterations will detect a CPU usage of 0%, causing a
 //   fluctuating value between each iterations. Fix this, maybe by averaging reported values over
@@ -41,13 +41,13 @@ impl CpuProbe {
     }
 }
 
-impl Probe for CpuProbe {
+impl Probe<PercentMetric> for CpuProbe {
     fn name(&self) -> &'static str {
         "CPU usage"
     }
 
-    fn default_metric(&self) -> Metric {
-        Metric::PercentUsage(f64::NAN)
+    fn default_metric(&self) -> PercentMetric {
+        PercentMetric::new(0.)
     }
 
     fn init_iteration(&mut self) -> Result<(), Error> {
@@ -62,7 +62,7 @@ impl Probe for CpuProbe {
         Ok(())
     }
 
-    fn probe(&mut self, pid: Pid) -> Result<Metric, Error> {
+    fn probe(&mut self, pid: Pid) -> Result<PercentMetric, Error> {
         let pid_stat = self.pid_stat_reader
             .read(pid)
             .map_err(|e| {
@@ -71,7 +71,7 @@ impl Probe for CpuProbe {
             })?;
 
         let percent = self.calculator.calculate_pid_usage(pid, pid_stat);
-        Ok(Metric::PercentUsage(percent))
+        Ok(PercentMetric::new(percent))
     }
 }
 
@@ -138,7 +138,8 @@ mod test_cpu_probe {
     use std::collections::{HashMap, VecDeque};
     use std::io;
 
-    use crate::core::metrics::{Metric, Probe};
+    use crate::core::metrics::{Metric, PercentMetric, Probe};
+    use crate::core::probe::Probe;
     use crate::core::process_view::Pid;
     use crate::procfs::cpu_probe::common_test_utils::{create_pid_stat, create_stat};
     use crate::procfs::cpu_probe::CpuProbe;
@@ -146,7 +147,7 @@ mod test_cpu_probe {
     use crate::procfs::ProcfsError;
 
     struct MemoryPidStatReader {
-        pid_stats_seq: HashMap<Pid, VecDeque<Result<PidStat, ProcfsError>>>
+        pid_stats_seq: HashMap<Pid, VecDeque<Result<PidStat, ProcfsError>>>,
     }
 
     impl ReadProcessData<PidStat> for MemoryPidStatReader {
@@ -159,7 +160,7 @@ mod test_cpu_probe {
     }
 
     struct InMemoryStatReader {
-        stat_seq: Vec<Stat>
+        stat_seq: Vec<Stat>,
     }
 
     impl ReadSystemData<Stat> for InMemoryStatReader {
@@ -179,7 +180,7 @@ mod test_cpu_probe {
                                                Box::new(pid_stat_reader))
             .expect("Could not create procfs");
 
-        let empty_map: HashMap<Pid, Metric> = HashMap::new();
+        let empty_map: HashMap<Pid, PercentMetric> = HashMap::new();
         assert!(matches!(probe.probe_processes(&vec![]), Ok(empty_map)));
     }
 
@@ -202,7 +203,7 @@ mod test_cpu_probe {
         probe.probe_processes(&vec![1]); // First calibration probing
 
         assert_eq!(probe.probe_processes(&vec![1]).unwrap(),
-                   hashmap!(1 => Metric::PercentUsage(50.)));
+                   hashmap!(1 => PercentMetric::new(50.)));
     }
 
 
@@ -225,8 +226,7 @@ mod test_cpu_probe {
 
         let metrics = probe.probe_processes(&vec!(1, 2)).unwrap();
         assert_eq!(metrics,
-                   hashmap!(1 => Metric::PercentUsage(25.),
-                   2 => Metric::PercentUsage(25.)));
+                   hashmap!(1 => PercentMetric::new(25.), 2 => PercentMetric::new(25.)));
     }
 
 
@@ -247,7 +247,7 @@ mod test_cpu_probe {
                                                Box::new(pid_stat_reader))
             .expect("Could not create procfs");
 
-        let map = hashmap!(1 => Metric::PercentUsage(25.));
+        let map = hashmap!(1 => PercentMetric::new(25.));
         assert!(matches!(probe.probe_processes(&vec![1, 2]), Ok(map)));
     }
 }

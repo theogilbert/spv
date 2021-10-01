@@ -1,10 +1,10 @@
-use std::time::Duration;
 use std::io;
+use std::time::Duration;
 
 use thiserror::Error;
 
-use crate::core::metrics::Archive;
 use crate::core::process_view::ProcessMetadata;
+use crate::core::view::{MetricsOverview, MetricView};
 use crate::ui::chart::MetricsChart;
 use crate::ui::layout::UiLayout;
 use crate::ui::metadata::MetadataBar;
@@ -47,7 +47,7 @@ impl SpvUI {
         })
     }
 
-    pub fn render(&mut self, metrics: &Archive) -> Result<(), Error> {
+    pub fn render(&mut self, metrics_overview: &MetricsOverview, metrics_view: &MetricView) -> Result<(), Error> {
         // We need to do this because the borrow checker does not like having &self.foo in a closure
         // while borrowing &mut self.terminal
         let tabs = &self.tabs;
@@ -59,12 +59,9 @@ impl SpvUI {
             let layout = UiLayout::new(frame);
 
             tabs.render(&mut frame, layout.tabs_chunk());
-            process_list.render(&mut frame, layout.processes_chunk(), metrics, tabs.current());
 
-            if let Some(process) = process_list.selected() {
-                chart.render(&mut frame, layout.chart_chunk(), process, metrics,
-                             tabs.current());
-            }
+            process_list.render(&mut frame, layout.processes_chunk(), metrics_overview);
+            chart.render(&mut frame, layout.chart_chunk(), metrics_view);
             metadata_bar.render(&mut frame, layout.metadata_chunk());
         })
     }
@@ -82,6 +79,10 @@ impl SpvUI {
     pub fn previous_process(&mut self) {
         self.process_list.previous();
         self.metadata_bar.set_selected_process(self.process_list.selected());
+    }
+
+    pub fn current_process(&self) -> Option<&ProcessMetadata> {
+        self.process_list.selected()
     }
 
     pub fn current_tab(&self) -> &str {

@@ -11,6 +11,7 @@ mod parsers;
 pub mod process;
 
 pub mod cpu_probe;
+// pub mod mem_probe;
 
 #[cfg(feature = "netio")]
 pub mod net_io_probe;
