@@ -13,6 +13,28 @@ pub trait Metric: Debug {
     fn explicit_repr(&self, index: usize) -> Result<String, Error>;
 }
 
+
+#[cfg(test)]
+impl PartialEq for &dyn Metric {
+    // Helper PartialEq impl to make tests more readable
+    fn eq(&self, other: &Self) -> bool {
+        if self.cardinality() != other.cardinality() {
+            return false;
+        } else if self.unit() != other.unit() {
+            return false;
+        }
+
+        for i in 0..self.cardinality() {
+            if self.as_f64(i).unwrap() != other.as_f64(i).unwrap() {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+
 pub trait ClonableMetric: Metric + Clone {}
 
 #[derive(Debug, PartialEq, Copy, Clone)]

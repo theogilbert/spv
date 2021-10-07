@@ -27,7 +27,7 @@ impl MetricsChart {
     }
 
     pub fn render(&self, frame: &mut Frame<TuiBackend>, chunk: Rect, metrics_view: &MetricView) {
-        let data_frame = DataFrame::new(metrics_view);
+        let data_frame = DataFrame::new(metrics_view, self.span);
 
         let chart = Chart::new(data_frame.datasets())
             .block(Block::default().borders(Borders::ALL))
@@ -75,13 +75,15 @@ struct DataFrame<'a> {
     // data has to be persisted as an attr, to be able to return a Dataset which references data
     // from this vec
     data: Vec<Vec<(f64, f64)>>,
+    span: Duration,
 }
 
 impl<'a> DataFrame<'a> {
-    pub fn new(metrics_view: &'a MetricView) -> Self {
+    pub fn new(metrics_view: &'a MetricView, span: Duration) -> Self {
         Self {
             metrics_view,
-            data: Self::extract_raw_from_metrics(metrics_view, metrics_view.resolution()),
+            data: Self::extract_raw_from_metrics(metrics_view, span, metrics_view.resolution()),
+            span,
         }
     }
 
@@ -115,14 +117,15 @@ impl<'a> DataFrame<'a> {
     /// Extract raw data from a collection of metrics
     /// Raw data consists of sets of (f64, f64) tuples, each set corresponding to a drawable
     /// `Dataset`
-    fn extract_raw_from_metrics(metrics_view: &MetricView, step: Duration) -> Vec<Vec<(f64, f64)>> {
+    fn extract_raw_from_metrics(metrics_view: &MetricView, span: Duration,
+                                step: Duration) -> Vec<Vec<(f64, f64)>> {
         let mut data_vecs: Vec<_> = Vec::new();
         let metrics_cardinality = metrics_view
             .last_or_default()
             .cardinality();
 
         for dimension_idx in 0..metrics_cardinality {
-            let data: Vec<_> = metrics_view.as_slice()
+            let data: Vec<_> = metrics_view.extract(span)
                 .iter()
                 .rev()
                 .map(|m| {
@@ -140,7 +143,7 @@ impl<'a> DataFrame<'a> {
     }
 
     pub fn max_value(&self) -> f64 {
-        self.metrics_view.as_slice()
+        self.metrics_view.extract(self.span)
             .iter()
             .map(|m| m.max_value())
             .max_by(|f1, f2| f1.partial_cmp(f2).unwrap_or(Ordering::Equal))
@@ -154,6 +157,7 @@ impl<'a> DataFrame<'a> {
 //     use std::time::Duration;
 //
 //     use crate::core::metrics::Metric;
+//     use crate::core::view::MetricView;
 //     use crate::ui::chart::DataFrame;
 //
 //     #[test]
