@@ -82,10 +82,6 @@ impl Probe<IOMetric> for NetIoProbe {
         "Net I/O"
     }
 
-    fn default_metric(&self) -> IOMetric {
-        IOMetric::new(0, 0)
-    }
-
     fn init_iteration(&mut self) -> Result<(), Error> {
         let net_stats = self.net_info.get_net_statistics()
             .map_err(|e| NetinfoError::from_std_error(&e))

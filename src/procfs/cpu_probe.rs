@@ -46,10 +46,6 @@ impl Probe<PercentMetric> for CpuProbe {
         "CPU usage"
     }
 
-    fn default_metric(&self) -> PercentMetric {
-        PercentMetric::new(0.)
-    }
-
     fn init_iteration(&mut self) -> Result<(), Error> {
         let new_stat: Stat = self.stat_reader
             .read()
@@ -138,7 +134,7 @@ mod test_cpu_probe {
     use std::collections::{HashMap, VecDeque};
     use std::io;
 
-    use crate::core::metrics::{Metric, PercentMetric, Probe};
+    use crate::core::metrics::PercentMetric;
     use crate::core::probe::Probe;
     use crate::core::process_view::Pid;
     use crate::procfs::cpu_probe::common_test_utils::{create_pid_stat, create_stat};

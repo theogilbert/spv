@@ -26,6 +26,10 @@ impl PercentMetric {
     }
 }
 
+impl Default for PercentMetric {
+    fn default() -> Self { PercentMetric::new(0.) }
+}
+
 impl Metric for PercentMetric {
     fn cardinality(&self) -> usize { 1 }
 
@@ -66,6 +70,10 @@ impl IOMetric {
     pub fn new(input: usize, output: usize) -> Self {
         Self { input, output }
     }
+}
+
+impl Default for IOMetric {
+    fn default() -> Self { IOMetric::new(0, 0) }
 }
 
 impl Metric for IOMetric {
