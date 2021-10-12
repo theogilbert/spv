@@ -4,7 +4,7 @@ use std::io;
 
 use thiserror::Error;
 
-use crate::core::process_view::Pid;
+use crate::core::process::Pid;
 
 mod parsers;
 

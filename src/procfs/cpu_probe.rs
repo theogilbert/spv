@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::core::Error;
 use crate::core::metrics::PercentMetric;
 use crate::core::probe::Probe;
-use crate::core::process_view::Pid;
+use crate::core::process::Pid;
 use crate::procfs::parsers;
 use crate::procfs::parsers::{PidStat, ProcessDataReader, ReadProcessData, ReadSystemData, Stat, SystemDataReader};
 
@@ -136,7 +136,7 @@ mod test_cpu_probe {
 
     use crate::core::metrics::PercentMetric;
     use crate::core::probe::Probe;
-    use crate::core::process_view::Pid;
+    use crate::core::process::Pid;
     use crate::procfs::cpu_probe::common_test_utils::{create_pid_stat, create_stat};
     use crate::procfs::cpu_probe::CpuProbe;
     use crate::procfs::parsers::{PidStat, ReadProcessData, ReadSystemData, Stat};

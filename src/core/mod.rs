@@ -4,9 +4,9 @@ use std::io;
 
 use thiserror::Error;
 
-use crate::core::process_view::Pid;
+use crate::core::process::Pid;
 
-pub mod process_view;
+pub mod process;
 pub mod metrics;
 pub mod collection;
 pub mod probe;

@@ -5,14 +5,14 @@ use std::time::Duration;
 use log::warn;
 
 use crate::core::collection::MetricCollector;
-use crate::core::process_view::{ProcessMetadata, ProcessView};
+use crate::core::process::{ProcessMetadata, ProcessCollector};
 use crate::Error;
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
 
 pub struct SpvApplication {
     receiver: Receiver<Trigger>,
-    process_view: ProcessView,
+    process_view: ProcessCollector,
     ui: SpvUI,
     collectors: HashMap<String, Box<dyn MetricCollector>>,
     resolution: Duration,
@@ -21,7 +21,7 @@ pub struct SpvApplication {
 
 impl SpvApplication {
     pub fn new(receiver: Receiver<Trigger>, collectors: Vec<Box<dyn MetricCollector>>,
-               process_view: ProcessView, step: Duration) -> Result<Self, Error> {
+               process_view: ProcessCollector, step: Duration) -> Result<Self, Error> {
         let ui = SpvUI::new(collectors.iter()
             .map(|p| p.name().to_string()))?;
 

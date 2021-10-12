@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 use crate::core::Error as CoreError;
-use crate::core::process_view::{Pid, ProcessMetadata, ProcessScanner};
+use crate::core::process::{Pid, ProcessMetadata, ProcessScanner};
 
 /// Errors internal to the process module
 #[derive(Error, Debug)]

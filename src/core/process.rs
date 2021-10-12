@@ -1,9 +1,11 @@
-//! Running processes discovery
+//! Process discovery utilities
 
 use log::warn;
 
 use crate::core::Error;
 
+/// Represents the unique ID of a running process
+///
 /// On Linux 64 bits, the maximum value for a PID is 4194304, hence u32
 pub type Pid = u32; // TODO add new type UPID (Unique PID) through the entire execution of spv
 
@@ -38,16 +40,17 @@ impl ProcessMetadata {
 }
 
 
-/// Lists the running processes
-pub struct ProcessView {
+/// Collects the running processes
+pub struct ProcessCollector {
     scanner: Box<dyn ProcessScanner>,
 }
 
-impl ProcessView {
+impl ProcessCollector {
     pub fn new(scanner: Box<dyn ProcessScanner>) -> Self {
         Self { scanner }
     }
 
+    /// Returns a Vec of [`ProcessMetadata`](struct.ProcessMetadata), each corresponding to a running process
     pub fn processes(&self) -> Result<Vec<ProcessMetadata>, Error> {
         let pids = self.scanner.scan()?;
 
@@ -76,4 +79,51 @@ pub trait ProcessScanner {
     ///
     /// * `pid`: The process identifier of the currently running process
     fn fetch_metadata(&self, pid: Pid) -> Result<ProcessMetadata, Error>;
+}
+
+#[cfg(test)]
+mod test_process_collector {
+    use crate::core::Error;
+    use crate::core::process::{Pid, ProcessCollector, ProcessMetadata, ProcessScanner};
+
+    struct ScannerStub {
+        scanned_pids: Vec<Pid>,
+    }
+
+    impl ProcessScanner for ScannerStub {
+        fn scan(&self) -> Result<Vec<Pid>, Error> {
+            Ok(self.scanned_pids.clone())
+        }
+
+        fn fetch_metadata(&self, pid: Pid) -> Result<ProcessMetadata, Error> {
+            Ok(ProcessMetadata::new(pid, "command"))
+        }
+    }
+
+    fn build_process_collector(scanned_pids: Vec<Pid>) -> ProcessCollector {
+        let boxed_scanner = Box::new(ScannerStub { scanned_pids });
+        ProcessCollector::new(boxed_scanner)
+    }
+
+    #[test]
+    fn test_should_collect_no_process_when_no_pid_scanned() {
+        let collector = build_process_collector(vec![]);
+        assert_eq!(collector.processes().unwrap(), vec![]);
+    }
+
+    #[test]
+    fn test_should_collect_processes_when_pids_are_scanned() {
+        let scanned_pids = vec![1, 2, 3];
+        let collector = build_process_collector(scanned_pids.clone());
+        let processes = collector.processes().unwrap();
+
+        assert_eq!(processes.len(), 3);
+
+        let mut processes_pids = processes.iter()
+            .map(|pm| pm.pid)
+            .collect::<Vec<Pid>>();
+        processes_pids.sort();
+
+        assert_eq!(processes_pids, scanned_pids);
+    }
 }

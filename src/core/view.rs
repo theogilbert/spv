@@ -5,10 +5,10 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use crate::core::metrics::Metric;
-use crate::core::process_view::Pid;
+use crate::core::process::Pid;
 
 /// Snapshot of all collected metrics of a single process, from a single probe
-/// 
+///
 /// Refer to the [`MetricCollector`](crate::core::collection::MetricCollector) trait to instanciate a `MetricView`
 pub struct MetricView<'a> {
     metrics: Vec<&'a dyn Metric>,
@@ -264,7 +264,7 @@ mod test_metric_overview {
 mod test_helpers {
     use crate::core::collection::MetricCollection;
     use crate::core::metrics::PercentMetric;
-    use crate::core::process_view::Pid;
+    use crate::core::process::Pid;
 
     /// Return collection of PercentMetric containing metrics for `proc_count` processes.<br/>
     /// The Pid values range from `0` to `proc_count - 1`<br/>

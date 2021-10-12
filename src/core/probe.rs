@@ -4,7 +4,7 @@ use log::warn;
 
 use crate::core::Error;
 use crate::core::metrics::Metric;
-use crate::core::process_view::Pid;
+use crate::core::process::Pid;
 
 /// Types which can probe processes for a specific kind of [`Metric`](enum.Metric)
 pub trait Probe<M> where M: Metric + Copy + Default {
@@ -57,7 +57,7 @@ mod test_probe_trait {
     use crate::core::Error;
     use crate::core::metrics::PercentMetric;
     use crate::core::probe::Probe;
-    use crate::core::process_view::Pid;
+    use crate::core::process::Pid;
 
     struct FakeProbe {
         probe_responses: HashMap<Pid, PercentMetric>,

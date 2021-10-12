@@ -8,7 +8,7 @@ use std::time::Instant;
 #[cfg(test)]
 use sn_fake_clock::FakeClock as Instant;
 
-use crate::core::process_view::Pid;
+use crate::core::process::Pid;
 use crate::procfs::ProcfsError;
 
 #[derive(Clone)]

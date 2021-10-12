@@ -6,7 +6,7 @@ use std::time::Duration;
 use crate::core::Error;
 use crate::core::metrics::Metric;
 use crate::core::probe::Probe;
-use crate::core::process_view::Pid;
+use crate::core::process::Pid;
 use crate::core::view::{MetricsOverview, MetricView};
 
 pub trait MetricCollector {

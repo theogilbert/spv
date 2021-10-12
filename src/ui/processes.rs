@@ -3,7 +3,7 @@ use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 
-use crate::core::process_view::{Pid, ProcessMetadata};
+use crate::core::process::{Pid, ProcessMetadata};
 use crate::core::view::MetricsOverview;
 use crate::ui::terminal::TuiBackend;
 

@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use thiserror::Error;
 
-use crate::core::process_view::ProcessMetadata;
+use crate::core::process::ProcessMetadata;
 use crate::core::view::{MetricsOverview, MetricView};
 use crate::ui::chart::MetricsChart;
 use crate::ui::layout::UiLayout;

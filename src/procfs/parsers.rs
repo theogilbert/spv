@@ -5,7 +5,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
-use crate::core::process_view::Pid;
+use crate::core::process::Pid;
 use crate::procfs::ProcfsError;
 
 /// Type which can be parsed from a `TokenParser`

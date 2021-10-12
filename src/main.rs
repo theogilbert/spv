@@ -7,7 +7,7 @@ use log::LevelFilter;
 use simplelog::{ConfigBuilder, WriteLogger};
 
 use spv::core::collection::{MetricCollector, ProbeCollector};
-use spv::core::process_view::ProcessView;
+use spv::core::process::ProcessCollector;
 use spv::Error;
 use spv::procfs::cpu_probe::CpuProbe;
 #[cfg(feature = "netio")]
@@ -26,7 +26,7 @@ fn main() -> anyhow::Result<()> {
     TriggersEmitter::launch_async(tx, refresh_period);
 
     let process_scanner = ProcfsScanner::new();
-    let process_view = ProcessView::new(Box::new(process_scanner));
+    let process_view = ProcessCollector::new(Box::new(process_scanner));
 
     let collectors = build_collectors()?;
 
