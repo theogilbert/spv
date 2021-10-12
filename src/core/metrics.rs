@@ -5,17 +5,19 @@ use std::fmt::Debug;
 
 use crate::core::Error;
 
-/// Set of methods that all concrete `Metric` implementations must implement
+/// Types which are probed by [`Probe`](crate::core::probe::Probe) implementations,
+/// and which represent a measurement of some kind.
 ///
 /// This trait allows applications to handle any type of `Metric` generically.
 pub trait Metric: Debug {
     /// Indicates how many components this metric has
-    /// Instances of a given concrete Metric type must always have the same cardinality
+    ///
+    /// Instances of a given concrete `Metric` type must always return the same cardinality
     fn cardinality(&self) -> usize;
 
     /// Extracts a component of the metric as a float number
     ///
-    /// If `index` is greater than or equal to `cardinality()`, an error is returned instead.
+    /// If `index` is greater than or equal to `cardinality()`, an error is returned instead
     ///
     /// # Arguments
     ///  * index: Indicates the component to extract
@@ -29,6 +31,7 @@ pub trait Metric: Debug {
     fn unit(&self) -> &'static str;
 
     /// Returns a concise representation of the metric
+    ///
     /// This representation may not include all components of the metric
     fn concise_repr(&self) -> String;
 
