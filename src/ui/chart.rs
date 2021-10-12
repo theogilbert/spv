@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use std::time::Duration;
 
 use tui::{Frame, symbols};
@@ -143,42 +142,6 @@ impl<'a> DataFrame<'a> {
     }
 
     pub fn max_value(&self) -> f64 {
-        self.metrics_view.extract(self.span)
-            .iter()
-            .map(|m| m.max_value())
-            .max_by(|f1, f2| f1.partial_cmp(f2).unwrap_or(Ordering::Equal))
-            .unwrap_or(0.)
+        self.metrics_view.max_f64(self.span)
     }
 }
-
-//
-// #[cfg(test)]
-// mod test_data_frame {
-//     use std::time::Duration;
-//
-//     use crate::core::metrics::Metric;
-//     use crate::core::view::MetricView;
-//     use crate::ui::chart::DataFrame;
-//
-//     #[test]
-//     fn test_max_metric() {
-//         let metrics = vec![
-//             Metric::IO { input: 20, output: 40 },
-//             Metric::IO { input: 5, output: 50 },
-//         ];
-//         let df = DataFrame::new(&metrics,
-//                                 Metric::IO { input: 0, output: 0 },
-//                                 Duration::from_secs(1));
-//
-//         assert_eq!(df.max_metric(), &metrics[1]);
-//     }
-//
-//     #[test]
-//     fn test_max_value() {
-//         let df = DataFrame::new(&[Metric::IO { input: 20, output: 50 }],
-//                                 Metric::IO { input: 0, output: 0 },
-//                                 Duration::from_secs(1));
-//
-//         assert_eq!(df.max_value(), 50.);
-//     }
-// }
