@@ -1,3 +1,5 @@
+//! Probe trait definition, used to implement metrics collection
+
 use std::collections::HashMap;
 
 use log::warn;
