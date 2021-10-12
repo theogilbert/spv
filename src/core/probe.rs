@@ -8,7 +8,7 @@ use crate::core::Error;
 use crate::core::metrics::Metric;
 use crate::core::process::Pid;
 
-/// Types which can probe processes for a specific kind of [`Metric`](enum.Metric)
+/// Types which can probe processes for a specific implementation of [`Metric`](crate::core::metrics::Metric)
 pub trait Probe<M> where M: Metric + Copy + Default {
     /// The name of the probe, as displayed in the application tab
     fn name(&self) -> &'static str;
@@ -18,10 +18,10 @@ pub trait Probe<M> where M: Metric + Copy + Default {
         Ok(())
     }
 
-    /// Probe a given process for a [`Metric`](enum.Metric)
+    /// Probe a given process for a [`Metric`](crate::core::metrics::Metric)
     fn probe(&mut self, pid: Pid) -> Result<M, Error>;
 
-    /// Returns a map associating a [`Metric`](enum.Metric) instance to each PID
+    /// Returns a map associating a [`Metric`](crate::core::metrics::Metric) instance to each PID
     ///
     /// If a process is not probed correctly, a default value for the given probe is returned
     /// and a WARNING level log is produced

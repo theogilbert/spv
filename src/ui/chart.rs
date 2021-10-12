@@ -86,8 +86,8 @@ impl<'a> DataFrame<'a> {
         }
     }
 
-    /// Returns datasets built from the [`Metric`](enum.Metric) instances
-    /// Each element in the returned `Vec` corresponds to one dimension
+    /// Returns datasets built from the metric view
+    /// Each dataset in the returned `Vec` corresponds to one dimension of the metrics
     pub fn datasets(&self) -> Vec<Dataset> {
         const COLORS: [Color; 2] = [Color::Blue, Color::Green];
 
