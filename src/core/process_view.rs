@@ -1,4 +1,4 @@
-//! Process discovery
+//! Running processes discovery
 
 use log::warn;
 
