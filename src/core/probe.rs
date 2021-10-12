@@ -23,7 +23,7 @@ pub trait Probe<M> where M: Metric + Copy + Default {
 
     /// Returns a map associating a [`Metric`](crate::core::metrics::Metric) instance to each PID
     ///
-    /// If a process is not probed correctly, a default value for the given probe is returned
+    /// If an error occurs while probing a process, a default metric is returned for this process,
     /// and a WARNING level log is produced
     ///
     /// # Arguments
