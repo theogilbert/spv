@@ -61,8 +61,7 @@ impl PartialEq for &dyn Metric {
 }
 
 
-pub trait ClonableMetric: Metric + Clone {}
-
+/// Metric representing a percent value (e.g. CPU usage)
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct PercentMetric {
     percent_usage: f64,
@@ -131,6 +130,7 @@ mod test_percent_metric {
     }
 }
 
+/// Metric representing input / output bitrates (e.g. network throughput)
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct IOMetric {
     input: usize,
