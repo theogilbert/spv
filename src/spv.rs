@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 use std::sync::mpsc::Receiver;
-use std::time::Duration;
 
 use log::warn;
 
 use crate::core::collection::MetricCollector;
-use crate::core::process::{ProcessMetadata, ProcessCollector};
+use crate::core::process::{ProcessCollector, ProcessMetadata};
 use crate::Error;
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
@@ -15,13 +14,12 @@ pub struct SpvApplication {
     process_view: ProcessCollector,
     ui: SpvUI,
     collectors: HashMap<String, Box<dyn MetricCollector>>,
-    resolution: Duration,
 }
 
 
 impl SpvApplication {
     pub fn new(receiver: Receiver<Trigger>, collectors: Vec<Box<dyn MetricCollector>>,
-               process_view: ProcessCollector, step: Duration) -> Result<Self, Error> {
+               process_view: ProcessCollector) -> Result<Self, Error> {
         let ui = SpvUI::new(collectors.iter()
             .map(|p| p.name().to_string()))?;
 
@@ -34,7 +32,6 @@ impl SpvApplication {
             process_view,
             ui,
             collectors: collectors_map,
-            resolution: step,
         };
 
         spv_app.calibrate_probes()?;
@@ -119,7 +116,7 @@ impl SpvApplication {
         let current_collector = self.current_collector(&self.collectors);
 
         self.ui.render(&current_collector.overview(),
-                       &current_collector.view(selected_pid, self.resolution))
+                       &current_collector.view(selected_pid))
             .map_err(Error::UiError)
     }
 
