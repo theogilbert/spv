@@ -196,7 +196,7 @@ mod test_cpu_probe {
                                                Box::new(pid_stat_reader))
             .expect("Could not create procfs");
 
-        probe.probe_processes(&vec![1]); // First calibration probing
+        probe.probe_processes(&vec![1]).unwrap(); // First calibration probing
 
         assert_eq!(probe.probe_processes(&vec![1]).unwrap(),
                    hashmap!(1 => PercentMetric::new(50.)));
@@ -218,7 +218,7 @@ mod test_cpu_probe {
         let mut probe = CpuProbe::from_readers(Box::new(stat_reader),
                                                Box::new(pid_stat_reader))
             .expect("Could not create procfs");
-        probe.probe_processes(&vec!(1, 2)); // calibrating probe
+        probe.probe_processes(&vec!(1, 2)).unwrap(); // calibrating probe
 
         let metrics = probe.probe_processes(&vec!(1, 2)).unwrap();
         assert_eq!(metrics,
