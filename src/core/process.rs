@@ -39,6 +39,21 @@ impl ProcessMetadata {
     }
 }
 
+#[cfg(test)]
+mod test_process_metadata {
+    use crate::core::process::ProcessMetadata;
+
+    #[test]
+    fn test_pid_should_be_pm_pid() {
+        assert_eq!(ProcessMetadata::new(123, "command").pid(), 123);
+    }
+
+    #[test]
+    fn test_command_should_be_pm_command() {
+        assert_eq!(ProcessMetadata::new(123, "command").command(), "command");
+    }
+}
+
 
 /// Collects the running processes
 pub struct ProcessCollector {
@@ -84,10 +99,12 @@ pub trait ProcessScanner {
 #[cfg(test)]
 mod test_process_collector {
     use crate::core::Error;
+    use crate::core::Error::InvalidPID;
     use crate::core::process::{Pid, ProcessCollector, ProcessMetadata, ProcessScanner};
 
     struct ScannerStub {
         scanned_pids: Vec<Pid>,
+        failing_processes: Vec<Pid>,
     }
 
     impl ProcessScanner for ScannerStub {
@@ -96,12 +113,24 @@ mod test_process_collector {
         }
 
         fn fetch_metadata(&self, pid: Pid) -> Result<ProcessMetadata, Error> {
-            Ok(ProcessMetadata::new(pid, "command"))
+            if self.failing_processes.contains(&pid) {
+                Err(InvalidPID(pid))
+            } else {
+                Ok(ProcessMetadata::new(pid, "command"))
+            }
         }
     }
 
     fn build_process_collector(scanned_pids: Vec<Pid>) -> ProcessCollector {
-        let boxed_scanner = Box::new(ScannerStub { scanned_pids });
+        let boxed_scanner = Box::new(ScannerStub {
+            scanned_pids,
+            failing_processes: vec![],
+        });
+        ProcessCollector::new(boxed_scanner)
+    }
+
+    fn build_failing_process_collector(scanned_pids: Vec<Pid>, failing_processes: Vec<Pid>) -> ProcessCollector {
+        let boxed_scanner = Box::new(ScannerStub { scanned_pids, failing_processes });
         ProcessCollector::new(boxed_scanner)
     }
 
@@ -125,5 +154,20 @@ mod test_process_collector {
         processes_pids.sort();
 
         assert_eq!(processes_pids, scanned_pids);
+    }
+
+    #[test]
+    fn test_should_ignore_processes_for_which_scanning_fails() {
+        let scanned_pids = vec![1, 2, 3];
+        let failing_processes = vec![2];
+        let collector = build_failing_process_collector(scanned_pids, failing_processes);
+        let processes = collector.processes().unwrap();
+
+        let processes_pids = processes.iter()
+            .map(|pm| pm.pid)
+            .collect::<Vec<Pid>>();
+
+        assert_eq!(processes_pids.len(), 2);
+        assert!(!processes_pids.contains(&2))
     }
 }
