@@ -1,5 +1,4 @@
 /target
-Cargo.lock
 spv.txt
 $CACHE_FILE$
 .gitignore
