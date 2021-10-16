@@ -1,6 +1,6 @@
 /target
 Cargo.lock
-*.txt
+spv.txt
 $CACHE_FILE$
 .gitignore
 *.xml
