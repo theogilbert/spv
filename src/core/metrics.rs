@@ -170,8 +170,8 @@ impl Metric for IOMetric {
 
     fn explicit_repr(&self, index: usize) -> Result<String, Error> {
         match index {
-            0 => Ok(format!("{}B/s", format_bytes(self.input, 2))),
-            1 => Ok(format!("{}B/s", format_bytes(self.output, 2))),
+            0 => Ok(format!("Input : {}B/s", format_bytes(self.input, 2))),
+            1 => Ok(format!("Output: {}B/s", format_bytes(self.output, 2))),
             _ => Err(Error::RawMetricAccessError(index, self.cardinality()))
         }
     }
