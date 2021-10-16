@@ -72,11 +72,33 @@ impl<'a> MetricView<'a> {
     /// # Arguments
     ///  * span: Indicates from how long ago the metrics should be compared
     pub fn max_f64(&self, span: Duration) -> f64 {
-        self.extract(span)
+        self.max_metric(span)
+            .max_value()
+    }
+
+    /// Returns a concise representation of the greatest metric in the given span. See [`MetricView::new()`](#method.extract) for
+    /// the behavior of `span`.
+    ///
+    /// If the metrics have a cardinality greater than one, the max f64 component of the metric is
+    /// used for the comparison.
+    ///
+    /// # Arguments
+    ///  * span: Indicates from how long ago the metrics should be compared
+    pub fn max_concise_repr(&self, span: Duration) -> String {
+        self.max_metric(span)
+            .concise_repr()
+    }
+
+    fn max_metric(&self, span: Duration) -> &dyn Metric {
+        *(self.extract(span)
             .iter()
-            .map(|m| m.max_value())
-            .max_by(|f1, f2| f1.partial_cmp(f2).unwrap_or(Ordering::Equal))
-            .unwrap_or(0.)
+            .max_by(|m1, m2| {
+                let v1 = m1.max_value();
+                let v2 = m2.max_value();
+
+                v1.partial_cmp(&v2).unwrap_or(Ordering::Equal)
+            })
+            .unwrap_or(&self.default))
     }
 }
 
@@ -220,6 +242,14 @@ mod test_metric_view {
         let view = build_view_of_pid_0(&collection);
 
         assert_eq!(view.max_f64(Duration::from_secs(2)), 0.);
+    }
+
+    #[test]
+    fn test_max_repr_should_return_repr_of_max_value() {
+        let collection = produce_metrics_collection(1, vec![0., 10., 2.]);
+        let view = build_view_of_pid_0(&collection);
+
+        assert_eq!(view.max_concise_repr(Duration::from_secs(3)), "10.0".to_string());
     }
 }
 

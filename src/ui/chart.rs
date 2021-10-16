@@ -31,13 +31,14 @@ impl MetricsChart {
         let chart = Chart::new(data_frame.datasets())
             .block(Block::default().borders(Borders::ALL))
             .x_axis(self.define_x_axis())
-            .y_axis(self.define_y_axis(&data_frame, metrics_view.unit()));
+            .y_axis(self.define_y_axis(&data_frame, metrics_view.max_concise_repr(self.span),
+                                       metrics_view.unit()));
 
         frame.render_widget(chart, chunk);
     }
 
     fn define_x_axis(&self) -> Axis {
-        let labels = [&self.axis_origin_label, "-0m"].iter()
+        let labels = [&self.axis_origin_label, "now"].iter()
             .cloned()
             .map(Span::from)
             .collect();
@@ -48,7 +49,7 @@ impl MetricsChart {
             .labels(labels)
     }
 
-    fn define_y_axis(&self, data_frame: &DataFrame, unit: &'static str) -> Axis {
+    fn define_y_axis(&self, data_frame: &DataFrame, upper_bound_repr: String, unit: &'static str) -> Axis {
         const MINIMUM_UPPER_BOUND: f64 = 10.;
         let upper_bound = (1.1 * data_frame.max_value()).max(MINIMUM_UPPER_BOUND);
 
@@ -56,14 +57,11 @@ impl MetricsChart {
             .title(unit)
             .style(Style::default().fg(Color::White))
             .bounds([0., upper_bound]) // 0 to 1.1 * max(dataset.y)
-            .labels(MetricsChart::build_y_axis_labels(upper_bound))
+            .labels(MetricsChart::build_y_axis_labels(upper_bound_repr))
     }
 
-    fn build_y_axis_labels<'a>(upper_bound: f64) -> Vec<Span<'a>> {
-        return vec! {
-            Span::from("0.0"),
-            Span::from((upper_bound as i32).to_string())
-        };
+    fn build_y_axis_labels<'a>(upper_bound_repr: String) -> Vec<Span<'a>> {
+        return vec![Span::from("0"), Span::from(upper_bound_repr)];
     }
 }
 
