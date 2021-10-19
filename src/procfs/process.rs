@@ -197,8 +197,9 @@ mod test_pid_scanner {
         };
 
         // when we scan processes
-        let pids = proc_scanner.scan()
+        let mut pids = proc_scanner.scan()
             .expect("Could not scan processes");
+        pids.sort();
 
         // The PIDs are only those represented by a dir with an integer name
         assert_eq!(vec![123, 456], pids);
