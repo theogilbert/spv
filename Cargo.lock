@@ -196,6 +196,7 @@ dependencies = [
 [[package]]
 name = "netinfo"
 version = "0.5.1"
+source = "git+https://github.com/theogilbert/netinfo?branch=fixed#3a850f9cb15a8a4c73a234b2bf4679787cf974c5"
 dependencies = [
  "byteorder",
  "error-chain",
