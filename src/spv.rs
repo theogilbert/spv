@@ -120,10 +120,11 @@ impl SpvApplication {
             .map_err(Error::UiError)
     }
 
-    fn current_collector<'a>(&self, collectors: &'a HashMap<String, Box<dyn MetricCollector>>) -> &'a Box<dyn MetricCollector> {
+    fn current_collector<'a>(&self, collectors: &'a HashMap<String, Box<dyn MetricCollector>>) -> &'a dyn MetricCollector {
         // The collectors attribute has to be passed as parameters. Otherwise the compiler thinks that
-        // this function borrows the whole &self reference immutably (preventing further mutable borrowing)
+        // this function borrows the whole &self reference immutably (preventing further mutable borrowing of self.ui)
         collectors.get(self.ui.current_tab())
             .expect("No collector is selected")
+            .as_ref()
     }
 }
