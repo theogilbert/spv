@@ -13,10 +13,7 @@ pub struct InputListener {
 
 impl InputListener {
     pub fn new(sender: Sender<Trigger>) -> Self {
-        Self {
-            sender,
-            exit: false,
-        }
+        Self { sender, exit: false }
     }
 
     pub fn listen(mut self) -> Result<(), Error> {

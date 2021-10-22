@@ -7,9 +7,7 @@ use crate::core::probe::Probe;
 use crate::core::process::Pid;
 use crate::core::Error;
 use crate::procfs::parsers;
-use crate::procfs::parsers::{
-    PidStat, ProcessDataReader, ReadProcessData, ReadSystemData, Stat, SystemDataReader,
-};
+use crate::procfs::parsers::{PidStat, ProcessDataReader, ReadProcessData, ReadSystemData, Stat, SystemDataReader};
 
 // TODO When a process CPU usage is low, some iterations will detect a CPU usage of 0%, causing a
 //   fluctuating value between each iterations. Fix this, maybe by averaging reported values over
@@ -24,9 +22,8 @@ pub struct CpuProbe {
 
 impl CpuProbe {
     pub fn new() -> Result<Self, Error> {
-        let stat_reader = SystemDataReader::new().map_err(|e| {
-            Error::ProbingError("Error initializing SystemDataReader".to_string(), e.into())
-        })?;
+        let stat_reader = SystemDataReader::new()
+            .map_err(|e| Error::ProbingError("Error initializing SystemDataReader".to_string(), e.into()))?;
 
         Self::from_readers(Box::new(stat_reader), Box::new(ProcessDataReader::new()))
     }
@@ -49,9 +46,10 @@ impl Probe<PercentMetric> for CpuProbe {
     }
 
     fn init_iteration(&mut self) -> Result<(), Error> {
-        let new_stat: Stat = self.stat_reader.read().map_err(|e| {
-            Error::ProbingError("Error reading global CPU stats".to_string(), e.into())
-        })?;
+        let new_stat: Stat = self
+            .stat_reader
+            .read()
+            .map_err(|e| Error::ProbingError("Error reading global CPU stats".to_string(), e.into()))?;
 
         self.calculator.compute_new_runtime_diff(new_stat);
 
@@ -59,9 +57,10 @@ impl Probe<PercentMetric> for CpuProbe {
     }
 
     fn probe(&mut self, pid: Pid) -> Result<PercentMetric, Error> {
-        let pid_stat = self.pid_stat_reader.read(pid).map_err(|e| {
-            Error::ProbingError(format!("Error probing CPU stats for PID {}", pid), e.into())
-        })?;
+        let pid_stat = self
+            .pid_stat_reader
+            .read(pid)
+            .map_err(|e| Error::ProbingError(format!("Error probing CPU stats for PID {}", pid), e.into()))?;
 
         let percent = self.calculator.calculate_pid_usage(pid, pid_stat);
         Ok(PercentMetric::new(percent))
@@ -143,11 +142,7 @@ mod test_cpu_probe {
 
     impl ReadProcessData<PidStat> for MemoryPidStatReader {
         fn read(&mut self, pid: u32) -> Result<PidStat, ProcfsError> {
-            self.pid_stats_seq
-                .get_mut(&pid)
-                .unwrap()
-                .pop_front()
-                .unwrap()
+            self.pid_stats_seq.get_mut(&pid).unwrap().pop_front().unwrap()
         }
     }
 
@@ -170,8 +165,8 @@ mod test_cpu_probe {
             pid_stats_seq: HashMap::new(),
         };
 
-        let mut probe = CpuProbe::from_readers(Box::new(stat_reader), Box::new(pid_stat_reader))
-            .expect("Could not create procfs");
+        let mut probe =
+            CpuProbe::from_readers(Box::new(stat_reader), Box::new(pid_stat_reader)).expect("Could not create procfs");
 
         let empty_map: HashMap<Pid, PercentMetric> = HashMap::new();
         assert!(matches!(probe.probe_processes(&vec![]), Ok(empty_map)));
@@ -188,8 +183,8 @@ mod test_cpu_probe {
             pid_stats_seq: hashmap!(1 => pid_stat_seq),
         };
 
-        let mut probe = CpuProbe::from_readers(Box::new(stat_reader), Box::new(pid_stat_reader))
-            .expect("Could not create procfs");
+        let mut probe =
+            CpuProbe::from_readers(Box::new(stat_reader), Box::new(pid_stat_reader)).expect("Could not create procfs");
 
         probe.probe_processes(&vec![1]).unwrap(); // First calibration probing
 
@@ -211,8 +206,8 @@ mod test_cpu_probe {
             pid_stats_seq: hashmap!(1 => first_pid_stat_seq, 2 => second_pid_stat_seq),
         };
 
-        let mut probe = CpuProbe::from_readers(Box::new(stat_reader), Box::new(pid_stat_reader))
-            .expect("Could not create procfs");
+        let mut probe =
+            CpuProbe::from_readers(Box::new(stat_reader), Box::new(pid_stat_reader)).expect("Could not create procfs");
         probe.probe_processes(&vec![1, 2]).unwrap(); // calibrating probe
 
         let metrics = probe.probe_processes(&vec![1, 2]).unwrap();
@@ -230,17 +225,14 @@ mod test_cpu_probe {
         let first_pid_stat_seq = vecdeque!(Ok(create_pid_stat(0)), Ok(create_pid_stat(50)));
         let second_pid_stat_seq = vecdeque!(
             Ok(create_pid_stat(0)),
-            Err(ProcfsError::IOError(io::Error::new(
-                io::ErrorKind::Other,
-                "oh no!"
-            )))
+            Err(ProcfsError::IOError(io::Error::new(io::ErrorKind::Other, "oh no!")))
         );
         let pid_stat_reader = MemoryPidStatReader {
             pid_stats_seq: hashmap!(1 => first_pid_stat_seq, 2 => second_pid_stat_seq),
         };
 
-        let mut probe = CpuProbe::from_readers(Box::new(stat_reader), Box::new(pid_stat_reader))
-            .expect("Could not create procfs");
+        let mut probe =
+            CpuProbe::from_readers(Box::new(stat_reader), Box::new(pid_stat_reader)).expect("Could not create procfs");
 
         let map = hashmap!(1 => PercentMetric::new(25.));
         assert!(matches!(probe.probe_processes(&vec![1, 2]), Ok(map)));

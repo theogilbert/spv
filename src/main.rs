@@ -58,8 +58,7 @@ fn init_logging() {
         .set_time_format_str("%Y-%m-%d %H:%M:%S%.3f")
         .build();
 
-    WriteLogger::init(LevelFilter::Debug, log_config, log_file)
-        .expect("Could not initialize logging");
+    WriteLogger::init(LevelFilter::Debug, log_config, log_file).expect("Could not initialize logging");
 }
 
 fn build_collectors(resolution: Duration) -> Result<Vec<Box<dyn MetricCollector>>, Error> {

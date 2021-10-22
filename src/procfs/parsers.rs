@@ -87,7 +87,7 @@ where
     fn get_process_reader(&mut self, pid: Pid) -> Result<&mut ProcfsReader<D>, ProcfsError> {
         Ok(match self.readers.entry(pid) {
             Entry::Occupied(o) => o.into_mut(),
-            Entry::Vacant(v) => v.insert(ProcfsReader::new(D::filepath(pid).as_path())?),
+            Entry::Vacant(v) => v.insert({ ProcfsReader::new(D::filepath(pid).as_path())? }),
         })
     }
 }
@@ -120,11 +120,9 @@ where
     D: Data + Sized,
 {
     pub fn new(filepath: &Path) -> Result<Self, ProcfsError> {
-        File::open(filepath)
-            .map_err(ProcfsError::from)
-            .map(|file| Self {
-                reader: DataReader::new(file),
-            })
+        File::open(filepath).map_err(ProcfsError::from).map(|file| Self {
+            reader: DataReader::new(file),
+        })
     }
 
     pub fn read(&mut self) -> Result<D, ProcfsError> {
@@ -197,18 +195,12 @@ impl<'a> TokenParser<'a> {
         self.lines
             .get(line_no)
             .ok_or({
-                let err_msg = format!(
-                    "Could not get data at line {} and position {}",
-                    line_no, pos
-                );
+                let err_msg = format!("Could not get data at line {} and position {}", line_no, pos);
                 ProcfsError::InvalidFileFormat(err_msg)
             })?
             .get(pos)
             .ok_or({
-                let err_msg = format!(
-                    "Could not get token at line {} and position {}",
-                    line_no, pos
-                );
+                let err_msg = format!("Could not get token at line {} and position {}", line_no, pos);
                 ProcfsError::InvalidFileFormat(err_msg)
             })?
             .parse::<T>()

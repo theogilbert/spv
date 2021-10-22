@@ -88,8 +88,7 @@ impl ProcessScanner for ProcfsScanner {
         let mut command = String::new();
         let comm_file_path = self.proc_dir.join(pid.to_string()).join("comm");
 
-        let mut file: File =
-            File::open(comm_file_path.as_path()).map_err(|_| Error::InvalidPID(pid))?;
+        let mut file: File = File::open(comm_file_path.as_path()).map_err(|_| Error::InvalidPID(pid))?;
 
         file.read_to_string(&mut command)
             .map_err(|io_err| Error::ProcessParsing(comm_file_path, io_err))?;
@@ -228,12 +227,10 @@ mod test_pid_scanner {
 
         create_tempdir("123", test_proc_dir.path()).expect("Could not create process dir");
 
-        let mut comm_file = create_tempfile("comm", test_proc_dir.path().join("123").as_os_str())
-            .expect("Could not create comm file");
+        let mut comm_file =
+            create_tempfile("comm", test_proc_dir.path().join("123").as_os_str()).expect("Could not create comm file");
 
-        comm_file
-            .write(b"test_cmd")
-            .expect("Could not write to comm file"); // The process 123's command is test_cmd
+        comm_file.write(b"test_cmd").expect("Could not write to comm file"); // The process 123's command is test_cmd
 
         let proc_scanner = ProcfsScanner {
             proc_dir: test_proc_dir.path().to_path_buf(),
@@ -243,10 +240,7 @@ mod test_pid_scanner {
             .fetch_metadata(123)
             .expect("Could not get processes metadata");
 
-        assert_eq!(
-            process_metadata,
-            ProcessMetadata::new(123, "test_cmd".to_string())
-        );
+        assert_eq!(process_metadata, ProcessMetadata::new(123, "test_cmd".to_string()));
     }
 
     #[test]
@@ -255,12 +249,10 @@ mod test_pid_scanner {
 
         create_tempdir("123", test_proc_dir.path()).expect("Could not create process dir");
 
-        let mut comm_file = create_tempfile("comm", test_proc_dir.path().join("123").as_os_str())
-            .expect("Could not create comm file");
+        let mut comm_file =
+            create_tempfile("comm", test_proc_dir.path().join("123").as_os_str()).expect("Could not create comm file");
 
-        comm_file
-            .write(b"test_cmd\n")
-            .expect("Could not write to comm file"); // The process 123's command is test_cmd
+        comm_file.write(b"test_cmd\n").expect("Could not write to comm file"); // The process 123's command is test_cmd
 
         let proc_scanner = ProcfsScanner {
             proc_dir: test_proc_dir.path().to_path_buf(),
@@ -270,10 +262,7 @@ mod test_pid_scanner {
             .fetch_metadata(123)
             .expect("Could not get processes metadata");
 
-        assert_eq!(
-            process_metadata,
-            ProcessMetadata::new(123, "test_cmd".to_string())
-        );
+        assert_eq!(process_metadata, ProcessMetadata::new(123, "test_cmd".to_string()));
     }
 
     #[test]
@@ -286,9 +275,6 @@ mod test_pid_scanner {
 
         let process_metadata_ret = proc_scanner.fetch_metadata(123);
 
-        assert!(matches!(
-            process_metadata_ret,
-            Err(CoreError::ScanProcessesError(_))
-        ));
+        assert!(matches!(process_metadata_ret, Err(CoreError::ScanProcessesError(_))));
     }
 }

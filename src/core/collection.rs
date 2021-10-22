@@ -161,9 +161,7 @@ mod test_probe_collector {
         ProbeCollector::new(probe, Duration::from_secs(1))
     }
 
-    fn create_probe_collector_with_return_map(
-        return_map: HashMap<Pid, f64>,
-    ) -> ProbeCollector<PercentMetric> {
+    fn create_probe_collector_with_return_map(return_map: HashMap<Pid, f64>) -> ProbeCollector<PercentMetric> {
         let probe = ProbeFake {
             return_map: Some(return_map),
         };
@@ -237,10 +235,7 @@ mod test_probe_collector {
         let mut collector = create_probe_collector_with_return_map(return_map);
         collector.calibrate(&[1, 2]).unwrap(); // we calibrate here, we do not collect
 
-        assert_eq!(
-            collector.compare_pids_by_last_metrics(1, 2),
-            Ordering::Equal
-        );
+        assert_eq!(collector.compare_pids_by_last_metrics(1, 2), Ordering::Equal);
     }
 
     #[test]
@@ -250,10 +245,7 @@ mod test_probe_collector {
         collector.collect(&[1]).unwrap();
 
         // Pid 1 should be Ordering::Greater than Pid 2 with 50% > default=0%
-        assert_eq!(
-            collector.compare_pids_by_last_metrics(1, 2),
-            Ordering::Greater
-        );
+        assert_eq!(collector.compare_pids_by_last_metrics(1, 2), Ordering::Greater);
     }
 }
 
@@ -303,9 +295,7 @@ where
     }
 
     pub fn view(&self, pid: Pid, resolution: Duration) -> MetricView {
-        let metrics = self
-            .metrics_as_metric_trait_objects(pid)
-            .unwrap_or_default();
+        let metrics = self.metrics_as_metric_trait_objects(pid).unwrap_or_default();
 
         MetricView::new(metrics, resolution, &self.default)
     }

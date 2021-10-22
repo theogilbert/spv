@@ -56,11 +56,7 @@ impl ProcessesRates {
 
         let new_value = match self.mode {
             PushMode::Accumulative => value,
-            PushMode::Increment => existing_values
-                .back()
-                .map(|dv| dv.value)
-                .unwrap_or(0)
-                .add(value),
+            PushMode::Increment => existing_values.back().map(|dv| dv.value).unwrap_or(0).add(value),
         };
 
         let now = Instant::now();
@@ -100,10 +96,7 @@ impl ProcessesRates {
     ///  * `pid`: The PID of the process for which to calculate the rate
     ///
     pub fn rate(&self, pid: Pid) -> Result<f64, ProcfsError> {
-        let values = self
-            .acc_values
-            .get(&pid)
-            .ok_or(ProcfsError::UnknownPID(pid))?;
+        let values = self.acc_values.get(&pid).ok_or(ProcfsError::UnknownPID(pid))?;
 
         if values.len() < 2 {
             return Ok(0.);
@@ -225,9 +218,7 @@ mod test_process_rates {
     }
 
     #[rstest]
-    fn test_should_compute_rate_from_out_dated_and_multiple_recent_values(
-        mut process_rates: ProcessesRates,
-    ) {
+    fn test_should_compute_rate_from_out_dated_and_multiple_recent_values(mut process_rates: ProcessesRates) {
         // In this more complex test, we have:
         // - One outdated data from 2s ago
         process_rates.push(123, 0);

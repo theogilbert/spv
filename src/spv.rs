@@ -24,10 +24,7 @@ impl SpvApplication {
     ) -> Result<Self, Error> {
         let ui = SpvUI::new(collectors.iter().map(|p| p.name().to_string()))?;
 
-        let collectors_map = collectors
-            .into_iter()
-            .map(|mc| (mc.name().to_string(), mc))
-            .collect();
+        let collectors_map = collectors.into_iter().map(|mc| (mc.name().to_string(), mc)).collect();
 
         let mut spv_app = Self {
             receiver,
@@ -111,10 +108,7 @@ impl SpvApplication {
         let current_collector = self.current_collector(&self.collectors);
 
         self.ui
-            .render(
-                &current_collector.overview(),
-                &current_collector.view(selected_pid),
-            )
+            .render(&current_collector.overview(), &current_collector.view(selected_pid))
             .map_err(Error::UiError)
     }
 

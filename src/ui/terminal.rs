@@ -30,20 +30,14 @@ impl Terminal {
     /// terminal. By generating an empty frame instead and then overwriting that frame, we do not
     /// erase any existing content on application startup.
     fn generate_empty_frame(terminal: &mut TuiTerminal<TuiBackend>) {
-        print!(
-            "{}",
-            "\n".repeat(terminal.get_frame().size().height as usize)
-        );
+        print!("{}", "\n".repeat(terminal.get_frame().size().height as usize));
     }
 
     pub fn draw<F>(&mut self, f: F) -> Result<(), Error>
     where
         F: FnOnce(&mut Frame<TuiBackend>),
     {
-        self.tui_terminal
-            .draw(f)
-            .map(|_frame| ())
-            .map_err(Error::IOError)
+        self.tui_terminal.draw(f).map(|_frame| ()).map_err(Error::IOError)
     }
 }
 

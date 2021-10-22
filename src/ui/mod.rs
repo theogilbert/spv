@@ -47,11 +47,7 @@ impl SpvUI {
         })
     }
 
-    pub fn render(
-        &mut self,
-        metrics_overview: &MetricsOverview,
-        metrics_view: &MetricView,
-    ) -> Result<(), Error> {
+    pub fn render(&mut self, metrics_overview: &MetricsOverview, metrics_view: &MetricView) -> Result<(), Error> {
         // We need to do this because the borrow checker does not like having &self.foo in a closure
         // while borrowing &mut self.terminal
         let tabs = &self.tabs;
@@ -72,20 +68,17 @@ impl SpvUI {
 
     pub fn set_processes(&mut self, processes: Vec<ProcessMetadata>) {
         self.process_list.set_processes(processes);
-        self.metadata_bar
-            .set_selected_process(self.process_list.selected());
+        self.metadata_bar.set_selected_process(self.process_list.selected());
     }
 
     pub fn next_process(&mut self) {
         self.process_list.next();
-        self.metadata_bar
-            .set_selected_process(self.process_list.selected());
+        self.metadata_bar.set_selected_process(self.process_list.selected());
     }
 
     pub fn previous_process(&mut self) {
         self.process_list.previous();
-        self.metadata_bar
-            .set_selected_process(self.process_list.selected());
+        self.metadata_bar.set_selected_process(self.process_list.selected());
     }
 
     pub fn current_process(&self) -> Option<&ProcessMetadata> {

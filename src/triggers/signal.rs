@@ -13,15 +13,11 @@ pub struct SignalListener {
 /// Listens for UNIX interrupt signals and emits appropriate triggers
 impl SignalListener {
     pub fn new(sender: Sender<Trigger>) -> Self {
-        Self {
-            sender,
-            exit: false,
-        }
+        Self { sender, exit: false }
     }
 
     pub fn listen(mut self) -> Result<(), Error> {
-        let mut signals =
-            Signals::new(&[SIGINT, SIGTERM, SIGQUIT, SIGWINCH]).map_err(Error::SignalError)?;
+        let mut signals = Signals::new(&[SIGINT, SIGTERM, SIGQUIT, SIGWINCH]).map_err(Error::SignalError)?;
 
         while !self.exit {
             for signal in signals.wait() {

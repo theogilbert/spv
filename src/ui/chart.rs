@@ -52,12 +52,7 @@ impl MetricsChart {
             .labels(labels)
     }
 
-    fn define_y_axis(
-        &self,
-        data_frame: &DataFrame,
-        upper_bound_repr: String,
-        unit: &'static str,
-    ) -> Axis {
+    fn define_y_axis(&self, data_frame: &DataFrame, upper_bound_repr: String, unit: &'static str) -> Axis {
         const MINIMUM_UPPER_BOUND: f64 = 10.;
         let upper_bound = (1.1 * data_frame.max_value()).max(MINIMUM_UPPER_BOUND);
 
@@ -122,11 +117,7 @@ impl<'a> DataFrame<'a> {
     /// Extract raw data from a collection of metrics
     /// Raw data consists of sets of (f64, f64) tuples, each set corresponding to a drawable
     /// `Dataset`
-    fn extract_raw_from_metrics(
-        metrics_view: &MetricView,
-        span: Duration,
-        step: Duration,
-    ) -> Vec<Vec<(f64, f64)>> {
+    fn extract_raw_from_metrics(metrics_view: &MetricView, span: Duration, step: Duration) -> Vec<Vec<(f64, f64)>> {
         let mut data_vecs: Vec<_> = Vec::new();
         let metrics_cardinality = metrics_view.last_or_default().cardinality();
 
@@ -135,10 +126,7 @@ impl<'a> DataFrame<'a> {
                 .extract(span)
                 .iter()
                 .rev()
-                .map(|m| {
-                    m.as_f64(dimension_idx)
-                        .expect("Error accessing raw metric value")
-                })
+                .map(|m| m.as_f64(dimension_idx).expect("Error accessing raw metric value"))
                 .enumerate()
                 .map(|(t, r)| (0. - (t as f64 * step.as_secs_f64()), r))
                 .collect();

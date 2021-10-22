@@ -132,10 +132,7 @@ mod test_process_collector {
         ProcessCollector::new(boxed_scanner)
     }
 
-    fn build_failing_process_collector(
-        scanned_pids: Vec<Pid>,
-        failing_processes: Vec<Pid>,
-    ) -> ProcessCollector {
+    fn build_failing_process_collector(scanned_pids: Vec<Pid>, failing_processes: Vec<Pid>) -> ProcessCollector {
         let boxed_scanner = Box::new(ScannerStub {
             scanned_pids,
             failing_processes,

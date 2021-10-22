@@ -83,9 +83,7 @@ mod test_probe_trait {
         }
 
         fn probe(&mut self, pid: u32) -> Result<PercentMetric, Error> {
-            self.probe_responses
-                .remove(&pid)
-                .ok_or(Error::InvalidPID(pid))
+            self.probe_responses.remove(&pid).ok_or(Error::InvalidPID(pid))
         }
     }
 

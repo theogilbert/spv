@@ -17,11 +17,7 @@ pub struct MetricView<'a> {
 }
 
 impl<'a> MetricView<'a> {
-    pub(crate) fn new(
-        metrics: Vec<&'a dyn Metric>,
-        resolution: Duration,
-        default: &'a dyn Metric,
-    ) -> Self {
+    pub(crate) fn new(metrics: Vec<&'a dyn Metric>, resolution: Duration, default: &'a dyn Metric) -> Self {
         Self {
             metrics,
             resolution,
@@ -120,10 +116,7 @@ pub struct MetricsOverview<'a> {
 
 impl<'a> MetricsOverview<'a> {
     pub fn new(last_metrics: HashMap<Pid, &'a dyn Metric>, default: &'a dyn Metric) -> Self {
-        Self {
-            last_metrics,
-            default,
-        }
+        Self { last_metrics, default }
     }
 
     /// Returns the latest collected `Metric` for a given process
@@ -255,10 +248,7 @@ mod test_metric_view {
         let collection = produce_metrics_collection(1, vec![0., 10., 2.]);
         let view = build_view_of_pid_0(&collection);
 
-        assert_eq!(
-            view.max_concise_repr(Duration::from_secs(3)),
-            "10.0".to_string()
-        );
+        assert_eq!(view.max_concise_repr(Duration::from_secs(3)), "10.0".to_string());
     }
 }
 
@@ -307,10 +297,7 @@ mod test_helpers {
     /// Return collection of PercentMetric containing metrics for `proc_count` processes.<br/>
     /// The Pid values range from `0` to `proc_count - 1`<br/>
     /// To each processes are associated the same PercentMetric values, ranging from `0` to `metrics_count`
-    pub(crate) fn produce_metrics_collection(
-        proc_count: usize,
-        values: Vec<f64>,
-    ) -> MetricCollection<PercentMetric> {
+    pub(crate) fn produce_metrics_collection(proc_count: usize, values: Vec<f64>) -> MetricCollection<PercentMetric> {
         let mut collection = MetricCollection::new();
 
         for value in values.into_iter() {

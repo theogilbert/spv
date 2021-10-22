@@ -136,14 +136,8 @@ mod test_percent_metric {
         let lesser_metric = PercentMetric::new(10.);
         let greater_metric = PercentMetric::new(20.);
 
-        assert_eq!(
-            lesser_metric.partial_cmp(&greater_metric),
-            Some(Ordering::Less)
-        );
-        assert_eq!(
-            greater_metric.partial_cmp(&lesser_metric),
-            Some(Ordering::Greater)
-        );
+        assert_eq!(lesser_metric.partial_cmp(&greater_metric), Some(Ordering::Less));
+        assert_eq!(greater_metric.partial_cmp(&lesser_metric), Some(Ordering::Greater));
     }
 }
 
@@ -267,14 +261,8 @@ mod test_io_metric {
         let lesser_metric = IOMetric::new(10, 20);
         let greater_metric = IOMetric::new(15, 25);
 
-        assert_eq!(
-            lesser_metric.partial_cmp(&greater_metric),
-            Some(Ordering::Less)
-        );
-        assert_eq!(
-            greater_metric.partial_cmp(&lesser_metric),
-            Some(Ordering::Greater)
-        );
+        assert_eq!(lesser_metric.partial_cmp(&greater_metric), Some(Ordering::Less));
+        assert_eq!(greater_metric.partial_cmp(&lesser_metric), Some(Ordering::Greater));
     }
 }
 

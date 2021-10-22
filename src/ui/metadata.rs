@@ -28,8 +28,7 @@ impl MetadataBar {
     }
 
     fn build_paragraph(&self) -> Paragraph {
-        Paragraph::new(Span::raw(self.current_text.as_str()))
-            .style(Style::default().fg(Color::White))
+        Paragraph::new(Span::raw(self.current_text.as_str())).style(Style::default().fg(Color::White))
     }
 
     pub fn set_selected_process(&mut self, process_data: Option<&ProcessMetadata>) {

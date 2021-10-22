@@ -37,12 +37,7 @@ impl ProcessList {
     ///   * `chunk`: The region within the `frame` reserved for this widget
     ///   * `archive`: The metrics archive, to display the current metric of each process
     ///   * `label`: The name of the metric to display
-    pub fn render(
-        &mut self,
-        frame: &mut Frame<TuiBackend>,
-        chunk: Rect,
-        metrics_overview: &MetricsOverview,
-    ) {
+    pub fn render(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect, metrics_overview: &MetricsOverview) {
         let rows_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(2), Constraint::Min(1)])
@@ -116,16 +111,11 @@ impl ProcessList {
     /// Processes are displayed in a list, sorted by their metric values
     /// From one frame to the other, the same process may have a different position in the list
     /// This function returns the new position of the selected process in the given `processes` list
-    fn retrieve_index_of_previously_selected_pid(
-        processes: &[ProcessMetadata],
-        selected_pid: Option<Pid>,
-    ) -> usize {
+    fn retrieve_index_of_previously_selected_pid(processes: &[ProcessMetadata], selected_pid: Option<Pid>) -> usize {
         match selected_pid {
             Some(selected_pid) => {
-                processes
-                    .iter()
-                    .position(|pm| pm.pid() == selected_pid)
-                    .unwrap_or(0) // If PID does not exist anymore, select first process
+                processes.iter().position(|pm| pm.pid() == selected_pid).unwrap_or(0)
+                // If PID does not exist anymore, select first process
             }
             None => 0,
         }
@@ -172,10 +162,7 @@ impl ProcessList {
             .map(|pm| Self::shortened_command_name(pm))
             .collect();
 
-        let items: Vec<ListItem> = processes_names
-            .iter()
-            .map(|cmd| ListItem::new(cmd.as_str()))
-            .collect();
+        let items: Vec<ListItem> = processes_names.iter().map(|cmd| ListItem::new(cmd.as_str())).collect();
 
         let list = Self::build_default_list_widget(items)
             .block(Block::default().borders(Borders::LEFT | Borders::BOTTOM))
@@ -194,34 +181,21 @@ impl ProcessList {
         }
     }
 
-    fn render_metric_column(
-        &mut self,
-        frame: &mut Frame<TuiBackend>,
-        chunk: Rect,
-        metrics_overview: &MetricsOverview,
-    ) {
+    fn render_metric_column(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect, metrics_overview: &MetricsOverview) {
         let str_metrics: Vec<String> = self
             .processes
             .iter()
             .map(|pm| self.formatted_process_metric(pm, metrics_overview))
             .collect();
 
-        let items: Vec<ListItem> = str_metrics
-            .iter()
-            .map(|pm| ListItem::new(pm.as_str()))
-            .collect();
+        let items: Vec<ListItem> = str_metrics.iter().map(|pm| ListItem::new(pm.as_str())).collect();
 
-        let list =
-            Self::build_default_list_widget(items).block(Block::default().borders(Borders::BOTTOM));
+        let list = Self::build_default_list_widget(items).block(Block::default().borders(Borders::BOTTOM));
 
         frame.render_stateful_widget(list, chunk, &mut self.state);
     }
 
-    fn formatted_process_metric(
-        &self,
-        process: &ProcessMetadata,
-        metrics_overview: &MetricsOverview,
-    ) -> String {
+    fn formatted_process_metric(&self, process: &ProcessMetadata, metrics_overview: &MetricsOverview) -> String {
         let m = metrics_overview.last_or_default(process.pid());
         self.justify_metric_repr(m.concise_repr())
     }
@@ -271,10 +245,7 @@ mod test_justify_right {
     }
 
     #[rstest]
-    fn test_should_add_trailing_space_on_short_repr(
-        process_list: ProcessList,
-        short_metric_repr: String,
-    ) {
+    fn test_should_add_trailing_space_on_short_repr(process_list: ProcessList, short_metric_repr: String) {
         let justified_repr = process_list.justify_metric_repr(short_metric_repr);
         assert!(justified_repr.ends_with(" "));
     }
