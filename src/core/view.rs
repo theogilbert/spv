@@ -18,7 +18,11 @@ pub struct MetricView<'a> {
 
 impl<'a> MetricView<'a> {
     pub(crate) fn new(metrics: Vec<&'a dyn Metric>, resolution: Duration, default: &'a dyn Metric) -> Self {
-        Self { metrics, resolution, default }
+        Self {
+            metrics,
+            resolution,
+            default,
+        }
     }
 
     /// Returns a slice of the metrics contained in this view.
@@ -54,13 +58,14 @@ impl<'a> MetricView<'a> {
     }
 
     /// Indicates the `Duration` step between each metric
-    pub fn resolution(&self) -> Duration { self.resolution }
+    pub fn resolution(&self) -> Duration {
+        self.resolution
+    }
 
     /// Returns the latest collected metric, or its default value if no metric has
     /// been collected for this process.
     pub fn last_or_default(&self) -> &dyn Metric {
-        *(self.metrics.last()
-            .unwrap_or(&self.default))
+        *(self.metrics.last().unwrap_or(&self.default))
     }
 
     /// Returns the greatest f64 value of the metric in the given span. See [`MetricView::new()`](#method.extract) for
@@ -72,8 +77,7 @@ impl<'a> MetricView<'a> {
     /// # Arguments
     ///  * span: Indicates from how long ago the metrics should be compared
     pub fn max_f64(&self, span: Duration) -> f64 {
-        self.max_metric(span)
-            .max_value()
+        self.max_metric(span).max_value()
     }
 
     /// Returns a concise representation of the greatest metric in the given span. See [`MetricView::new()`](#method.extract) for
@@ -85,12 +89,12 @@ impl<'a> MetricView<'a> {
     /// # Arguments
     ///  * span: Indicates from how long ago the metrics should be compared
     pub fn max_concise_repr(&self, span: Duration) -> String {
-        self.max_metric(span)
-            .concise_repr()
+        self.max_metric(span).concise_repr()
     }
 
     fn max_metric(&self, span: Duration) -> &dyn Metric {
-        *(self.extract(span)
+        *(self
+            .extract(span)
             .iter()
             .max_by(|m1, m2| {
                 let v1 = m1.max_value();
@@ -121,8 +125,7 @@ impl<'a> MetricsOverview<'a> {
     /// # Arguments
     ///  * pid: The ID of the process
     pub fn last_or_default(&self, pid: Pid) -> &dyn Metric {
-        *(self.last_metrics.get(&pid)
-            .unwrap_or(&self.default))
+        *(self.last_metrics.get(&pid).unwrap_or(&self.default))
     }
 
     /// Returns the unit representation of the metrics contained in this view
@@ -131,15 +134,14 @@ impl<'a> MetricsOverview<'a> {
     }
 }
 
-
 #[cfg(test)]
 mod test_metric_view {
     use std::time::Duration;
 
     use crate::core::collection::MetricCollection;
     use crate::core::metrics::{Metric, PercentMetric};
-    use crate::core::view::MetricView;
     use crate::core::view::test_helpers::produce_metrics_collection;
+    use crate::core::view::MetricView;
 
     fn build_view_of_pid_0(collection: &MetricCollection<PercentMetric>) -> MetricView {
         collection.view(0, Duration::from_secs(1))
@@ -200,10 +202,7 @@ mod test_metric_view {
 
         let extract = view.extract(view.resolution() * 2);
 
-        let expected: &[&dyn Metric; 2] = &[
-            &PercentMetric::new(2.),
-            &PercentMetric::new(3.)
-        ];
+        let expected: &[&dyn Metric; 2] = &[&PercentMetric::new(2.), &PercentMetric::new(3.)];
 
         assert_eq!(extract, expected);
     }
@@ -253,13 +252,12 @@ mod test_metric_view {
     }
 }
 
-
 #[cfg(test)]
 mod test_metric_overview {
     use crate::core::collection::MetricCollection;
     use crate::core::metrics::{Metric, PercentMetric};
-    use crate::core::view::MetricsOverview;
     use crate::core::view::test_helpers::produce_metrics_collection;
+    use crate::core::view::MetricsOverview;
 
     fn build_overview(collection: &MetricCollection<PercentMetric>) -> MetricsOverview {
         collection.overview()
@@ -299,7 +297,7 @@ mod test_helpers {
     /// Return collection of PercentMetric containing metrics for `proc_count` processes.<br/>
     /// The Pid values range from `0` to `proc_count - 1`<br/>
     /// To each processes are associated the same PercentMetric values, ranging from `0` to `metrics_count`
-    pub(crate) fn produce_metrics_collection(proc_count: usize, values: Vec::<f64>) -> MetricCollection<PercentMetric> {
+    pub(crate) fn produce_metrics_collection(proc_count: usize, values: Vec<f64>) -> MetricCollection<PercentMetric> {
         let mut collection = MetricCollection::new();
 
         for value in values.into_iter() {

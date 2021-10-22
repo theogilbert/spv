@@ -1,8 +1,8 @@
-use tui::Frame;
 use tui::layout::Rect;
 use tui::style::{Color, Style};
 use tui::text::Span;
 use tui::widgets::Paragraph;
+use tui::Frame;
 
 use crate::core::process::ProcessMetadata;
 use crate::ui::terminal::TuiBackend;
@@ -14,7 +14,7 @@ pub struct MetadataBar {
 impl Default for MetadataBar {
     fn default() -> Self {
         Self {
-            current_text: Self::build_text(None)
+            current_text: Self::build_text(None),
         }
     }
 }
@@ -28,8 +28,7 @@ impl MetadataBar {
     }
 
     fn build_paragraph(&self) -> Paragraph {
-        Paragraph::new(Span::raw(self.current_text.as_str()))
-            .style(Style::default().fg(Color::White))
+        Paragraph::new(Span::raw(self.current_text.as_str())).style(Style::default().fg(Color::White))
     }
 
     pub fn set_selected_process(&mut self, process_data: Option<&ProcessMetadata>) {

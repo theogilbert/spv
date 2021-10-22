@@ -5,9 +5,9 @@ use log::warn;
 
 use crate::core::collection::MetricCollector;
 use crate::core::process::{ProcessCollector, ProcessMetadata};
-use crate::Error;
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
+use crate::Error;
 
 pub struct SpvApplication {
     receiver: Receiver<Trigger>,
@@ -16,16 +16,15 @@ pub struct SpvApplication {
     collectors: HashMap<String, Box<dyn MetricCollector>>,
 }
 
-
 impl SpvApplication {
-    pub fn new(receiver: Receiver<Trigger>, collectors: Vec<Box<dyn MetricCollector>>,
-               process_view: ProcessCollector) -> Result<Self, Error> {
-        let ui = SpvUI::new(collectors.iter()
-            .map(|p| p.name().to_string()))?;
+    pub fn new(
+        receiver: Receiver<Trigger>,
+        collectors: Vec<Box<dyn MetricCollector>>,
+        process_view: ProcessCollector,
+    ) -> Result<Self, Error> {
+        let ui = SpvUI::new(collectors.iter().map(|p| p.name().to_string()))?;
 
-        let collectors_map = collectors.into_iter()
-            .map(|mc| (mc.name().to_string(), mc))
-            .collect();
+        let collectors_map = collectors.into_iter().map(|mc| (mc.name().to_string(), mc)).collect();
 
         let mut spv_app = Self {
             receiver,
@@ -48,9 +47,7 @@ impl SpvApplication {
 
             match trigger {
                 Trigger::Exit => break,
-                Trigger::Impulse => {
-                    self.collect_metrics()?
-                }
+                Trigger::Impulse => self.collect_metrics()?,
                 Trigger::NextProcess => self.ui.next_process(),
                 Trigger::PreviousProcess => self.ui.previous_process(),
                 Trigger::Resize => {
@@ -82,10 +79,9 @@ impl SpvApplication {
         let pids = SpvApplication::extract_processes_pids(&processes);
 
         for collector in self.collectors.values_mut() {
-            collector.collect(&pids)
-                .unwrap_or_else(|e| {
-                    warn!("Error reading from collector {}: {}", collector.name(), e);
-                });
+            collector.collect(&pids).unwrap_or_else(|e| {
+                warn!("Error reading from collector {}: {}", collector.name(), e);
+            });
         }
 
         processes.sort_by(|pm1, pm2| {
@@ -99,31 +95,31 @@ impl SpvApplication {
     }
 
     fn collect_processes(&mut self) -> Result<Vec<ProcessMetadata>, Error> {
-        self.process_view.processes()
-            .map_err(Error::CoreError)
+        self.process_view.processes().map_err(Error::CoreError)
     }
 
     fn extract_processes_pids(processes: &[ProcessMetadata]) -> Vec<u32> {
-        processes.iter()
-            .map(|pm| pm.pid())
-            .collect()
+        processes.iter().map(|pm| pm.pid()).collect()
     }
 
     fn draw_ui(&mut self) -> Result<(), Error> {
-        let selected_pid = self.ui.current_process()
-            .map_or(0, |pm| pm.pid());
+        let selected_pid = self.ui.current_process().map_or(0, |pm| pm.pid());
 
         let current_collector = self.current_collector(&self.collectors);
 
-        self.ui.render(&current_collector.overview(),
-                       &current_collector.view(selected_pid))
+        self.ui
+            .render(&current_collector.overview(), &current_collector.view(selected_pid))
             .map_err(Error::UiError)
     }
 
-    fn current_collector<'a>(&self, collectors: &'a HashMap<String, Box<dyn MetricCollector>>) -> &'a dyn MetricCollector {
+    fn current_collector<'a>(
+        &self,
+        collectors: &'a HashMap<String, Box<dyn MetricCollector>>,
+    ) -> &'a dyn MetricCollector {
         // The collectors attribute has to be passed as parameters. Otherwise the compiler thinks that
         // this function borrows the whole &self reference immutably (preventing further mutable borrowing of self.ui)
-        collectors.get(self.ui.current_tab())
+        collectors
+            .get(self.ui.current_tab())
             .expect("No collector is selected")
             .as_ref()
     }

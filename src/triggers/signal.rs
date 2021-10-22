@@ -3,7 +3,7 @@ use std::sync::mpsc::Sender;
 use signal_hook::iterator::Signals;
 
 use crate::triggers::{Error, Trigger};
-use signal_hook::consts::{SIGTERM, SIGINT, SIGQUIT, SIGWINCH};
+use signal_hook::consts::{SIGINT, SIGQUIT, SIGTERM, SIGWINCH};
 
 pub struct SignalListener {
     sender: Sender<Trigger>,
@@ -12,14 +12,12 @@ pub struct SignalListener {
 
 /// Listens for UNIX interrupt signals and emits appropriate triggers
 impl SignalListener {
-
     pub fn new(sender: Sender<Trigger>) -> Self {
         Self { sender, exit: false }
     }
 
     pub fn listen(mut self) -> Result<(), Error> {
-        let mut signals = Signals::new(&[SIGINT, SIGTERM, SIGQUIT, SIGWINCH])
-            .map_err(Error::SignalError)?;
+        let mut signals = Signals::new(&[SIGINT, SIGTERM, SIGQUIT, SIGWINCH]).map_err(Error::SignalError)?;
 
         while !self.exit {
             for signal in signals.wait() {
@@ -28,7 +26,7 @@ impl SignalListener {
                         self.send_exit();
                     }
                     SIGWINCH => self.send(Trigger::Resize),
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 }
             }
         }

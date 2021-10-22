@@ -42,7 +42,6 @@ pub trait Metric: Debug {
     fn explicit_repr(&self, index: usize) -> Result<String, Error>;
 }
 
-
 #[cfg(test)]
 impl PartialEq for &dyn Metric {
     // Helper PartialEq impl to make tests more readable
@@ -63,7 +62,6 @@ impl PartialEq for &dyn Metric {
     }
 }
 
-
 /// Metric representing a percent value (e.g. CPU usage)
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct PercentMetric {
@@ -77,30 +75,40 @@ impl PercentMetric {
 }
 
 impl Default for PercentMetric {
-    fn default() -> Self { PercentMetric::new(0.) }
+    fn default() -> Self {
+        PercentMetric::new(0.)
+    }
 }
 
 impl Metric for PercentMetric {
     /// Returns 1, as PercentMetric is only composed of one element: the percent value.
-    fn cardinality(&self) -> usize { 1 }
+    fn cardinality(&self) -> usize {
+        1
+    }
 
     fn as_f64(&self, index: usize) -> Result<f64, Error> {
         match index {
             0 => Ok(self.percent_usage),
-            _ => Err(Error::RawMetricAccessError(index, self.cardinality()))
+            _ => Err(Error::RawMetricAccessError(index, self.cardinality())),
         }
     }
 
-    fn max_value(&self) -> f64 { self.percent_usage }
+    fn max_value(&self) -> f64 {
+        self.percent_usage
+    }
 
-    fn unit(&self) -> &'static str { "%" }
+    fn unit(&self) -> &'static str {
+        "%"
+    }
 
-    fn concise_repr(&self) -> String { format!("{:.1}", self.percent_usage) }
+    fn concise_repr(&self) -> String {
+        format!("{:.1}", self.percent_usage)
+    }
 
     fn explicit_repr(&self, index: usize) -> Result<String, Error> {
         match index {
             0 => Ok(format!("Usage {:.2}%", self.percent_usage)),
-            _ => Err(Error::RawMetricAccessError(index, self.cardinality()))
+            _ => Err(Error::RawMetricAccessError(index, self.cardinality())),
         }
     }
 }
@@ -147,32 +155,42 @@ impl IOMetric {
 }
 
 impl Default for IOMetric {
-    fn default() -> Self { IOMetric::new(0, 0) }
+    fn default() -> Self {
+        IOMetric::new(0, 0)
+    }
 }
 
 impl Metric for IOMetric {
     /// Returns 2, as a IOMetric is composed of two elements: the input and the output values
-    fn cardinality(&self) -> usize { 2 }
+    fn cardinality(&self) -> usize {
+        2
+    }
 
     fn as_f64(&self, index: usize) -> Result<f64, Error> {
         match index {
             0 => Ok(self.input as f64),
             1 => Ok(self.output as f64),
-            _ => Err(Error::RawMetricAccessError(index, self.cardinality()))
+            _ => Err(Error::RawMetricAccessError(index, self.cardinality())),
         }
     }
 
-    fn max_value(&self) -> f64 { self.input.max(self.output) as f64 }
+    fn max_value(&self) -> f64 {
+        self.input.max(self.output) as f64
+    }
 
-    fn unit(&self) -> &'static str { "B/s" }
+    fn unit(&self) -> &'static str {
+        "B/s"
+    }
 
-    fn concise_repr(&self) -> String { format_bytes(self.max_value() as usize, 1) }
+    fn concise_repr(&self) -> String {
+        format_bytes(self.max_value() as usize, 1)
+    }
 
     fn explicit_repr(&self, index: usize) -> Result<String, Error> {
         match index {
             0 => Ok(format!("Input : {}B/s", format_bytes(self.input, 2))),
             1 => Ok(format!("Output: {}B/s", format_bytes(self.output, 2))),
-            _ => Err(Error::RawMetricAccessError(index, self.cardinality()))
+            _ => Err(Error::RawMetricAccessError(index, self.cardinality())),
         }
     }
 }
@@ -186,16 +204,21 @@ fn format_bytes(bytes_val: usize, precision: usize) -> String {
 
     const METRIC_PREFIXES: [&str; 4] = ["", "k", "M", "G"];
 
-    let prefix_index = (bytes_val as f64).log(1024.)
+    let prefix_index = (bytes_val as f64)
+        .log(1024.)
         .max(0.)
         .min((METRIC_PREFIXES.len() - 1) as f64)
         .floor() as usize;
 
     let simplified = bytes_val as f64 / (1024_usize.pow(prefix_index as u32) as f64);
 
-    format!("{:.precision$}{}", simplified, METRIC_PREFIXES[prefix_index], precision = precision)
+    format!(
+        "{:.precision$}{}",
+        simplified,
+        METRIC_PREFIXES[prefix_index],
+        precision = precision
+    )
 }
-
 
 impl PartialOrd for IOMetric {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {

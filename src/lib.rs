@@ -6,12 +6,11 @@ use thiserror::Error;
 #[macro_use]
 mod macros;
 
-mod ui;
-pub mod procfs;
 pub mod core;
-pub mod triggers;
+pub mod procfs;
 pub mod spv;
-
+pub mod triggers;
+mod ui;
 
 #[derive(Error, Debug)]
 pub enum Error {

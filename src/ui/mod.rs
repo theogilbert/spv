@@ -4,7 +4,7 @@ use std::time::Duration;
 use thiserror::Error;
 
 use crate::core::process::ProcessMetadata;
-use crate::core::view::{MetricsOverview, MetricView};
+use crate::core::view::{MetricView, MetricsOverview};
 use crate::ui::chart::MetricsChart;
 use crate::ui::layout::UiLayout;
 use crate::ui::metadata::MetadataBar;
@@ -12,11 +12,11 @@ use crate::ui::processes::ProcessList;
 use crate::ui::tabs::MetricTabs;
 use crate::ui::terminal::Terminal;
 
-mod layout;
-mod tabs;
-mod processes;
 mod chart;
+mod layout;
 mod metadata;
+mod processes;
+mod tabs;
 mod terminal;
 
 #[derive(Error, Debug)]
@@ -34,7 +34,7 @@ pub struct SpvUI {
 }
 
 impl SpvUI {
-    pub fn new(labels: impl Iterator<Item=String>) -> Result<Self, Error> {
+    pub fn new(labels: impl Iterator<Item = String>) -> Result<Self, Error> {
         let tabs = MetricTabs::new(labels.collect());
         let chart = MetricsChart::new(Duration::from_secs(60));
 
@@ -97,4 +97,3 @@ impl SpvUI {
         self.tabs.previous();
     }
 }
-

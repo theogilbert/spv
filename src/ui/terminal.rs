@@ -3,13 +3,12 @@ use std::io::Stdout;
 
 use log::error;
 use termion::raw::{IntoRawMode, RawTerminal};
-use tui::{Frame, Terminal as TuiTerminal};
 use tui::backend::TermionBackend;
+use tui::{Frame, Terminal as TuiTerminal};
 
 use crate::ui::Error;
 
 pub type TuiBackend = TermionBackend<RawTerminal<Stdout>>;
-
 
 pub struct Terminal {
     tui_terminal: TuiTerminal<TuiBackend>,
@@ -17,8 +16,7 @@ pub struct Terminal {
 
 impl Terminal {
     pub fn new() -> Result<Self, Error> {
-        let stdout = io::stdout()
-            .into_raw_mode()?;
+        let stdout = io::stdout().into_raw_mode()?;
         let backend = TermionBackend::new(stdout);
 
         let mut tui_terminal = TuiTerminal::new(backend)?;
@@ -36,11 +34,10 @@ impl Terminal {
     }
 
     pub fn draw<F>(&mut self, f: F) -> Result<(), Error>
-        where F: FnOnce(&mut Frame<TuiBackend>),
+    where
+        F: FnOnce(&mut Frame<TuiBackend>),
     {
-        self.tui_terminal.draw(f)
-            .map(|_frame| ())
-            .map_err(Error::IOError)
+        self.tui_terminal.draw(f).map(|_frame| ()).map_err(Error::IOError)
     }
 }
 
@@ -51,4 +48,3 @@ impl Drop for Terminal {
         }
     }
 }
-

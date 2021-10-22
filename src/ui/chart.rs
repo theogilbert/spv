@@ -1,10 +1,10 @@
 use std::time::Duration;
 
-use tui::{Frame, symbols};
 use tui::layout::Rect;
 use tui::style::{Color, Style};
 use tui::text::Span;
 use tui::widgets::{Axis, Block, Borders, Chart, Dataset, GraphType};
+use tui::{symbols, Frame};
 
 use crate::core::view::MetricView;
 use crate::ui::terminal::TuiBackend;
@@ -14,7 +14,6 @@ pub struct MetricsChart {
     span: Duration,
     axis_origin_label: String,
 }
-
 
 // TODO Keep displaying "dead" processes if they are covered by `span`
 impl MetricsChart {
@@ -31,14 +30,18 @@ impl MetricsChart {
         let chart = Chart::new(data_frame.datasets())
             .block(Block::default().borders(Borders::ALL))
             .x_axis(self.define_x_axis())
-            .y_axis(self.define_y_axis(&data_frame, metrics_view.max_concise_repr(self.span),
-                                       metrics_view.unit()));
+            .y_axis(self.define_y_axis(
+                &data_frame,
+                metrics_view.max_concise_repr(self.span),
+                metrics_view.unit(),
+            ));
 
         frame.render_widget(chart, chunk);
     }
 
     fn define_x_axis(&self) -> Axis {
-        let labels = [&self.axis_origin_label, "now"].iter()
+        let labels = [&self.axis_origin_label, "now"]
+            .iter()
             .cloned()
             .map(Span::from)
             .collect();
@@ -65,7 +68,6 @@ impl MetricsChart {
     }
 }
 
-
 /// Performs all required operations to get raw "drawable" data from `&[&Metric]`
 struct DataFrame<'a> {
     metrics_view: &'a MetricView<'a>,
@@ -89,16 +91,18 @@ impl<'a> DataFrame<'a> {
     pub fn datasets(&self) -> Vec<Dataset> {
         const COLORS: [Color; 2] = [Color::Blue, Color::Green];
 
-        self.data.iter()
+        self.data
+            .iter()
             .enumerate()
             .map(|(index, data)| {
-                let name = self.metrics_view.last_or_default()
+                let name = self
+                    .metrics_view
+                    .last_or_default()
                     .explicit_repr(index)
                     // panic should never happen as index should never be greater than cardinality:
                     .expect("Invalid index when building dataframe");
 
-                let ds_style = Style::default()
-                    .fg(COLORS[index % COLORS.len()]);
+                let ds_style = Style::default().fg(COLORS[index % COLORS.len()]);
 
                 Dataset::default()
                     .name(name)
@@ -110,25 +114,19 @@ impl<'a> DataFrame<'a> {
             .collect()
     }
 
-
     /// Extract raw data from a collection of metrics
     /// Raw data consists of sets of (f64, f64) tuples, each set corresponding to a drawable
     /// `Dataset`
-    fn extract_raw_from_metrics(metrics_view: &MetricView, span: Duration,
-                                step: Duration) -> Vec<Vec<(f64, f64)>> {
+    fn extract_raw_from_metrics(metrics_view: &MetricView, span: Duration, step: Duration) -> Vec<Vec<(f64, f64)>> {
         let mut data_vecs: Vec<_> = Vec::new();
-        let metrics_cardinality = metrics_view
-            .last_or_default()
-            .cardinality();
+        let metrics_cardinality = metrics_view.last_or_default().cardinality();
 
         for dimension_idx in 0..metrics_cardinality {
-            let data: Vec<_> = metrics_view.extract(span)
+            let data: Vec<_> = metrics_view
+                .extract(span)
                 .iter()
                 .rev()
-                .map(|m| {
-                    m.as_f64(dimension_idx)
-                        .expect("Error accessing raw metric value")
-                })
+                .map(|m| m.as_f64(dimension_idx).expect("Error accessing raw metric value"))
                 .enumerate()
                 .map(|(t, r)| (0. - (t as f64 * step.as_secs_f64()), r))
                 .collect();

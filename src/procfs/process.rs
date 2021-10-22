@@ -1,15 +1,14 @@
 //! Process discovery
 
-
-use std::fs::{DirEntry, File, read_dir};
+use std::fs::{read_dir, DirEntry, File};
 use std::io;
 use std::io::Read;
 use std::path::PathBuf;
 
 use thiserror::Error;
 
-use crate::core::Error as CoreError;
 use crate::core::process::{Pid, ProcessMetadata, ProcessScanner};
+use crate::core::Error as CoreError;
 
 /// Errors internal to the process module
 #[derive(Error, Debug)]
@@ -30,20 +29,20 @@ impl From<Error> for CoreError {
     }
 }
 
-
 /// Implementation of ProcessScanner that uses the `/proc` Linux virtual directory as source
 #[derive(Default)]
 pub struct ProcfsScanner {
-    proc_dir: PathBuf
+    proc_dir: PathBuf,
 }
 
 /// Scan running processes on a Linux host by scanning the content of /proc directory
 impl ProcfsScanner {
     /// Returns a new ProcfsScanner instance
     pub fn new() -> ProcfsScanner {
-        ProcfsScanner { proc_dir: PathBuf::from("/proc") }
+        ProcfsScanner {
+            proc_dir: PathBuf::from("/proc"),
+        }
     }
-
 
     /// Parses a PID from a directory name, if it represents an unsigned integer
     ///
@@ -52,21 +51,20 @@ impl ProcfsScanner {
     ///
     fn extract_pid_from_proc_dir(dir_name_opt: Option<&str>) -> std::result::Result<Pid, Error> {
         match dir_name_opt {
-            Some(dir_name) => dir_name.parse::<Pid>()
+            Some(dir_name) => dir_name
+                .parse::<Pid>()
                 .map_err(|_| Error::NotProcessDir(dir_name.to_string())),
-            None => Err(Error::NotProcessDir("".to_string()))
+            None => Err(Error::NotProcessDir("".to_string())),
         }
     }
 }
-
 
 impl ProcessScanner for ProcfsScanner {
     /// Returns the PIDs of currently running processes
     fn scan(&self) -> std::result::Result<Vec<Pid>, CoreError> {
         let path = self.proc_dir.as_path();
 
-        let dir_iter = read_dir(path)
-            .map_err(|e| Error::ProcessScanningFailure(path.into(), e))?;
+        let dir_iter = read_dir(path).map_err(|e| Error::ProcessScanningFailure(path.into(), e))?;
 
         let pids = dir_iter
             // only retrieve dir entry which are not err
@@ -88,17 +86,15 @@ impl ProcessScanner for ProcfsScanner {
     ///  * `pid`: The identifier of the process for which to retrieve metadata
     fn fetch_metadata(&self, pid: Pid) -> std::result::Result<ProcessMetadata, CoreError> {
         let mut command = String::new();
-        let comm_file_path = self.proc_dir
-            .join(pid.to_string())
-            .join("comm");
+        let comm_file_path = self.proc_dir.join(pid.to_string()).join("comm");
 
-        let mut file: File = File::open(comm_file_path.as_path())
-            .map_err(|_| Error::InvalidPID(pid))?;
+        let mut file: File = File::open(comm_file_path.as_path()).map_err(|_| Error::InvalidPID(pid))?;
 
         file.read_to_string(&mut command)
             .map_err(|io_err| Error::ProcessParsing(comm_file_path, io_err))?;
 
-        if command.ends_with('\n') {  // Remove trailing newline
+        if command.ends_with('\n') {
+            // Remove trailing newline
             command.pop();
         }
 
@@ -141,7 +137,7 @@ mod test_pid_scanner {
     use std::os::unix::fs::PermissionsExt;
     use std::path::Path;
 
-    use tempfile::{NamedTempFile, tempdir};
+    use tempfile::{tempdir, NamedTempFile};
 
     use crate::core::Error as CoreError;
 
@@ -156,13 +152,12 @@ mod test_pid_scanner {
 
         match NamedTempFile::new() {
             Ok(ntf) => Ok(ntf.persist(fp).expect("Could not persist file")),
-            Err(e) => Err(e)
+            Err(e) => Err(e),
         }
     }
 
     fn set_dir_permissions(path: &Path, mode: u32) -> std::io::Result<()> {
-        let mut perms = fs::metadata(path)?
-            .permissions();
+        let mut perms = fs::metadata(path)?.permissions();
 
         perms.set_mode(mode);
         fs::set_permissions(path, perms)
@@ -185,20 +180,22 @@ mod test_pid_scanner {
         ];
         let proc_subfiles = vec![
             create_tempfile("987", test_proc_dir.path()),
-            create_tempfile("46a", test_proc_dir.path())
+            create_tempfile("46a", test_proc_dir.path()),
         ];
 
         if proc_subdirs.iter().any(|i| i.is_err()) || proc_subfiles.iter().any(|i| i.is_err()) {
-            panic!("Could not create all temp dir/files: {:?} / {:?}", proc_subdirs, proc_subfiles);
+            panic!(
+                "Could not create all temp dir/files: {:?} / {:?}",
+                proc_subdirs, proc_subfiles
+            );
         }
 
         let proc_scanner = ProcfsScanner {
-            proc_dir: test_proc_dir.path().to_path_buf()
+            proc_dir: test_proc_dir.path().to_path_buf(),
         };
 
         // when we scan processes
-        let mut pids = proc_scanner.scan()
-            .expect("Could not scan processes");
+        let mut pids = proc_scanner.scan().expect("Could not scan processes");
         pids.sort();
 
         // The PIDs are only those represented by a dir with an integer name
@@ -212,7 +209,7 @@ mod test_pid_scanner {
         set_dir_permissions(test_proc_dir.path(), 0o000).expect("Could not set dir permissions");
 
         let proc_scanner = ProcfsScanner {
-            proc_dir: test_proc_dir.path().to_path_buf()
+            proc_dir: test_proc_dir.path().to_path_buf(),
         };
 
         // when we scan processes
@@ -228,55 +225,53 @@ mod test_pid_scanner {
     fn test_process_metadata() {
         let test_proc_dir = tempdir().expect("Could not create tmp dir");
 
-        create_tempdir("123", test_proc_dir.path())
-            .expect("Could not create process dir");
+        create_tempdir("123", test_proc_dir.path()).expect("Could not create process dir");
 
-        let mut comm_file = create_tempfile("comm", test_proc_dir.path().join("123").as_os_str())
-            .expect("Could not create comm file");
+        let mut comm_file =
+            create_tempfile("comm", test_proc_dir.path().join("123").as_os_str()).expect("Could not create comm file");
 
-        comm_file.write(b"test_cmd")
-            .expect("Could not write to comm file"); // The process 123's command is test_cmd
+        comm_file.write(b"test_cmd").expect("Could not write to comm file"); // The process 123's command is test_cmd
 
         let proc_scanner = ProcfsScanner {
-            proc_dir: test_proc_dir.path().to_path_buf()
+            proc_dir: test_proc_dir.path().to_path_buf(),
         };
 
-        let process_metadata = proc_scanner.fetch_metadata(123)
+        let process_metadata = proc_scanner
+            .fetch_metadata(123)
             .expect("Could not get processes metadata");
 
-        assert_eq!(process_metadata,
-                   ProcessMetadata::new(123, "test_cmd".to_string()));
+        assert_eq!(process_metadata, ProcessMetadata::new(123, "test_cmd".to_string()));
     }
 
     #[test]
     fn test_process_metadata_with_newline() {
         let test_proc_dir = tempdir().expect("Could not create tmp dir");
 
-        create_tempdir("123", test_proc_dir.path())
-            .expect("Could not create process dir");
+        create_tempdir("123", test_proc_dir.path()).expect("Could not create process dir");
 
-        let mut comm_file = create_tempfile("comm", test_proc_dir.path().join("123").as_os_str())
-            .expect("Could not create comm file");
+        let mut comm_file =
+            create_tempfile("comm", test_proc_dir.path().join("123").as_os_str()).expect("Could not create comm file");
 
-        comm_file.write(b"test_cmd\n")
-            .expect("Could not write to comm file"); // The process 123's command is test_cmd
+        comm_file.write(b"test_cmd\n").expect("Could not write to comm file"); // The process 123's command is test_cmd
 
         let proc_scanner = ProcfsScanner {
-            proc_dir: test_proc_dir.path().to_path_buf()
+            proc_dir: test_proc_dir.path().to_path_buf(),
         };
 
-        let process_metadata = proc_scanner.fetch_metadata(123)
+        let process_metadata = proc_scanner
+            .fetch_metadata(123)
             .expect("Could not get processes metadata");
 
-        assert_eq!(process_metadata,
-                   ProcessMetadata::new(123, "test_cmd".to_string()));
+        assert_eq!(process_metadata, ProcessMetadata::new(123, "test_cmd".to_string()));
     }
 
     #[test]
     fn test_get_metadata_with_invalid_pid() {
         let test_proc_dir = tempdir().expect("Could not create tmp dir");
 
-        let proc_scanner = ProcfsScanner { proc_dir: test_proc_dir.path().to_path_buf() };
+        let proc_scanner = ProcfsScanner {
+            proc_dir: test_proc_dir.path().to_path_buf(),
+        };
 
         let process_metadata_ret = proc_scanner.fetch_metadata(123);
 

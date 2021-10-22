@@ -1,5 +1,5 @@
-use std::collections::{HashMap, VecDeque};
 use std::collections::hash_map::Entry;
+use std::collections::{HashMap, VecDeque};
 use std::ops::Add;
 use std::time::Duration;
 #[cfg(not(test))]
@@ -12,8 +12,7 @@ use crate::core::process::Pid;
 use crate::procfs::ProcfsError;
 
 #[derive(Clone)]
-struct DatedValue
-{
+struct DatedValue {
     date: Instant,
     value: usize,
 }
@@ -30,7 +29,6 @@ pub struct ProcessesRates {
     mode: PushMode,
 }
 
-
 impl ProcessesRates {
     /// Creates a new ProcessRates structure, configured to calculate the frequency from the last
     /// data covered by the given retention duration
@@ -42,7 +40,11 @@ impl ProcessesRates {
     ///         pushed value
     ///  * `data_retention`: Indicates over how much time to calculate the rate.
     pub fn new(mode: PushMode, data_retention: Duration) -> Self {
-        ProcessesRates { acc_values: HashMap::new(), range: data_retention, mode }
+        ProcessesRates {
+            acc_values: HashMap::new(),
+            range: data_retention,
+            mode,
+        }
     }
 
     /// Pushes a new data associated to the given PID
@@ -54,16 +56,14 @@ impl ProcessesRates {
 
         let new_value = match self.mode {
             PushMode::Accumulative => value,
-            PushMode::Increment => {
-                existing_values.back()
-                    .map(|dv| dv.value)
-                    .unwrap_or(0)
-                    .add(value)
-            }
+            PushMode::Increment => existing_values.back().map(|dv| dv.value).unwrap_or(0).add(value),
         };
 
         let now = Instant::now();
-        existing_values.push_back(DatedValue { date: now, value: new_value });
+        existing_values.push_back(DatedValue {
+            date: now,
+            value: new_value,
+        });
         self.remove_outdated_values(pid, now);
     }
 
@@ -73,7 +73,8 @@ impl ProcessesRates {
         let values = self.acc_values.get_mut(&pid).unwrap();
         let data_retention = self.range;
 
-        let last_outdated = values.iter()
+        let last_outdated = values
+            .iter()
             .filter(|dv| dv.date < now - data_retention)
             .max_by(|dv_1, dv_2| dv_1.date.cmp(&dv_2.date))
             .cloned();
@@ -95,8 +96,7 @@ impl ProcessesRates {
     ///  * `pid`: The PID of the process for which to calculate the rate
     ///
     pub fn rate(&self, pid: Pid) -> Result<f64, ProcfsError> {
-        let values = self.acc_values.get(&pid)
-            .ok_or(ProcfsError::UnknownPID(pid))?;
+        let values = self.acc_values.get(&pid).ok_or(ProcfsError::UnknownPID(pid))?;
 
         if values.len() < 2 {
             return Ok(0.);
@@ -117,14 +117,14 @@ impl ProcessesRates {
         let origin = now - self.range;
 
         if values.len() < 2 {
-            return None;  // If there is not two values
+            return None; // If there is not two values
         }
 
         let first = values.front().unwrap();
         let second = values.get(1).unwrap();
 
         if first.date == second.date {
-            return None;  // If the two dates are identical, we don't want to divide by zero below
+            return None; // If the two dates are identical, we don't want to divide by zero below
         }
 
         let slope = (second.value - first.value) as f64 / (second.date - first.date).as_secs_f64();
@@ -145,7 +145,6 @@ impl ProcessesRates {
         }
     }
 
-
     // TODO Clear process values when the process has died
 }
 
@@ -156,14 +155,13 @@ mod test_process_rates {
     use rstest::*;
     use sn_fake_clock::FakeClock;
 
-    use crate::procfs::ProcfsError;
     use crate::procfs::rates::{ProcessesRates, PushMode};
+    use crate::procfs::ProcfsError;
 
     #[fixture]
     fn process_rates() -> ProcessesRates {
         FakeClock::set_time(10000);
-        ProcessesRates::new(PushMode::Accumulative,
-                            Duration::from_secs(1))
+        ProcessesRates::new(PushMode::Accumulative, Duration::from_secs(1))
     }
 
     #[rstest]
@@ -216,7 +214,7 @@ mod test_process_rates {
         FakeClock::advance_time(2000);
         process_rates.push(123, 100);
 
-        assert_eq!(process_rates.rate(123).unwrap(), 50.);  // 100 over 2s -> 50/s
+        assert_eq!(process_rates.rate(123).unwrap(), 50.); // 100 over 2s -> 50/s
     }
 
     #[rstest]

@@ -5,11 +5,11 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::time::Duration;
 
-use crate::core::Error;
 use crate::core::metrics::Metric;
 use crate::core::probe::Probe;
 use crate::core::process::Pid;
-use crate::core::view::{MetricsOverview, MetricView};
+use crate::core::view::{MetricView, MetricsOverview};
+use crate::core::Error;
 
 /// Types which can collect and store a specific type of [`Metric`](crate::core::metrics::Metric)
 ///
@@ -64,13 +64,19 @@ pub trait MetricCollector {
 /// An implementation of [`MetricCollector`](MetricCollector)
 ///
 /// Uses a [`Probe`](crate::core::probe::Probe) object to probe metrics.
-pub struct ProbeCollector<M> where M: Metric + Copy + PartialOrd + Default {
+pub struct ProbeCollector<M>
+where
+    M: Metric + Copy + PartialOrd + Default,
+{
     collection: MetricCollection<M>,
     probe: Box<dyn Probe<M>>,
     resolution: Duration,
 }
 
-impl<M> ProbeCollector<M> where M: Metric + Copy + PartialOrd + Default {
+impl<M> ProbeCollector<M>
+where
+    M: Metric + Copy + PartialOrd + Default,
+{
     pub fn new(probe: impl Probe<M> + 'static, resolution: Duration) -> Self {
         Self {
             collection: MetricCollection::<M>::new(),
@@ -80,7 +86,10 @@ impl<M> ProbeCollector<M> where M: Metric + Copy + PartialOrd + Default {
     }
 }
 
-impl<M> MetricCollector for ProbeCollector<M> where M: Metric + Copy + PartialOrd + Default {
+impl<M> MetricCollector for ProbeCollector<M>
+where
+    M: Metric + Copy + PartialOrd + Default,
+{
     fn collect(&mut self, pids: &[Pid]) -> Result<(), Error> {
         let metrics = self.probe.probe_processes(pids)?;
 
@@ -92,25 +101,27 @@ impl<M> MetricCollector for ProbeCollector<M> where M: Metric + Copy + PartialOr
     }
 
     fn calibrate(&mut self, pids: &[Pid]) -> Result<(), Error> {
-        self.probe.probe_processes(pids)
-            .map(|_| ())
+        self.probe.probe_processes(pids).map(|_| ())
     }
 
     fn compare_pids_by_last_metrics(&self, pid1: Pid, pid2: Pid) -> Ordering {
         let last_pid1 = self.collection.last_or_default(pid1);
         let last_pid2 = self.collection.last_or_default(pid2);
 
-        last_pid1.partial_cmp(last_pid2)
-            .unwrap_or(Ordering::Equal)
+        last_pid1.partial_cmp(last_pid2).unwrap_or(Ordering::Equal)
     }
 
     fn name(&self) -> &'static str {
         self.probe.name()
     }
 
-    fn view(&self, pid: Pid) -> MetricView { self.collection.view(pid, self.resolution) }
+    fn view(&self, pid: Pid) -> MetricView {
+        self.collection.view(pid, self.resolution)
+    }
 
-    fn overview(&self) -> MetricsOverview { self.collection.overview() }
+    fn overview(&self) -> MetricsOverview {
+        self.collection.overview()
+    }
 }
 
 #[cfg(test)]
@@ -122,17 +133,19 @@ mod test_probe_collector {
     use rstest::*;
 
     use crate::core::collection::{MetricCollector, ProbeCollector};
-    use crate::core::Error;
     use crate::core::metrics::PercentMetric;
     use crate::core::probe::Probe;
     use crate::core::process::Pid;
+    use crate::core::Error;
 
     struct ProbeFake {
         return_map: Option<HashMap<Pid, f64>>,
     }
 
     impl Probe<PercentMetric> for ProbeFake {
-        fn name(&self) -> &'static str { return "fake"; }
+        fn name(&self) -> &'static str {
+            return "fake";
+        }
 
         fn probe(&mut self, pid: Pid) -> Result<PercentMetric, Error> {
             if let Some(return_map) = self.return_map.as_ref() {
@@ -149,7 +162,9 @@ mod test_probe_collector {
     }
 
     fn create_probe_collector_with_return_map(return_map: HashMap<Pid, f64>) -> ProbeCollector<PercentMetric> {
-        let probe = ProbeFake { return_map: Some(return_map) };
+        let probe = ProbeFake {
+            return_map: Some(return_map),
+        };
         ProbeCollector::new(probe, Duration::from_secs(1))
     }
 
@@ -202,8 +217,11 @@ mod test_probe_collector {
     #[case(50., 45., Ordering::Greater)]
     #[case(50., 55., Ordering::Less)]
     #[case(50., 50., Ordering::Equal)]
-    fn test_collector_should_correctly_compare_pids(#[case] metric_pid1: f64, #[case] metric_pid2: f64,
-                                                    #[case] expected_ord: Ordering) {
+    fn test_collector_should_correctly_compare_pids(
+        #[case] metric_pid1: f64,
+        #[case] metric_pid2: f64,
+        #[case] expected_ord: Ordering,
+    ) {
         let return_map = hashmap!(1 => metric_pid1, 2 => metric_pid2);
         let mut collector = create_probe_collector_with_return_map(return_map);
         collector.collect(&[1, 2]).unwrap();
@@ -215,7 +233,7 @@ mod test_probe_collector {
     fn test_collector_should_compare_pid_as_equal_when_not_collected() {
         let return_map = hashmap!(1 => 50., 2 => 45.);
         let mut collector = create_probe_collector_with_return_map(return_map);
-        collector.calibrate(&[1, 2]).unwrap();  // we calibrate here, we do not collect
+        collector.calibrate(&[1, 2]).unwrap(); // we calibrate here, we do not collect
 
         assert_eq!(collector.compare_pids_by_last_metrics(1, 2), Ordering::Equal);
     }
@@ -235,20 +253,29 @@ mod test_probe_collector {
 /// It can also return them as &dyn Metric through MetricView or MetricsOverview.
 ///
 /// This struct was created to move the metric store logic out of MetricCollector
-pub(crate) struct MetricCollection<M> where M: Metric + Copy + PartialOrd + Default {
+pub(crate) struct MetricCollection<M>
+where
+    M: Metric + Copy + PartialOrd + Default,
+{
     series: HashMap<Pid, Vec<M>>,
     default: M,
 }
 
-impl<M> MetricCollection<M> where M: Metric + Copy + PartialOrd + Default {
+impl<M> MetricCollection<M>
+where
+    M: Metric + Copy + PartialOrd + Default,
+{
     pub fn new() -> Self {
-        Self { series: HashMap::new(), default: M::default() }
+        Self {
+            series: HashMap::new(),
+            default: M::default(),
+        }
     }
 
     pub fn push(&mut self, pid: Pid, metric: M) {
         let process_series = match self.series.entry(pid) {
             Entry::Occupied(o) => o.into_mut(),
-            Entry::Vacant(v) => v.insert(Vec::new())
+            Entry::Vacant(v) => v.insert(Vec::new()),
         };
 
         process_series.push(metric);
@@ -261,20 +288,22 @@ impl<M> MetricCollection<M> where M: Metric + Copy + PartialOrd + Default {
     }
 
     fn metrics_of_process(&self, pid: Pid) -> Result<Vec<&M>, Error> {
-        self.series.get(&pid)
+        self.series
+            .get(&pid)
             .map(|v| v.iter().collect())
             .ok_or(Error::InvalidPID(pid))
     }
 
     pub fn view(&self, pid: Pid, resolution: Duration) -> MetricView {
-        let metrics = self.metrics_as_metric_trait_objects(pid)
-            .unwrap_or_default();
+        let metrics = self.metrics_as_metric_trait_objects(pid).unwrap_or_default();
 
         MetricView::new(metrics, resolution, &self.default)
     }
 
     pub fn overview(&self) -> MetricsOverview {
-        let last_metrics = self.series.keys()
+        let last_metrics = self
+            .series
+            .keys()
             .map(|pid| (*pid, self.last_or_default(*pid) as &dyn Metric))
             .collect();
 

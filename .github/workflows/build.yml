@@ -11,7 +11,6 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -20,5 +19,23 @@ jobs:
       run: rustup update stable
     - name: Build
       run: cargo build --all-features
+
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Update rustup
+      run: rustup update stable
     - name: Run tests
       run: cargo test --all-features
+
+  rustfmt:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Update rustup
+      run: rustup update stable
+    - name: Check format
+      run: cargo fmt --all -- --check

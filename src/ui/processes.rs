@@ -1,7 +1,7 @@
-use tui::Frame;
 use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
+use tui::Frame;
 
 use crate::core::process::{Pid, ProcessMetadata};
 use crate::core::view::MetricsOverview;
@@ -27,7 +27,6 @@ impl Default for ProcessList {
         }
     }
 }
-
 
 impl ProcessList {
     /// Renders the processes assigned through the
@@ -57,7 +56,10 @@ impl ProcessList {
         let index_opt = if self.processes.is_empty() {
             None
         } else {
-            Some(Self::retrieve_index_of_previously_selected_pid(&processes, self.selected_pid))
+            Some(Self::retrieve_index_of_previously_selected_pid(
+                &processes,
+                self.selected_pid,
+            ))
         };
 
         self.processes = processes;
@@ -66,7 +68,9 @@ impl ProcessList {
 
     /// Focus the previous process
     pub fn previous(&mut self) {
-        let prev_idx = self.state.selected()
+        let prev_idx = self
+            .state
+            .selected()
             .map(|s| if s > 0 { s - 1 } else { 0 })
             .unwrap_or(0);
 
@@ -75,9 +79,7 @@ impl ProcessList {
 
     /// Focus the next process
     pub fn next(&mut self) {
-        let next_idx = self.state.selected()
-            .map(|s| s + 1)
-            .unwrap_or(0);
+        let next_idx = self.state.selected().map(|s| s + 1).unwrap_or(0);
 
         self.select(Some(next_idx));
     }
@@ -86,7 +88,7 @@ impl ProcessList {
     pub fn selected(&self) -> Option<&ProcessMetadata> {
         match self.selected_pid {
             None => None,
-            Some(pid) => self.processes.iter().find(|pm| pm.pid() == pid)
+            Some(pid) => self.processes.iter().find(|pm| pm.pid() == pid),
         }
     }
 
@@ -106,19 +108,16 @@ impl ProcessList {
         }
     }
 
-
     /// Processes are displayed in a list, sorted by their metric values
     /// From one frame to the other, the same process may have a different position in the list
     /// This function returns the new position of the selected process in the given `processes` list
-    fn retrieve_index_of_previously_selected_pid(processes: &[ProcessMetadata],
-                                                 selected_pid: Option<Pid>) -> usize {
+    fn retrieve_index_of_previously_selected_pid(processes: &[ProcessMetadata], selected_pid: Option<Pid>) -> usize {
         match selected_pid {
             Some(selected_pid) => {
-                processes.iter()
-                    .position(|pm| pm.pid() == selected_pid)
-                    .unwrap_or(0) // If PID does not exist anymore, select first process
+                processes.iter().position(|pm| pm.pid() == selected_pid).unwrap_or(0)
+                // If PID does not exist anymore, select first process
             }
-            None => 0
+            None => 0,
         }
     }
 
@@ -130,9 +129,10 @@ impl ProcessList {
             .direction(Direction::Horizontal)
             .constraints(
                 [
-                    Constraint::Min(CMD_COL_WIDTH as u16 + 2),  // processes names
-                    Constraint::Min(METRICS_COL_WIDTH as u16),  // processes metrics
-                ].as_ref()
+                    Constraint::Min(CMD_COL_WIDTH as u16 + 2), // processes names
+                    Constraint::Min(METRICS_COL_WIDTH as u16), // processes metrics
+                ]
+                .as_ref(),
             )
             .split(chunk);
 
@@ -156,13 +156,13 @@ impl ProcessList {
     }
 
     fn render_name_column(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect) {
-        let processes_names: Vec<_> = self.processes.iter()
+        let processes_names: Vec<_> = self
+            .processes
+            .iter()
             .map(|pm| Self::shortened_command_name(pm))
             .collect();
 
-        let items: Vec<ListItem> = processes_names.iter()
-            .map(|cmd| ListItem::new(cmd.as_str()))
-            .collect();
+        let items: Vec<ListItem> = processes_names.iter().map(|cmd| ListItem::new(cmd.as_str())).collect();
 
         let list = Self::build_default_list_widget(items)
             .block(Block::default().borders(Borders::LEFT | Borders::BOTTOM))
@@ -170,7 +170,6 @@ impl ProcessList {
 
         frame.render_stateful_widget(list, chunk, &mut self.state);
     }
-
 
     /// Returns the formatted command name of `process_metadata` so that its length does not exceed
     /// `MAX_COMMAND_LENGTH` characters
@@ -183,16 +182,15 @@ impl ProcessList {
     }
 
     fn render_metric_column(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect, metrics_overview: &MetricsOverview) {
-        let str_metrics: Vec<String> = self.processes.iter()
+        let str_metrics: Vec<String> = self
+            .processes
+            .iter()
             .map(|pm| self.formatted_process_metric(pm, metrics_overview))
             .collect();
 
-        let items: Vec<ListItem> = str_metrics.iter()
-            .map(|pm| ListItem::new(pm.as_str()))
-            .collect();
+        let items: Vec<ListItem> = str_metrics.iter().map(|pm| ListItem::new(pm.as_str())).collect();
 
-        let list = Self::build_default_list_widget(items)
-            .block(Block::default().borders(Borders::BOTTOM));
+        let list = Self::build_default_list_widget(items).block(Block::default().borders(Borders::BOTTOM));
 
         frame.render_stateful_widget(list, chunk, &mut self.state);
     }
@@ -213,12 +211,11 @@ impl ProcessList {
     }
 }
 
-
 #[cfg(test)]
 mod test_justify_right {
     use rstest::*;
 
-    use crate::ui::processes::{METRICS_COL_WIDTH, ProcessList};
+    use crate::ui::processes::{ProcessList, METRICS_COL_WIDTH};
 
     #[fixture]
     fn process_list() -> ProcessList {
@@ -227,15 +224,10 @@ mod test_justify_right {
 
     #[fixture]
     fn short_metric_repr() -> String {
-        std::iter::repeat('0')
-            .take(METRICS_COL_WIDTH / 2)
-            .collect()
+        std::iter::repeat('0').take(METRICS_COL_WIDTH / 2).collect()
     }
 
-    #[rstest(input,
-    case("a"),
-    case("abcdefgh"),
-    )]
+    #[rstest(input, case("a"), case("abcdefgh"))]
     fn test_should_align_right_with_right_padding(process_list: ProcessList, input: &str) {
         let aligned = process_list.justify_metric_repr(input.to_string());
 
@@ -244,15 +236,16 @@ mod test_justify_right {
     }
 
     #[rstest]
-    fn test_should_contain_one_extra_space_in_front_of_short_text(process_list: ProcessList,
-                                                                  short_metric_repr: String) {
+    fn test_should_contain_one_extra_space_in_front_of_short_text(
+        process_list: ProcessList,
+        short_metric_repr: String,
+    ) {
         let justified_repr = process_list.justify_metric_repr(short_metric_repr);
         assert!(justified_repr.starts_with(" "));
     }
 
     #[rstest]
-    fn test_should_add_trailing_space_on_short_repr(process_list: ProcessList,
-                                                    short_metric_repr: String) {
+    fn test_should_add_trailing_space_on_short_repr(process_list: ProcessList, short_metric_repr: String) {
         let justified_repr = process_list.justify_metric_repr(short_metric_repr);
         assert!(justified_repr.ends_with(" "));
     }

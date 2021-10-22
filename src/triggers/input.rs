@@ -29,7 +29,7 @@ impl InputListener {
                 Key::Right => self.send(Trigger::NextTab),
                 Key::Up => self.send(Trigger::PreviousProcess),
                 Key::Down => self.send(Trigger::NextProcess),
-                _ => ()
+                _ => (),
             }
 
             if self.exit {
@@ -43,7 +43,7 @@ impl InputListener {
     fn on_ctrl_key_pressed(&mut self, key: char) {
         match key {
             'c' | 'd' => self.send_exit(),
-            _ => ()
+            _ => (),
         }
     }
 

@@ -20,8 +20,13 @@ pub struct ProcessMetadata {
 impl ProcessMetadata {
     /// Returns a new instance of a ProcessMetadata
     pub fn new<T>(pid: Pid, command: T) -> ProcessMetadata
-        where T: Into<String> {
-        ProcessMetadata { pid, command: command.into() }
+    where
+        T: Into<String>,
+    {
+        ProcessMetadata {
+            pid,
+            command: command.into(),
+        }
     }
 
     /// Returns the process identifier assigned to the process by the OS
@@ -54,7 +59,6 @@ mod test_process_metadata {
     }
 }
 
-
 /// Collects the running processes
 pub struct ProcessCollector {
     scanner: Box<dyn ProcessScanner>,
@@ -69,15 +73,14 @@ impl ProcessCollector {
     pub fn processes(&self) -> Result<Vec<ProcessMetadata>, Error> {
         let pids = self.scanner.scan()?;
 
-        Ok(pids.iter()
-            .filter_map(|pid| {
-                match self.scanner.fetch_metadata(*pid) {
-                    Err(e) => {
-                        warn!("Error fetching process metadata: {:?}", e);
-                        None
-                    }
-                    Ok(pm) => Some(pm)
+        Ok(pids
+            .iter()
+            .filter_map(|pid| match self.scanner.fetch_metadata(*pid) {
+                Err(e) => {
+                    warn!("Error fetching process metadata: {:?}", e);
+                    None
                 }
+                Ok(pm) => Some(pm),
             })
             .collect())
     }
@@ -98,9 +101,9 @@ pub trait ProcessScanner {
 
 #[cfg(test)]
 mod test_process_collector {
+    use crate::core::process::{Pid, ProcessCollector, ProcessMetadata, ProcessScanner};
     use crate::core::Error;
     use crate::core::Error::InvalidPID;
-    use crate::core::process::{Pid, ProcessCollector, ProcessMetadata, ProcessScanner};
 
     struct ScannerStub {
         scanned_pids: Vec<Pid>,
@@ -130,7 +133,10 @@ mod test_process_collector {
     }
 
     fn build_failing_process_collector(scanned_pids: Vec<Pid>, failing_processes: Vec<Pid>) -> ProcessCollector {
-        let boxed_scanner = Box::new(ScannerStub { scanned_pids, failing_processes });
+        let boxed_scanner = Box::new(ScannerStub {
+            scanned_pids,
+            failing_processes,
+        });
         ProcessCollector::new(boxed_scanner)
     }
 
@@ -148,9 +154,7 @@ mod test_process_collector {
 
         assert_eq!(processes.len(), 3);
 
-        let mut processes_pids = processes.iter()
-            .map(|pm| pm.pid)
-            .collect::<Vec<Pid>>();
+        let mut processes_pids = processes.iter().map(|pm| pm.pid).collect::<Vec<Pid>>();
         processes_pids.sort();
 
         assert_eq!(processes_pids, scanned_pids);
@@ -163,9 +167,7 @@ mod test_process_collector {
         let collector = build_failing_process_collector(scanned_pids, failing_processes);
         let processes = collector.processes().unwrap();
 
-        let processes_pids = processes.iter()
-            .map(|pm| pm.pid)
-            .collect::<Vec<Pid>>();
+        let processes_pids = processes.iter().map(|pm| pm.pid).collect::<Vec<Pid>>();
 
         assert_eq!(processes_pids.len(), 2);
         assert!(!processes_pids.contains(&2))

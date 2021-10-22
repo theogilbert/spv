@@ -23,62 +23,84 @@ pub trait ProcessData: Data {
     fn filepath(pid: Pid) -> PathBuf;
 }
 
-
 /// Type which can read a `SystemData`
-pub trait ReadSystemData<D> where D: SystemData + Sized {
+pub trait ReadSystemData<D>
+where
+    D: SystemData + Sized,
+{
     fn read(&mut self) -> Result<D, ProcfsError>;
 }
 
 /// Type which can read a `ProcessData`
-pub trait ReadProcessData<D> where D: ProcessData + Sized {
+pub trait ReadProcessData<D>
+where
+    D: ProcessData + Sized,
+{
     fn read(&mut self, pid: Pid) -> Result<D, ProcfsError>;
 }
 
-
 /// Reads data from procfs system files that are not associated to processes (directly in `/proc`)
-pub struct SystemDataReader<D> where D: SystemData + Sized {
+pub struct SystemDataReader<D>
+where
+    D: SystemData + Sized,
+{
     reader: ProcfsReader<D>,
 }
 
-impl<D> SystemDataReader<D> where D: SystemData + Sized {
+impl<D> SystemDataReader<D>
+where
+    D: SystemData + Sized,
+{
     pub fn new() -> Result<Self, ProcfsError> {
         let reader = ProcfsReader::new(D::filepath().as_path())?;
         Ok(SystemDataReader { reader })
     }
 }
 
-impl<D> ReadSystemData<D> for SystemDataReader<D> where D: SystemData + Sized {
+impl<D> ReadSystemData<D> for SystemDataReader<D>
+where
+    D: SystemData + Sized,
+{
     fn read(&mut self) -> Result<D, ProcfsError> {
         self.reader.read()
     }
 }
 
 /// Reads data from procfs files bound to a PID (in `/proc/[pid]/`)
-pub struct ProcessDataReader<D> where D: ProcessData + Sized {
+pub struct ProcessDataReader<D>
+where
+    D: ProcessData + Sized,
+{
     readers: HashMap<Pid, ProcfsReader<D>>,
 }
 
-impl<D> ProcessDataReader<D> where D: ProcessData + Sized {
+impl<D> ProcessDataReader<D>
+where
+    D: ProcessData + Sized,
+{
     pub fn new() -> Self {
-        ProcessDataReader { readers: HashMap::new() }
+        ProcessDataReader {
+            readers: HashMap::new(),
+        }
     }
 
     fn get_process_reader(&mut self, pid: Pid) -> Result<&mut ProcfsReader<D>, ProcfsError> {
         Ok(match self.readers.entry(pid) {
             Entry::Occupied(o) => o.into_mut(),
-            Entry::Vacant(v) => v.insert({
-                ProcfsReader::new(D::filepath(pid).as_path())?
-            })
+            Entry::Vacant(v) => v.insert({ ProcfsReader::new(D::filepath(pid).as_path())? }),
         })
     }
 }
 
-impl<D> ReadProcessData<D> for ProcessDataReader<D> where D: ProcessData + Sized {
+impl<D> ReadProcessData<D> for ProcessDataReader<D>
+where
+    D: ProcessData + Sized,
+{
     fn read(&mut self, pid: u32) -> Result<D, ProcfsError> {
-        let data_ret = self.get_process_reader(pid)?
-            .read();
+        let data_ret = self.get_process_reader(pid)?.read();
 
-        if data_ret.is_err() {  // if reading files for this PID fails, we stop tracking the file
+        if data_ret.is_err() {
+            // if reading files for this PID fails, we stop tracking the file
             self.readers.remove(&pid);
         }
 
@@ -86,16 +108,21 @@ impl<D> ReadProcessData<D> for ProcessDataReader<D> where D: ProcessData + Sized
     }
 }
 
-
-struct ProcfsReader<D> where D: Data + Sized {
+struct ProcfsReader<D>
+where
+    D: Data + Sized,
+{
     reader: DataReader<File, D>,
 }
 
-impl<D> ProcfsReader<D> where D: Data + Sized {
+impl<D> ProcfsReader<D>
+where
+    D: Data + Sized,
+{
     pub fn new(filepath: &Path) -> Result<Self, ProcfsError> {
-        File::open(filepath)
-            .map_err(ProcfsError::from)
-            .map(|file| Self { reader: DataReader::new(file) })
+        File::open(filepath).map_err(ProcfsError::from).map(|file| Self {
+            reader: DataReader::new(file),
+        })
     }
 
     pub fn read(&mut self) -> Result<D, ProcfsError> {
@@ -103,19 +130,29 @@ impl<D> ProcfsReader<D> where D: Data + Sized {
     }
 }
 
-struct DataReader<R, D> where R: Read + Seek, D: Data + Sized {
+struct DataReader<R, D>
+where
+    R: Read + Seek,
+    D: Data + Sized,
+{
     src: R,
     phantom: PhantomData<D>,
 }
 
-impl<R, D> DataReader<R, D> where R: Read + Seek, D: Data + Sized {
+impl<R, D> DataReader<R, D>
+where
+    R: Read + Seek,
+    D: Data + Sized,
+{
     pub fn new(src: R) -> Self {
-        DataReader { src, phantom: PhantomData }
+        DataReader {
+            src,
+            phantom: PhantomData,
+        }
     }
 
     pub fn read(&mut self) -> Result<D, ProcfsError> {
-        self.src
-            .seek(SeekFrom::Start(0))?;
+        self.src.seek(SeekFrom::Start(0))?;
 
         // Might be optimized, by not reallocating at each call
         let mut stat_content = String::new();
@@ -126,7 +163,6 @@ impl<R, D> DataReader<R, D> where R: Read + Seek, D: Data + Sized {
         D::parse(&tp)
     }
 }
-
 
 /// Parses space-separated token from a given multi-line string slice
 pub struct TokenParser<'a> {
@@ -141,9 +177,7 @@ impl<'a> TokenParser<'a> {
         let mut lines = Vec::<Vec<&'a str>>::new();
 
         for line in content.split('\n') {
-            let tokens: Vec<&str> = line.split(' ')
-                .filter(|t| !t.is_empty())
-                .collect();
+            let tokens: Vec<&str> = line.split(' ').filter(|t| !t.is_empty()).collect();
             lines.push(tokens);
         }
 
@@ -155,28 +189,31 @@ impl<'a> TokenParser<'a> {
     ///  * `line_no`: The line number from which to retrieve the token
     ///  * `pos`: The position of the token in the line (e.g. 1 for token 'b' in line 'a b c')
     fn token<T>(&self, line_no: usize, pos: usize) -> Result<T, ProcfsError>
-        where T: std::str::FromStr {
-        self.lines.get(line_no)
+    where
+        T: std::str::FromStr,
+    {
+        self.lines
+            .get(line_no)
             .ok_or({
-                let err_msg = format!("Could not get data at line {} and position {}",
-                                      line_no, pos);
+                let err_msg = format!("Could not get data at line {} and position {}", line_no, pos);
                 ProcfsError::InvalidFileFormat(err_msg)
             })?
             .get(pos)
             .ok_or({
-                let err_msg = format!("Could not get token at line {} and position {}",
-                                      line_no, pos);
+                let err_msg = format!("Could not get token at line {} and position {}", line_no, pos);
                 ProcfsError::InvalidFileFormat(err_msg)
             })?
             .parse::<T>()
             .or({
-                let err_msg = format!("The token at line {} and position {} \
-                                                could not be parsed", line_no, pos);
+                let err_msg = format!(
+                    "The token at line {} and position {} \
+                                                could not be parsed",
+                    line_no, pos
+                );
                 Err(ProcfsError::InvalidFileContent(err_msg))
             })
     }
 }
-
 
 #[cfg(test)]
 mod test_data_reader {
@@ -205,7 +242,13 @@ mod test_data_reader {
 
         let mut data_reader = DataReader::new(data_src);
 
-        assert!(matches!(data_reader.read(), Ok(TestSystemData { field_1: 12, field_2: -92 })));
+        assert!(matches!(
+            data_reader.read(),
+            Ok(TestSystemData {
+                field_1: 12,
+                field_2: -92
+            })
+        ));
     }
 }
 
@@ -242,11 +285,9 @@ mod test_token_parser {
     }
 }
 
-
 /// --------------------
 /// Data implementations
 /// --------------------
-
 
 /// Represents data and additional computed data from `/proc/stat`
 #[derive(Eq, PartialEq, Debug)]
@@ -268,9 +309,15 @@ pub struct Stat {
 }
 
 impl Stat {
-    pub fn new(user: u64, nice: u64, system: u64, idle: u64, guest: u64,
-               guest_nice: u64) -> Self {
-        Stat { user, nice, system, idle, guest, guest_nice }
+    pub fn new(user: u64, nice: u64, system: u64, idle: u64, guest: u64, guest_nice: u64) -> Self {
+        Stat {
+            user,
+            nice,
+            system,
+            idle,
+            guest,
+            guest_nice,
+        }
     }
 
     pub fn running_time(&self) -> u64 {
@@ -296,7 +343,6 @@ impl SystemData for Stat {
         ["/proc", "stat"].iter().collect()
     }
 }
-
 
 /// Represents data from `/proc/[PID]/stat`
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
@@ -353,21 +399,24 @@ mod test_stat {
     #[test]
     fn test_parse_stat_file() {
         let content = "cpu 10132153 290696 3084719 46828483 16683 0 25195 0 175628 0
-cpu0 1393280 32966 572056 13343292 6130 0 17875 0 23933 0".to_string();
+cpu0 1393280 32966 572056 13343292 6130 0 17875 0 23933 0"
+            .to_string();
 
         let token_parser = TokenParser::new(&content);
 
-        let pid_stat = Stat::parse(&token_parser)
-            .expect("Could not read Stat");
+        let pid_stat = Stat::parse(&token_parser).expect("Could not read Stat");
 
-        assert_eq!(pid_stat, Stat {
-            user: 10132153,
-            nice: 290696,
-            system: 3084719,
-            idle: 46828483,
-            guest: 175628,
-            guest_nice: 0,
-        });
+        assert_eq!(
+            pid_stat,
+            Stat {
+                user: 10132153,
+                nice: 290696,
+                system: 3084719,
+                idle: 46828483,
+                guest: 175628,
+                guest_nice: 0,
+            }
+        );
     }
 
     #[test]
@@ -385,12 +434,16 @@ cpu0 1393280 32966 572056 13343292 6130 0 17875 0 23933 0".to_string();
     }
 }
 
-
 #[cfg(test)]
 impl PidStat {
     /// PidStat constructor for test purposes
     pub fn new(utime: u32, stime: u32, cutime: i32, cstime: i32) -> Self {
-        PidStat { utime, stime, cutime, cstime }
+        PidStat {
+            utime,
+            stime,
+            cutime,
+            cstime,
+        }
     }
 }
 
@@ -405,19 +458,22 @@ mod test_pid_stat {
         let content = "1905 (python3) S 1877 1905 1877 34822 1905 4194304 1096 0 0 \
 13 42 11 10 0 20 0 1 0 487679 13963264 2541 18446744073709551615 4194304 7010805 \
 140731882007344 0 0 0 0 16781312 134217730 1 0 0 17 0 0 0 0 0 0 9362864 9653016 \
-10731520 140731882009319 140731882009327 140731882009327 140731882012647 0".to_string();
+10731520 140731882009319 140731882009327 140731882009327 140731882012647 0"
+            .to_string();
 
         let token_parser = TokenParser::new(&content);
 
-        let pid_stat = PidStat::parse(&token_parser)
-            .expect("Could not read PidStat");
+        let pid_stat = PidStat::parse(&token_parser).expect("Could not read PidStat");
 
-        assert_eq!(pid_stat, PidStat {
-            utime: 13,
-            stime: 42,
-            cutime: 11,
-            cstime: 10,
-        });
+        assert_eq!(
+            pid_stat,
+            PidStat {
+                utime: 13,
+                stime: 42,
+                cutime: 11,
+                cstime: 10,
+            }
+        );
     }
 
     #[test]
@@ -434,7 +490,6 @@ mod test_pid_stat {
 
     #[test]
     fn filepath_should_contain_pid() {
-        assert_eq!(PidStat::filepath(456),
-                   PathBuf::from("/proc/456/stat"))
+        assert_eq!(PidStat::filepath(456), PathBuf::from("/proc/456/stat"))
     }
 }
