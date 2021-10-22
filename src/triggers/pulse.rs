@@ -10,7 +10,10 @@ pub struct Pulse {
 /// given refresh period
 impl Pulse {
     pub fn new(refresh_period: Duration) -> Self {
-        Pulse { last_tick: Instant::now(), refresh_period }
+        Pulse {
+            last_tick: Instant::now(),
+            refresh_period,
+        }
     }
 
     /// Blocking method that only returns on the next pulse
@@ -39,7 +42,8 @@ mod test_pulse {
             pulse.pulse();
         }
 
-        let elapsed = SystemTime::now().duration_since(start)
+        let elapsed = SystemTime::now()
+            .duration_since(start)
             .expect("Error calculating pulse test elapsed time");
 
         // 10 pulses at a refresh period of 10ms should take ~100ms to complete

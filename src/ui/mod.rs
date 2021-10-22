@@ -4,7 +4,7 @@ use std::time::Duration;
 use thiserror::Error;
 
 use crate::core::process::ProcessMetadata;
-use crate::core::view::{MetricsOverview, MetricView};
+use crate::core::view::{MetricView, MetricsOverview};
 use crate::ui::chart::MetricsChart;
 use crate::ui::layout::UiLayout;
 use crate::ui::metadata::MetadataBar;
@@ -12,11 +12,11 @@ use crate::ui::processes::ProcessList;
 use crate::ui::tabs::MetricTabs;
 use crate::ui::terminal::Terminal;
 
-mod layout;
-mod tabs;
-mod processes;
 mod chart;
+mod layout;
 mod metadata;
+mod processes;
+mod tabs;
 mod terminal;
 
 #[derive(Error, Debug)]
@@ -34,7 +34,7 @@ pub struct SpvUI {
 }
 
 impl SpvUI {
-    pub fn new(labels: impl Iterator<Item=String>) -> Result<Self, Error> {
+    pub fn new(labels: impl Iterator<Item = String>) -> Result<Self, Error> {
         let tabs = MetricTabs::new(labels.collect());
         let chart = MetricsChart::new(Duration::from_secs(60));
 
@@ -47,7 +47,11 @@ impl SpvUI {
         })
     }
 
-    pub fn render(&mut self, metrics_overview: &MetricsOverview, metrics_view: &MetricView) -> Result<(), Error> {
+    pub fn render(
+        &mut self,
+        metrics_overview: &MetricsOverview,
+        metrics_view: &MetricView,
+    ) -> Result<(), Error> {
         // We need to do this because the borrow checker does not like having &self.foo in a closure
         // while borrowing &mut self.terminal
         let tabs = &self.tabs;
@@ -68,17 +72,20 @@ impl SpvUI {
 
     pub fn set_processes(&mut self, processes: Vec<ProcessMetadata>) {
         self.process_list.set_processes(processes);
-        self.metadata_bar.set_selected_process(self.process_list.selected());
+        self.metadata_bar
+            .set_selected_process(self.process_list.selected());
     }
 
     pub fn next_process(&mut self) {
         self.process_list.next();
-        self.metadata_bar.set_selected_process(self.process_list.selected());
+        self.metadata_bar
+            .set_selected_process(self.process_list.selected());
     }
 
     pub fn previous_process(&mut self) {
         self.process_list.previous();
-        self.metadata_bar.set_selected_process(self.process_list.selected());
+        self.metadata_bar
+            .set_selected_process(self.process_list.selected());
     }
 
     pub fn current_process(&self) -> Option<&ProcessMetadata> {
@@ -97,4 +104,3 @@ impl SpvUI {
         self.tabs.previous();
     }
 }
-

@@ -1,8 +1,8 @@
-use tui::Frame;
 use tui::layout::Rect;
 use tui::style::{Color, Style};
 use tui::text::Spans;
 use tui::widgets::Tabs;
+use tui::Frame;
 
 use crate::ui::terminal::TuiBackend;
 
@@ -13,14 +13,14 @@ pub struct MetricTabs {
 
 impl MetricTabs {
     pub fn new(metrics_labels: Vec<String>) -> Self {
-        Self { selected_index: 0, tabs: metrics_labels }
+        Self {
+            selected_index: 0,
+            tabs: metrics_labels,
+        }
     }
 
     pub fn render(&self, frame: &mut Frame<TuiBackend>, chunk: Rect) {
-        let tabs_spans = self.tabs.iter()
-            .cloned()
-            .map(Spans::from)
-            .collect();
+        let tabs_spans = self.tabs.iter().cloned().map(Spans::from).collect();
 
         let tabs = Tabs::new(tabs_spans)
             .style(Style::default().fg(Color::White))
@@ -32,7 +32,8 @@ impl MetricTabs {
     }
 
     pub fn current(&self) -> &str {
-        self.tabs.get(self.selected_index)
+        self.tabs
+            .get(self.selected_index)
             .unwrap_or_else(|| panic!("Invalid tab index: {}", self.selected_index))
     }
 
@@ -41,7 +42,9 @@ impl MetricTabs {
     }
 
     pub fn previous(&mut self) {
-        self.selected_index = self.selected_index.checked_sub(1)
+        self.selected_index = self
+            .selected_index
+            .checked_sub(1)
             .unwrap_or(self.tabs.len() - 1);
     }
 }

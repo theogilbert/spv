@@ -1,16 +1,16 @@
 use std::sync::mpsc::Sender;
-use std::{thread, io};
 use std::time::Duration;
+use std::{io, thread};
 
-use thiserror::Error;
 use log::error;
+use thiserror::Error;
 
 use crate::triggers::input::InputListener;
 use crate::triggers::pulse::Pulse;
 use crate::triggers::signal::SignalListener;
 
-mod pulse;
 mod input;
+mod pulse;
 mod signal;
 
 #[derive(Error, Debug)]

@@ -8,13 +8,13 @@ use simplelog::{ConfigBuilder, WriteLogger};
 
 use spv::core::collection::{MetricCollector, ProbeCollector};
 use spv::core::process::ProcessCollector;
-use spv::Error;
 use spv::procfs::cpu_probe::CpuProbe;
 #[cfg(feature = "netio")]
 use spv::procfs::net_io_probe::NetIoProbe;
 use spv::procfs::process::ProcfsScanner;
 use spv::spv::SpvApplication;
 use spv::triggers::TriggersEmitter;
+use spv::Error;
 
 fn main() -> anyhow::Result<()> {
     setup_panic_logging();
@@ -62,7 +62,6 @@ fn init_logging() {
         .expect("Could not initialize logging");
 }
 
-
 fn build_collectors(resolution: Duration) -> Result<Vec<Box<dyn MetricCollector>>, Error> {
     let mut collectors = vec![];
 
@@ -71,11 +70,11 @@ fn build_collectors(resolution: Duration) -> Result<Vec<Box<dyn MetricCollector>
     collectors.push(Box::new(cpu_collector) as Box<dyn MetricCollector>);
 
     #[cfg(feature = "netio")]
-        {
-            let netio_probe = NetIoProbe::new().map_err(Error::CoreError)?;
-            let net_collector = ProbeCollector::new(netio_probe, resolution);
-            collectors.push(Box::new(net_collector) as Box<dyn MetricCollector>);
-        }
+    {
+        let netio_probe = NetIoProbe::new().map_err(Error::CoreError)?;
+        let net_collector = ProbeCollector::new(netio_probe, resolution);
+        collectors.push(Box::new(net_collector) as Box<dyn MetricCollector>);
+    }
 
     Ok(collectors)
 }

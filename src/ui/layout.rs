@@ -1,5 +1,5 @@
-use tui::Frame;
 use tui::layout::{Constraint, Direction, Layout, Rect};
+use tui::Frame;
 
 use crate::ui::terminal::TuiBackend;
 
@@ -14,10 +14,11 @@ impl UiLayout {
             .direction(Direction::Vertical)
             .constraints(
                 [
-                    Constraint::Length(1),  // tabs constraint
-                    Constraint::Min(1),  // center region constraint
+                    Constraint::Length(1), // tabs constraint
+                    Constraint::Min(1),    // center region constraint
                     Constraint::Length(1), // metadata constraint
-                ].as_ref()
+                ]
+                .as_ref(),
             )
             .split(frame.size());
 
@@ -25,13 +26,17 @@ impl UiLayout {
             .direction(Direction::Horizontal)
             .constraints(
                 [
-                    Constraint::Length(30),  // Processes constraint
-                    Constraint::Min(1),  // graph constraint
-                ].as_ref()
+                    Constraint::Length(30), // Processes constraint
+                    Constraint::Min(1),     // graph constraint
+                ]
+                .as_ref(),
             )
             .split(*main_chunks.get(1).unwrap());
 
-        Self { main_chunks, center_chunks }
+        Self {
+            main_chunks,
+            center_chunks,
+        }
     }
 
     pub fn tabs_chunk(&self) -> Rect {

@@ -6,10 +6,10 @@ use thiserror::Error;
 
 use crate::core::process::Pid;
 
-pub mod process;
-pub mod metrics;
 pub mod collection;
+pub mod metrics;
 pub mod probe;
+pub mod process;
 pub mod view;
 
 #[derive(Error, Debug)]

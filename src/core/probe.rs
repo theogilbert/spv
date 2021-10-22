@@ -4,12 +4,15 @@ use std::collections::HashMap;
 
 use log::warn;
 
-use crate::core::Error;
 use crate::core::metrics::Metric;
 use crate::core::process::Pid;
+use crate::core::Error;
 
 /// Types which can probe processes for a specific implementation of [`Metric`](crate::core::metrics::Metric)
-pub trait Probe<M> where M: Metric + Copy + Default {
+pub trait Probe<M>
+where
+    M: Metric + Copy + Default,
+{
     /// The name of the probe, as displayed in the application tab
     fn name(&self) -> &'static str;
 
@@ -32,14 +35,18 @@ pub trait Probe<M> where M: Metric + Copy + Default {
     fn probe_processes(&mut self, pids: &[Pid]) -> Result<HashMap<Pid, M>, Error> {
         self.init_iteration()?;
 
-        let metrics = pids.iter()
+        let metrics = pids
+            .iter()
             .map(|pid| {
-                let metric = self.probe(*pid)
-                    .unwrap_or_else(|e| {
-                        warn!("Could not probe {} metric for pid {}: {}",
-                              self.name(), pid, e.to_string());
-                        M::default()
-                    });
+                let metric = self.probe(*pid).unwrap_or_else(|e| {
+                    warn!(
+                        "Could not probe {} metric for pid {}: {}",
+                        self.name(),
+                        pid,
+                        e.to_string()
+                    );
+                    M::default()
+                });
 
                 (*pid, metric)
             })
@@ -49,17 +56,16 @@ pub trait Probe<M> where M: Metric + Copy + Default {
     }
 }
 
-
 #[cfg(test)]
 mod test_probe_trait {
     use std::collections::HashMap;
 
     use rstest::*;
 
-    use crate::core::Error;
     use crate::core::metrics::PercentMetric;
     use crate::core::probe::Probe;
     use crate::core::process::Pid;
+    use crate::core::Error;
 
     struct FakeProbe {
         probe_responses: HashMap<Pid, PercentMetric>,
@@ -72,10 +78,13 @@ mod test_probe_trait {
     }
 
     impl Probe<PercentMetric> for FakeProbe {
-        fn name(&self) -> &'static str { "fake-probe" }
+        fn name(&self) -> &'static str {
+            "fake-probe"
+        }
 
         fn probe(&mut self, pid: u32) -> Result<PercentMetric, Error> {
-            self.probe_responses.remove(&pid)
+            self.probe_responses
+                .remove(&pid)
                 .ok_or(Error::InvalidPID(pid))
         }
     }
@@ -107,4 +116,3 @@ mod test_probe_trait {
         assert_eq!(results.get(&2), Some(&PercentMetric::default()));
     }
 }
-

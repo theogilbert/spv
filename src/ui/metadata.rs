@@ -1,8 +1,8 @@
-use tui::Frame;
 use tui::layout::Rect;
 use tui::style::{Color, Style};
 use tui::text::Span;
 use tui::widgets::Paragraph;
+use tui::Frame;
 
 use crate::core::process::ProcessMetadata;
 use crate::ui::terminal::TuiBackend;
@@ -14,7 +14,7 @@ pub struct MetadataBar {
 impl Default for MetadataBar {
     fn default() -> Self {
         Self {
-            current_text: Self::build_text(None)
+            current_text: Self::build_text(None),
         }
     }
 }
