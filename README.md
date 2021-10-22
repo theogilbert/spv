@@ -1,5 +1,7 @@
 # spv
 
+[![CI](https://github.com/theogilbert/spv/actions/workflows/build.yml/badge.svg)](https://github.com/theogilbert/spv/actions/workflows/build.yml)
+
 Spv is a terminal-based tool to monitor running processes.
 
 ![](doc/images/spv.gif)

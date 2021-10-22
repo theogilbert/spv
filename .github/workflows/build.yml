@@ -1,4 +1,4 @@
-name: Rust
+name: CI
 
 on:
   push:
@@ -16,7 +16,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: Update rustup
+      run: rustup update stable
     - name: Build
-      run: cargo build --features netio --verbose
+      run: cargo build --all-features
     - name: Run tests
-      run: cargo test --features netio --verbose
+      run: cargo test --all-features
