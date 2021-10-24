@@ -493,3 +493,70 @@ mod test_pid_stat {
         assert_eq!(PidStat::filepath(456), PathBuf::from("/proc/456/stat"))
     }
 }
+
+pub struct PidIO {
+    read_bytes: usize,
+    write_bytes: usize,
+    cancelled_write_bytes: usize,
+}
+
+impl PidIO {
+    pub fn read_bytes(&self) -> usize {
+        self.read_bytes
+    }
+
+    pub fn written_bytes(&self) -> usize {
+        self.write_bytes.saturating_sub(self.cancelled_write_bytes)
+    }
+}
+
+impl Data for PidIO {
+    fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
+        Ok(PidIO {
+            read_bytes: token_parser.token(4, 1)?,
+            write_bytes: token_parser.token(5, 1)?,
+            cancelled_write_bytes: token_parser.token(6, 1)?,
+        })
+    }
+}
+
+impl ProcessData for PidIO {
+    fn filepath(pid: Pid) -> PathBuf {
+        let mut path_buf = PathBuf::new();
+
+        path_buf.push("/proc");
+        path_buf.push(pid.to_string());
+        path_buf.push("io");
+
+        path_buf
+    }
+}
+
+#[cfg(test)]
+mod test_pid_io {
+    use std::path::PathBuf;
+
+    use crate::procfs::parsers::{Data, PidIO, ProcessData, TokenParser};
+
+    #[test]
+    fn test_should_produce_correct_file_path() {
+        assert_eq!(PidIO::filepath(42), PathBuf::from("/proc/42/io"));
+    }
+
+    #[test]
+    fn test_should_parse_file_correctly() {
+        let io_file_content = "rchar: 323934931
+        wchar: 323929600
+        syscr: 632687
+        syscw: 632675
+        read_bytes: 12345
+        write_bytes: 323932160
+        cancelled_write_bytes: 876";
+
+        let token_parser = TokenParser::new(io_file_content);
+        let pid_io = PidIO::parse(&token_parser).unwrap();
+
+        assert_eq!(pid_io.read_bytes(), 12345);
+        assert_eq!(pid_io.written_bytes(), 323932160 - 876);
+    }
+}
