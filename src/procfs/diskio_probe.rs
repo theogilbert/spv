@@ -1,4 +1,4 @@
-//! CPU Usage probing
+//! Disk usage probing
 
 use std::time::Duration;
 
@@ -11,7 +11,7 @@ use crate::procfs::rates::{ProcessesRates, PushMode};
 
 const IO_RATE_RETENTION: Duration = Duration::from_secs(1);
 
-/// Probe implementation to measure the CPU usage (in percent) of processes
+/// Probe implementation to measure and calculate the I/O usage of the disk
 pub struct DiskIOProbe {
     reader: Box<dyn ReadProcessData<PidIO>>,
     input_rate_calculator: ProcessesRates,
