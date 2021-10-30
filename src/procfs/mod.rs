@@ -15,7 +15,7 @@ pub mod diskio_probe;
 
 #[cfg(feature = "netio")]
 pub mod net_io_probe;
-#[cfg(feature = "netio")]
+
 mod rates;
 
 #[derive(Error, Debug)]
