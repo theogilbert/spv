@@ -150,13 +150,12 @@ impl ProcessesRates {
 
 #[cfg(test)]
 mod test_process_rates {
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     use rstest::*;
     use sn_fake_clock::FakeClock;
 
     use crate::procfs::rates::{ProcessesRates, PushMode};
-    use crate::procfs::ProcfsError;
 
     #[fixture]
     fn process_rates() -> ProcessesRates {
@@ -165,7 +164,7 @@ mod test_process_rates {
     }
 
     #[rstest]
-    fn test_rate_returns_error_if_pid_not_known(mut process_rates: ProcessesRates) {
+    fn test_rate_returns_error_if_pid_not_known(process_rates: ProcessesRates) {
         assert!(process_rates.rate(123).is_err());
     }
 

@@ -87,7 +87,7 @@ where
     fn get_process_reader(&mut self, pid: Pid) -> Result<&mut ProcfsReader<D>, ProcfsError> {
         Ok(match self.readers.entry(pid) {
             Entry::Occupied(o) => o.into_mut(),
-            Entry::Vacant(v) => v.insert({ ProcfsReader::new(D::filepath(pid).as_path())? }),
+            Entry::Vacant(v) => v.insert(ProcfsReader::new(D::filepath(pid).as_path())?),
         })
     }
 }
@@ -494,12 +494,14 @@ mod test_pid_stat {
     }
 }
 
+#[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub struct PidIO {
     read_bytes: usize,
     write_bytes: usize,
     cancelled_write_bytes: usize,
 }
 
+/// Represents data from `/proc/[PID]/io`
 impl PidIO {
     pub fn read_bytes(&self) -> usize {
         self.read_bytes
@@ -507,6 +509,17 @@ impl PidIO {
 
     pub fn written_bytes(&self) -> usize {
         self.write_bytes.saturating_sub(self.cancelled_write_bytes)
+    }
+}
+
+#[cfg(test)]
+impl PidIO {
+    pub fn new(read_bytes: usize, write_bytes: usize, cancelled_write_bytes: usize) -> Self {
+        PidIO {
+            read_bytes,
+            write_bytes,
+            cancelled_write_bytes,
+        }
     }
 }
 
