@@ -63,13 +63,15 @@ impl Probe<IOMetric> for DiskIOProbe {
 
 #[cfg(test)]
 mod test_disk_io_probe {
+    use rstest::*;
+    use sn_fake_clock::FakeClock;
+
     use crate::core::metrics::IOMetric;
     use crate::core::probe::Probe;
     use crate::core::process::Pid;
     use crate::procfs::diskio_probe::DiskIOProbe;
     use crate::procfs::parsers::{PidIO, ReadProcessData};
     use crate::procfs::ProcfsError;
-    use sn_fake_clock::FakeClock;
 
     struct PidIOReaderStub {
         reverted_sequence: Vec<PidIO>,
@@ -94,19 +96,29 @@ mod test_disk_io_probe {
         }
     }
 
-    #[test]
-    fn test_should_calculate_correct_input_rate() {
-        let sequence = vec![PidIO::new(0, 0, 0), PidIO::new(10, 15, 5)];
-        let reader = PidIOReaderStub::new(sequence);
+    #[rstest]
+    #[case(0, 0, 0, 0, 0)]
+    #[case(10, 15, 5, 10, 10)]
+    #[case(10, 15, 0, 10, 15)]
+    fn test_should_calculate_correct_input_rate(
+        #[case] read_bytes: usize,
+        #[case] write_bytes: usize,
+        #[case] cancelled_write_bytes: usize,
+        #[case] expected_input: usize,
+        #[case] expected_output: usize,
+    ) {
+        let sequence = vec![
+            PidIO::new(0, 0, 0),
+            PidIO::new(read_bytes, write_bytes, cancelled_write_bytes),
+        ];
 
+        let reader = PidIOReaderStub::new(sequence);
         let mut io_probe = DiskIOProbe::from_reader(Box::new(reader));
 
-        FakeClock::set_time(1000);
-        let io_1 = io_probe.probe(0).unwrap();
+        let _ = io_probe.probe(0).unwrap();
         FakeClock::advance_time(1000);
         let io_2 = io_probe.probe(0).unwrap();
 
-        assert_eq!(io_1, IOMetric::new(0, 0));
-        assert_eq!(io_2, IOMetric::new(10, 10));
+        assert_eq!(io_2, IOMetric::new(expected_input, expected_output));
     }
 }
