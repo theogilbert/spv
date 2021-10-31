@@ -235,7 +235,7 @@ mod test_process_rates {
     }
 
     #[rstest]
-    fn test_should_not_panic_when_range_larger_than_timestamp(mut process_rates: ProcessesRates) {
+    fn test_should_not_panic_when_range_larger_than_now_timestamp() {
         // By default with FakeClock, now() == 0s.
         // We want to make sure that ProcessesRates does not panic when it tries to substract data_retention from now()
         let mut proc_rates = ProcessesRates::new(PushMode::Accumulative, Duration::from_secs(1));
