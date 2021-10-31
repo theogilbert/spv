@@ -64,22 +64,24 @@ impl ProcessesRates {
             date: now,
             value: new_value,
         });
-        self.remove_outdated_values(pid, now);
+
+        if let Some(range_begin) = now.checked_sub(self.range) {
+            self.remove_outdated_values(pid, range_begin);
+        }
     }
 
-    /// Removes all values associated to a timestamp earlier than `now - self.range`, except the
+    /// Removes all values associated to a timestamp earlier than `range_begin`, except the
     /// last one (c.f. self.estimate_origin_value())
-    fn remove_outdated_values(&mut self, pid: Pid, now: Instant) {
+    fn remove_outdated_values(&mut self, pid: Pid, range_begin: Instant) {
         let values = self.acc_values.get_mut(&pid).unwrap();
-        let data_retention = self.range;
 
         let last_outdated = values
             .iter()
-            .filter(|dv| dv.date < now - data_retention)
+            .filter(|dv| dv.date < range_begin)
             .max_by(|dv_1, dv_2| dv_1.date.cmp(&dv_2.date))
             .cloned();
 
-        values.retain(|dv| (now - dv.date) <= data_retention);
+        values.retain(|dv| dv.date >= range_begin);
 
         if let Some(last_outdated) = last_outdated {
             values.push_front(last_outdated);
@@ -230,5 +232,14 @@ mod test_process_rates {
 
         // 100 in the last 0.5 sec + 150 in the previous 1.5 sec -> 100 + 150/3 -> 150/s
         assert_eq!(process_rates.rate(123).unwrap(), 150.);
+    }
+
+    #[rstest]
+    fn test_should_not_panic_when_range_larger_than_timestamp(mut process_rates: ProcessesRates) {
+        // By default with FakeClock, now() == 0s.
+        // We want to make sure that ProcessesRates does not panic when it tries to substract data_retention from now()
+        let mut proc_rates = ProcessesRates::new(PushMode::Accumulative, Duration::from_secs(1));
+
+        proc_rates.push(1, 10);
     }
 }
