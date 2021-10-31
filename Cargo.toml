@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Theo Gilbert"]
 edition = "2021"
 description = "Command line utility to supervize resource usage of processes"
-license = "Apache-2.0"
+license = "MIT"
 
 [features]
 netio = ["netinfo"]

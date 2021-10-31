@@ -11,11 +11,11 @@ mod parsers;
 pub mod process;
 
 pub mod cpu_probe;
-// pub mod mem_probe;
+pub mod diskio_probe;
 
 #[cfg(feature = "netio")]
 pub mod net_io_probe;
-#[cfg(feature = "netio")]
+
 mod rates;
 
 #[derive(Error, Debug)]

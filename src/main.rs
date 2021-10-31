@@ -9,6 +9,7 @@ use simplelog::{ConfigBuilder, WriteLogger};
 use spv::core::collection::{MetricCollector, ProbeCollector};
 use spv::core::process::ProcessCollector;
 use spv::procfs::cpu_probe::CpuProbe;
+use spv::procfs::diskio_probe::DiskIOProbe;
 #[cfg(feature = "netio")]
 use spv::procfs::net_io_probe::NetIoProbe;
 use spv::procfs::process::ProcfsScanner;
@@ -67,6 +68,10 @@ fn build_collectors(resolution: Duration) -> Result<Vec<Box<dyn MetricCollector>
     let cpu_probe = CpuProbe::new().map_err(Error::CoreError)?;
     let cpu_collector = ProbeCollector::new(cpu_probe, resolution);
     collectors.push(Box::new(cpu_collector) as Box<dyn MetricCollector>);
+
+    let disk_io_probe = DiskIOProbe::default();
+    let disk_io_collector = ProbeCollector::new(disk_io_probe, resolution);
+    collectors.push(Box::new(disk_io_collector) as Box<dyn MetricCollector>);
 
     #[cfg(feature = "netio")]
     {
