@@ -95,7 +95,7 @@ impl SpvApplication {
     }
 
     fn collect_processes(&mut self) -> Result<Vec<ProcessMetadata>, Error> {
-        self.process_view.processes().map_err(Error::CoreError)
+        self.process_view.collect_processes().map_err(Error::CoreError)
     }
 
     fn extract_processes_pids(processes: &[ProcessMetadata]) -> Vec<u32> {
