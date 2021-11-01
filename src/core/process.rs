@@ -86,19 +86,6 @@ impl ProcessCollector {
     }
 }
 
-/// Trait with methods to retrieve basic information about running processes
-pub trait ProcessScanner {
-    /// Returns a list containing the PIDs of all currently running processes
-    fn scan(&self) -> Result<Vec<Pid>, Error>;
-
-    /// Returns The ProcessMetadata of the currently running process with the given PID
-    ///
-    /// # Arguments
-    ///
-    /// * `pid`: The process identifier of the currently running process
-    fn fetch_metadata(&self, pid: Pid) -> Result<ProcessMetadata, Error>;
-}
-
 #[cfg(test)]
 mod test_process_collector {
     use crate::core::process::{Pid, ProcessCollector, ProcessMetadata, ProcessScanner};
@@ -172,4 +159,17 @@ mod test_process_collector {
         assert_eq!(processes_pids.len(), 2);
         assert!(!processes_pids.contains(&2))
     }
+}
+
+/// Trait with methods to retrieve basic information about running processes
+pub trait ProcessScanner {
+    /// Returns a list containing the PIDs of all currently running processes
+    fn scan(&mut self) -> Result<Vec<Pid>, Error>;
+
+    /// Returns The ProcessMetadata of the currently running process with the given PID
+    ///
+    /// # Arguments
+    ///
+    /// * `pid`: The process identifier of the currently running process
+    fn fetch_metadata(&self, pid: Pid) -> Result<ProcessMetadata, Error>;
 }

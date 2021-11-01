@@ -61,7 +61,7 @@ impl ProcfsScanner {
 
 impl ProcessScanner for ProcfsScanner {
     /// Returns the PIDs of currently running processes
-    fn scan(&self) -> std::result::Result<Vec<Pid>, CoreError> {
+    fn scan(&mut self) -> std::result::Result<Vec<Pid>, CoreError> {
         let path = self.proc_dir.as_path();
 
         let dir_iter = read_dir(path).map_err(|e| Error::ProcessScanningFailure(path.into(), e))?;
@@ -190,7 +190,7 @@ mod test_pid_scanner {
             );
         }
 
-        let proc_scanner = ProcfsScanner {
+        let mut proc_scanner = ProcfsScanner {
             proc_dir: test_proc_dir.path().to_path_buf(),
         };
 
@@ -208,7 +208,7 @@ mod test_pid_scanner {
         let test_proc_dir = tempdir().expect("Could not create tmp dir");
         set_dir_permissions(test_proc_dir.path(), 0o000).expect("Could not set dir permissions");
 
-        let proc_scanner = ProcfsScanner {
+        let mut proc_scanner = ProcfsScanner {
             proc_dir: test_proc_dir.path().to_path_buf(),
         };
 
