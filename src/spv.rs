@@ -1,10 +1,11 @@
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::mpsc::Receiver;
 
 use log::warn;
 
 use crate::core::collection::MetricCollector;
-use crate::core::process::{ProcessCollector, ProcessMetadata};
+use crate::core::process::{ProcessCollector, ProcessMetadata, Status};
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
 use crate::Error;
@@ -84,14 +85,21 @@ impl SpvApplication {
             });
         }
 
-        processes.sort_by(|pm1, pm2| {
-            self.current_collector(&self.collectors)
-                .compare_pids_by_last_metrics(pm1.pid(), pm2.pid())
-                .reverse()
-        });
+        self.sort_processes_by_status_and_metric(&mut processes);
         self.ui.set_processes(processes);
 
         Ok(())
+    }
+
+    fn sort_processes_by_status_and_metric(&self, processes: &mut Vec<ProcessMetadata>) {
+        processes.sort_by(|pm1, pm2| match (pm1.status(), pm2.status()) {
+            (Status::RUNNING, Status::DEAD) => Ordering::Less,
+            (Status::DEAD, Status::RUNNING) => Ordering::Greater,
+            (_, _) => self
+                .current_collector(&self.collectors)
+                .compare_pids_by_last_metrics(pm1.pid(), pm2.pid())
+                .reverse(),
+        });
     }
 
     fn collect_processes(&mut self) -> Result<Vec<ProcessMetadata>, Error> {
