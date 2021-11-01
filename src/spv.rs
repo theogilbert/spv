@@ -65,8 +65,8 @@ impl SpvApplication {
     }
 
     fn calibrate_probes(&mut self) -> Result<(), Error> {
-        let processes = self.collect_processes()?;
-        let pids = SpvApplication::extract_processes_pids(&processes);
+        self.collect_running_processes()?;
+        let pids = SpvApplication::extract_processes_pids(&self.process_view.running_processes());
 
         for c in self.collectors.values_mut() {
             c.calibrate(&pids)?;
@@ -76,17 +76,19 @@ impl SpvApplication {
     }
 
     fn collect_metrics(&mut self) -> Result<(), Error> {
-        let mut processes = self.collect_processes()?;
-        let pids = SpvApplication::extract_processes_pids(&processes);
+        self.collect_running_processes()?;
+        let running_pids = SpvApplication::extract_processes_pids(&self.process_view.running_processes());
 
         for collector in self.collectors.values_mut() {
-            collector.collect(&pids).unwrap_or_else(|e| {
-                warn!("Error reading from collector {}: {}", collector.name(), e);
+            collector.collect(&running_pids).unwrap_or_else(|e| {
+                warn!("Error reading from collector {}: {}", collector.name(), e.to_string());
             });
         }
 
-        self.sort_processes_by_status_and_metric(&mut processes);
-        self.ui.set_processes(processes);
+        let mut all_processes = self.process_view.processes();
+
+        self.sort_processes_by_status_and_metric(&mut all_processes);
+        self.ui.set_processes(all_processes);
 
         Ok(())
     }
@@ -102,8 +104,9 @@ impl SpvApplication {
         });
     }
 
-    fn collect_processes(&mut self) -> Result<Vec<ProcessMetadata>, Error> {
-        self.process_view.collect_processes().map_err(Error::CoreError)
+    fn collect_running_processes(&mut self) -> Result<(), Error> {
+        self.process_view.collect_processes().map_err(Error::CoreError)?;
+        Ok(())
     }
 
     fn extract_processes_pids(processes: &[ProcessMetadata]) -> Vec<u32> {

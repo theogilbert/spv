@@ -30,7 +30,7 @@ impl Display for Status {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Status::RUNNING => f.write_str("running"),
-            Status::DEAD => f.write_str("dead")
+            Status::DEAD => f.write_str("dead"),
         }
     }
 }
@@ -97,7 +97,7 @@ mod test_process_metadata {
     fn test_status_should_be_dead_once_marked_as_dead() {
         let mut pm = ProcessMetadata::new(123, "command");
         pm.set_dead();
-        assert_eq!(pm.status(), Status::RUNNING);
+        assert_eq!(pm.status(), Status::DEAD);
     }
 }
 
@@ -115,8 +115,8 @@ impl ProcessCollector {
         }
     }
 
-    /// Returns a Vec of [`ProcessMetadata`](struct.ProcessMetadata), each corresponding to process (running or dead)
-    pub fn collect_processes(&mut self) -> Result<Vec<ProcessMetadata>, Error> {
+    /// Scans and retrieves information about running processes
+    pub fn collect_processes(&mut self) -> Result<(), Error> {
         let running_pids = self.scanner.scan()?;
 
         self.mark_dead_processes(&running_pids);
@@ -125,7 +125,30 @@ impl ProcessCollector {
             self.registered_processes.insert(pm.pid(), pm);
         }
 
-        Ok(self.registered_processes.values().map(|pm| pm.clone()).collect())
+        Ok(())
+    }
+
+    /// Returns the list of all processes, regardless of their status (running or not)
+    pub fn processes(&self) -> Vec<ProcessMetadata> {
+        self.registered_processes.values().map(|pm| pm.clone()).collect()
+    }
+
+    /// Returns the list of processes that were still running as of the last collection
+    pub fn running_processes(&self) -> Vec<ProcessMetadata> {
+        self.processes_with_status(Status::RUNNING)
+    }
+
+    /// Returns the list of processes that were not running anymore during the last collection
+    pub fn dead_processes(&self) -> Vec<ProcessMetadata> {
+        self.processes_with_status(Status::DEAD)
+    }
+
+    fn processes_with_status(&self, status: Status) -> Vec<ProcessMetadata> {
+        self.registered_processes
+            .values()
+            .filter(|pm| pm.status == status)
+            .map(|pm| pm.clone())
+            .collect()
     }
 
     fn parse_new_processes(&self, running_pids: &[Pid]) -> Vec<ProcessMetadata> {
@@ -208,17 +231,18 @@ mod test_process_collector {
     #[test]
     fn test_should_collect_no_process_when_no_pid_scanned() {
         let mut collector = build_process_collector(vec![]);
+        collector.collect_processes().unwrap();
+        let processes = collector.running_processes();
 
-        let procesess = collector.collect_processes().unwrap();
-
-        assert_eq!(procesess, vec![]);
+        assert_eq!(processes, vec![]);
     }
 
     #[test]
     fn test_should_collect_processes_when_pids_are_scanned() {
         let scanned_pids = vec![1, 2, 3];
         let mut collector = build_process_collector(scanned_pids.clone());
-        let processes = collector.collect_processes().unwrap();
+        collector.collect_processes().unwrap();
+        let processes = collector.running_processes();
 
         assert_eq!(processes.len(), 3);
 
@@ -231,7 +255,8 @@ mod test_process_collector {
     #[test]
     fn test_should_ignore_processes_for_which_scanning_fails() {
         let mut collector = build_collector_which_fails(vec![1, 2, 3], vec![2]);
-        let processes = collector.collect_processes().unwrap();
+        collector.collect_processes().unwrap();
+        let processes = collector.running_processes();
 
         let processes_pids = processes.iter().map(|pm| pm.pid).collect::<Vec<Pid>>();
 
@@ -243,7 +268,8 @@ mod test_process_collector {
     fn test_should_set_status_of_running_processes_to_running() {
         let mut collector = build_process_collector(vec![1]);
 
-        let processes = collector.collect_processes().unwrap();
+        collector.collect_processes().unwrap();
+        let processes = collector.running_processes();
 
         assert_eq!(processes[0].status, Status::RUNNING);
     }
@@ -256,9 +282,43 @@ mod test_process_collector {
         let mut collector = ProcessCollector::new(boxed_scanner);
 
         collector.collect_processes().unwrap(); // Process pid=3 is collected
-        let processes = collector.collect_processes().unwrap(); // Process pid=3 is not running anymore
+        collector.collect_processes().unwrap(); // Process pid=3 is not running anymore
+        let processes = collector.dead_processes();
 
+        assert_eq!(processes.len(), 1);
         assert_eq!(processes[0].status, Status::DEAD);
+
+        assert_eq!(collector.running_processes().len(), 0);
+    }
+
+    #[test]
+    fn test_dead_processes_should_only_return_dead_processes() {
+        let mut boxed_scanner = Box::new(ScannerStub::new(vec![1, 2, 3]));
+        boxed_scanner.set_next_scanned_pids(vec![1, 3]);
+
+        let mut collector = ProcessCollector::new(boxed_scanner);
+
+        collector.collect_processes().unwrap(); // Processes 1, 2 and 3 are running
+        collector.collect_processes().unwrap(); // Process 2 is not running anymore
+
+        let dead_processes = collector.dead_processes();
+        assert_eq!(dead_processes.len(), 1);
+        assert_eq!(dead_processes[0].pid(), 2);
+    }
+
+    #[test]
+    fn test_running_processes_should_only_return_running_processes() {
+        let mut boxed_scanner = Box::new(ScannerStub::new(vec![1, 2, 3]));
+        boxed_scanner.set_next_scanned_pids(vec![1]);
+
+        let mut collector = ProcessCollector::new(boxed_scanner);
+
+        collector.collect_processes().unwrap(); // Processes 1, 2 and 3 are running
+        collector.collect_processes().unwrap(); // Only process 1 is still running
+
+        let running_processes = collector.running_processes();
+        assert_eq!(running_processes.len(), 1);
+        assert_eq!(running_processes[0].pid(), 1);
     }
 }
 
