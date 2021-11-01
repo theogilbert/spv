@@ -1,6 +1,7 @@
 //! Process discovery utilities
 
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 
 use log::warn;
 
@@ -23,6 +24,15 @@ pub struct ProcessMetadata {
 pub enum Status {
     RUNNING,
     DEAD,
+}
+
+impl Display for Status {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Status::RUNNING => f.write_str("running"),
+            Status::DEAD => f.write_str("dead")
+        }
+    }
 }
 
 /// Describes a process
