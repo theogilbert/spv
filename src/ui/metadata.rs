@@ -25,7 +25,7 @@ impl MetadataBar {
             None => "No process is currently selected".to_string(),
             Some(pm) => {
                 format!("{} ({}) - {}", pm.pid(), pm.status(), pm.command())
-            },
+            }
         }
     }
 
