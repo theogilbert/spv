@@ -6,9 +6,9 @@ use log::warn;
 
 use crate::core::collection::MetricCollector;
 use crate::core::process::{ProcessCollector, ProcessMetadata, Status};
+use crate::Error;
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
-use crate::Error;
 
 pub struct SpvApplication {
     receiver: Receiver<Trigger>,
@@ -85,12 +85,37 @@ impl SpvApplication {
             });
         }
 
-        let mut all_processes = self.process_view.processes();
+        let mut exposed_processes = self.exposed_processes();
 
-        self.sort_processes_by_status_and_metric(&mut all_processes);
-        self.ui.set_processes(all_processes);
+        self.sort_processes_by_status_and_metric(&mut exposed_processes);
+        self.ui.set_processes(exposed_processes);
 
         Ok(())
+    }
+
+    fn collect_running_processes(&mut self) -> Result<(), Error> {
+        self.process_view.collect_processes().map_err(Error::CoreError)?;
+        Ok(())
+    }
+
+    fn extract_processes_pids(processes: &[ProcessMetadata]) -> Vec<u32> {
+        processes.iter().map(|pm| pm.pid()).collect()
+    }
+
+    fn exposed_processes(&self) -> Vec<ProcessMetadata> {
+        let minimum_represented_date = self.ui.chart_left_bound();
+
+        self.process_view
+            .processes()
+            .into_iter()
+            .filter(|pm| {
+                if let Some(tod) = pm.time_of_death() {
+                    tod >= minimum_represented_date
+                } else {
+                    true // the process is still running
+                }
+            })
+            .collect()
     }
 
     fn sort_processes_by_status_and_metric(&self, processes: &mut Vec<ProcessMetadata>) {
@@ -102,15 +127,6 @@ impl SpvApplication {
                 .compare_pids_by_last_metrics(pm1.pid(), pm2.pid())
                 .reverse(),
         });
-    }
-
-    fn collect_running_processes(&mut self) -> Result<(), Error> {
-        self.process_view.collect_processes().map_err(Error::CoreError)?;
-        Ok(())
-    }
-
-    fn extract_processes_pids(processes: &[ProcessMetadata]) -> Vec<u32> {
-        processes.iter().map(|pm| pm.pid()).collect()
     }
 
     fn draw_ui(&mut self) -> Result<(), Error> {

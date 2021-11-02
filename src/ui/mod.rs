@@ -1,10 +1,10 @@
 use std::io;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use thiserror::Error;
 
 use crate::core::process::ProcessMetadata;
-use crate::core::view::{MetricsOverview, MetricView};
+use crate::core::view::{MetricView, MetricsOverview};
 use crate::ui::chart::MetricsChart;
 use crate::ui::layout::UiLayout;
 use crate::ui::metadata::MetadataBar;
@@ -89,5 +89,9 @@ impl SpvUI {
 
     pub fn previous_tab(&mut self) {
         self.tabs.previous();
+    }
+
+    pub fn chart_left_bound(&self) -> Instant {
+        self.chart.left_bound()
     }
 }

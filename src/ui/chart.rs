@@ -1,15 +1,14 @@
 use std::time::Duration;
-use tui::layout::Rect;
-use tui::style::{Color, Style};
-use tui::text::Span;
-use tui::widgets::{Axis, Block, Borders, Chart, Dataset, GraphType};
-use tui::{symbols, Frame};
-
 #[cfg(not(test))]
 use std::time::Instant;
 
 #[cfg(test)]
 use sn_fake_clock::FakeClock as Instant;
+use tui::layout::Rect;
+use tui::style::{Color, Style};
+use tui::text::Span;
+use tui::widgets::{Axis, Block, Borders, Chart, Dataset, GraphType};
+use tui::{symbols, Frame};
 
 use crate::core::view::MetricView;
 use crate::ui::terminal::TuiBackend;
@@ -69,7 +68,12 @@ impl MetricsChart {
     }
 
     fn build_y_axis_labels<'a>(upper_bound_repr: String) -> Vec<Span<'a>> {
-        return vec![Span::from("0"), Span::from(upper_bound_repr)];
+        vec![Span::from("0"), Span::from(upper_bound_repr)]
+    }
+
+    pub fn left_bound(&self) -> Instant {
+        // TODO use iteration rather than instant before allowing user to change span
+        Instant::now().checked_sub(self.span).unwrap()
     }
 }
 
