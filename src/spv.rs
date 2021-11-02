@@ -66,7 +66,7 @@ impl SpvApplication {
 
     fn calibrate_probes(&mut self) -> Result<(), Error> {
         self.collect_running_processes()?;
-        let pids = SpvApplication::extract_processes_pids(&self.process_view.running_processes());
+        let pids = Self::extract_processes_pids(&self.process_view.running_processes());
 
         for c in self.collectors.values_mut() {
             c.calibrate(&pids)?;
@@ -77,7 +77,7 @@ impl SpvApplication {
 
     fn collect_metrics(&mut self) -> Result<(), Error> {
         self.collect_running_processes()?;
-        let running_pids = SpvApplication::extract_processes_pids(&self.process_view.running_processes());
+        let running_pids = Self::extract_processes_pids(&self.process_view.running_processes());
 
         for collector in self.collectors.values_mut() {
             collector.collect(&running_pids).unwrap_or_else(|e| {
@@ -114,12 +114,16 @@ impl SpvApplication {
     }
 
     fn draw_ui(&mut self) -> Result<(), Error> {
-        let selected_pid = self.ui.current_process().map_or(0, |pm| pm.pid());
-
         let current_collector = self.current_collector(&self.collectors);
 
+        let current_process = self
+            .ui
+            .current_process()
+            .cloned()
+            .unwrap_or(ProcessMetadata::new(0, "default"));
+
         self.ui
-            .render(&current_collector.overview(), &current_collector.view(selected_pid))
+            .render(&current_collector.overview(), &current_collector.view(current_process))
             .map_err(Error::UiError)
     }
 

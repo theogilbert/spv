@@ -4,6 +4,12 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::time::Duration;
 
+#[cfg(not(test))]
+use std::time::Instant;
+
+#[cfg(test)]
+use sn_fake_clock::FakeClock as Instant;
+
 use crate::core::metrics::Metric;
 use crate::core::process::Pid;
 
@@ -11,15 +17,22 @@ use crate::core::process::Pid;
 ///
 /// Refer to the [`MetricCollector`](crate::core::collection::MetricCollector) trait to instanciate a `MetricView`
 pub struct MetricView<'a> {
+    last_metric_date: Instant,
     metrics: Vec<&'a dyn Metric>,
     resolution: Duration,
     default: &'a dyn Metric,
 }
 
 impl<'a> MetricView<'a> {
-    pub(crate) fn new(metrics: Vec<&'a dyn Metric>, resolution: Duration, default: &'a dyn Metric) -> Self {
+    pub(crate) fn new(
+        metrics: Vec<&'a dyn Metric>,
+        last_metric_date: Instant,
+        resolution: Duration,
+        default: &'a dyn Metric,
+    ) -> Self {
         Self {
             metrics,
+            last_metric_date,
             resolution,
             default,
         }
@@ -104,6 +117,13 @@ impl<'a> MetricView<'a> {
             })
             .unwrap_or(&self.default))
     }
+
+    /// Indicates from when dates the last metric in this view
+    pub fn last_metric_date(&self) -> Instant {
+        // TODO in core/spv/ui, keep track of time using iteration counter instead of actual Instant instances
+        //   only pulse.rs should keep track of time.
+        self.last_metric_date
+    }
 }
 
 /// Overview of a single probe's latest metrics, for all running processes
@@ -136,15 +156,17 @@ impl<'a> MetricsOverview<'a> {
 
 #[cfg(test)]
 mod test_metric_view {
+    use sn_fake_clock::FakeClock;
     use std::time::Duration;
 
     use crate::core::collection::MetricCollection;
     use crate::core::metrics::{Metric, PercentMetric};
+    use crate::core::process::ProcessMetadata;
     use crate::core::view::test_helpers::produce_metrics_collection;
     use crate::core::view::MetricView;
 
     fn build_view_of_pid_0(collection: &MetricCollection<PercentMetric>) -> MetricView {
-        collection.view(0, Duration::from_secs(1))
+        collection.view(ProcessMetadata::new(0, "cmd"), Duration::from_secs(1))
     }
 
     #[test]
@@ -174,7 +196,7 @@ mod test_metric_view {
     #[test]
     fn test_resolution_should_return_resolution_given_in_constructor() {
         let collection = MetricCollection::<PercentMetric>::new();
-        let view = collection.view(1, Duration::from_secs(123));
+        let view = collection.view(ProcessMetadata::new(1, "cmd"), Duration::from_secs(123));
 
         assert_eq!(view.resolution(), Duration::from_secs(123));
     }
@@ -249,6 +271,14 @@ mod test_metric_view {
         let view = build_view_of_pid_0(&collection);
 
         assert_eq!(view.max_concise_repr(Duration::from_secs(3)), "10.0".to_string());
+    }
+
+    #[test]
+    fn test_should_return_last_metric_date() {
+        let now = FakeClock::now();
+        let default = PercentMetric::new(0.);
+        let mv = MetricView::new(vec![], now, Duration::from_secs(1), &default);
+        assert_eq!(mv.last_metric_date(), now);
     }
 }
 

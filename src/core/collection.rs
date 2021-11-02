@@ -5,9 +5,15 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::time::Duration;
 
+#[cfg(not(test))]
+use std::time::Instant;
+
+#[cfg(test)]
+use sn_fake_clock::FakeClock as Instant;
+
 use crate::core::metrics::Metric;
 use crate::core::probe::Probe;
-use crate::core::process::Pid;
+use crate::core::process::{Pid, ProcessMetadata};
 use crate::core::view::{MetricView, MetricsOverview};
 use crate::core::Error;
 
@@ -53,8 +59,8 @@ pub trait MetricCollector {
     /// metrics of a given process.
     ///
     /// # Arguments
-    ///  * `pid`: The ID of the process for which to get the `MetricView`
-    fn view(&self, pid: Pid) -> MetricView;
+    ///  * `process`: The `ProcessMetadata` structure containing informations about the process
+    fn view(&self, process: ProcessMetadata) -> MetricView;
 
     /// Builds a [`MetricsOverview`](crate::core::view::MetricsOverview), containing the last metrics
     /// of all running processes.
@@ -115,8 +121,8 @@ where
         self.probe.name()
     }
 
-    fn view(&self, pid: Pid) -> MetricView {
-        self.collection.view(pid, self.resolution)
+    fn view(&self, process: ProcessMetadata) -> MetricView {
+        self.collection.view(process, self.resolution)
     }
 
     fn overview(&self) -> MetricsOverview {
@@ -135,7 +141,7 @@ mod test_probe_collector {
     use crate::core::collection::{MetricCollector, ProbeCollector};
     use crate::core::metrics::PercentMetric;
     use crate::core::probe::Probe;
-    use crate::core::process::Pid;
+    use crate::core::process::{Pid, ProcessMetadata};
     use crate::core::Error;
 
     struct ProbeFake {
@@ -172,7 +178,7 @@ mod test_probe_collector {
     fn test_collector_should_be_empty_by_default() {
         let collector = create_probe_collector();
 
-        let view = collector.view(0);
+        let view = collector.view(ProcessMetadata::new(0, "cmd"));
         let extract = view.extract(Duration::from_secs(10));
 
         assert_eq!(extract.len(), 0);
@@ -183,7 +189,7 @@ mod test_probe_collector {
         let mut collector = create_probe_collector();
         collector.calibrate(&[1, 2, 3]).unwrap();
 
-        let view = collector.view(1);
+        let view = collector.view(ProcessMetadata::new(1, "cmd"));
         let extract = view.extract(Duration::from_secs(10));
 
         assert_eq!(extract.len(), 0);
@@ -194,7 +200,7 @@ mod test_probe_collector {
         let mut collector = create_probe_collector();
         collector.collect(&[1, 2, 3]).unwrap();
 
-        let view = collector.view(4);
+        let view = collector.view(ProcessMetadata::new(4, "cmd"));
         let extract = view.extract(Duration::from_secs(10));
 
         assert_eq!(extract.len(), 0);
@@ -206,7 +212,7 @@ mod test_probe_collector {
         let mut collector = create_probe_collector_with_return_map(return_map);
         collector.collect(&[1, 2]).unwrap();
 
-        let view = collector.view(1);
+        let view = collector.view(ProcessMetadata::new(1, "cmd"));
         let extract = view.extract(Duration::from_secs(10));
 
         assert_eq!(extract.len(), 1);
@@ -294,10 +300,11 @@ where
             .ok_or(Error::InvalidPID(pid))
     }
 
-    pub fn view(&self, pid: Pid, resolution: Duration) -> MetricView {
-        let metrics = self.metrics_as_metric_trait_objects(pid).unwrap_or_default();
+    pub fn view(&self, process: ProcessMetadata, resolution: Duration) -> MetricView {
+        let metrics = self.metrics_as_metric_trait_objects(process.pid()).unwrap_or_default();
+        let last_metric_date = process.time_of_death().unwrap_or(Instant::now());
 
-        MetricView::new(metrics, resolution, &self.default)
+        MetricView::new(metrics, last_metric_date, resolution, &self.default)
     }
 
     pub fn overview(&self) -> MetricsOverview {

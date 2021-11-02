@@ -2,8 +2,12 @@
 
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+#[cfg(not(test))]
+use std::time::Instant;
 
 use log::warn;
+#[cfg(test)]
+use sn_fake_clock::FakeClock as Instant;
 
 use crate::core::Error;
 
@@ -18,6 +22,7 @@ pub struct ProcessMetadata {
     pid: Pid,
     command: String,
     status: Status,
+    time_of_death: Option<Instant>,
 }
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
@@ -46,6 +51,7 @@ impl ProcessMetadata {
             pid,
             command: command.into(),
             status: Status::RUNNING,
+            time_of_death: None,
         }
     }
 
@@ -70,12 +76,20 @@ impl ProcessMetadata {
 
     /// Marks a process as dead, indicating that it is not running anymore
     pub fn set_dead(&mut self) {
-        self.status = Status::DEAD
+        self.status = Status::DEAD;
+        self.time_of_death = Some(Instant::now());
+    }
+
+    /// Indicates when the process stopped running
+    pub fn time_of_death(&self) -> Option<Instant> {
+        self.time_of_death.clone()
     }
 }
 
 #[cfg(test)]
 mod test_process_metadata {
+    use sn_fake_clock::FakeClock;
+
     use crate::core::process::{ProcessMetadata, Status};
 
     #[test]
@@ -98,6 +112,25 @@ mod test_process_metadata {
         let mut pm = ProcessMetadata::new(123, "command");
         pm.set_dead();
         assert_eq!(pm.status(), Status::DEAD);
+    }
+
+    #[test]
+    fn test_time_of_death_should_be_none_by_default() {
+        assert_eq!(ProcessMetadata::new(123, "command").time_of_death(), None);
+    }
+
+    #[test]
+    fn test_time_of_death_should_be_set_when_process_set_dead() {
+        FakeClock::set_time(1000);
+        let mut pm = ProcessMetadata::new(456, "command");
+
+        FakeClock::advance_time(1000);
+        pm.set_dead();
+        let expected_tod = FakeClock::now();
+
+        FakeClock::advance_time(1000);
+
+        assert_eq!(pm.time_of_death(), Some(expected_tod));
     }
 }
 
@@ -168,6 +201,7 @@ impl ProcessCollector {
     fn mark_dead_processes(&mut self, running_pids: &Vec<Pid>) {
         self.registered_processes
             .values_mut()
+            .filter(|pm| pm.status() == Status::RUNNING) // No need to mark dead an already dead process
             .filter(|pm| !running_pids.contains(&pm.pid()))
             .for_each(|pm| pm.set_dead());
     }

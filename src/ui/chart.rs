@@ -1,10 +1,15 @@
 use std::time::Duration;
-
 use tui::layout::Rect;
 use tui::style::{Color, Style};
 use tui::text::Span;
 use tui::widgets::{Axis, Block, Borders, Chart, Dataset, GraphType};
 use tui::{symbols, Frame};
+
+#[cfg(not(test))]
+use std::time::Instant;
+
+#[cfg(test)]
+use sn_fake_clock::FakeClock as Instant;
 
 use crate::core::view::MetricView;
 use crate::ui::terminal::TuiBackend;
@@ -121,6 +126,9 @@ impl<'a> DataFrame<'a> {
         let mut data_vecs: Vec<_> = Vec::new();
         let metrics_cardinality = metrics_view.last_or_default().cardinality();
 
+        // TODO use iteration count rather than relying on timestamps
+        let age_of_metrics = Instant::now().duration_since(metrics_view.last_metric_date()).as_secs() as f64;
+
         for dimension_idx in 0..metrics_cardinality {
             let data: Vec<_> = metrics_view
                 .extract(span)
@@ -128,7 +136,10 @@ impl<'a> DataFrame<'a> {
                 .rev()
                 .map(|m| m.as_f64(dimension_idx).expect("Error accessing raw metric value"))
                 .enumerate()
-                .map(|(t, r)| (0. - (t as f64 * step.as_secs_f64()), r))
+                .map(|(idx, raw_value)| {
+                    let delta_from_origin = age_of_metrics + idx as f64 * step.as_secs_f64();
+                    (0. - delta_from_origin, raw_value)
+                })
                 .collect();
 
             data_vecs.push(data);
