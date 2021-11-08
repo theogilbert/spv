@@ -161,18 +161,9 @@ impl ProcessCollector {
 
     /// Returns the list of processes that were still running as of the last collection
     pub fn running_processes(&self) -> Vec<ProcessMetadata> {
-        self.processes_with_status(Status::RUNNING)
-    }
-
-    /// Returns the list of processes that were not running anymore during the last collection
-    pub fn dead_processes(&self) -> Vec<ProcessMetadata> {
-        self.processes_with_status(Status::DEAD)
-    }
-
-    fn processes_with_status(&self, status: Status) -> Vec<ProcessMetadata> {
         self.registered_processes
             .values()
-            .filter(|pm| pm.status == status)
+            .filter(|pm| pm.status == Status::RUNNING)
             .cloned()
             .collect()
     }
@@ -255,6 +246,23 @@ mod test_process_collector {
         ProcessCollector::new(boxed_scanner)
     }
 
+    fn build_collector_with_sequence_and_collect(mut pids_sequence: Vec<Vec<Pid>>) -> ProcessCollector {
+        let sequence_count = pids_sequence.len();
+        pids_sequence.reverse();
+
+        let mut boxed_scanner = Box::new(ScannerStub::new(pids_sequence.pop().unwrap()));
+        pids_sequence
+            .into_iter()
+            .for_each(|pids| boxed_scanner.set_next_scanned_pids(pids));
+
+        let mut collector = ProcessCollector::new(boxed_scanner);
+        for iteration in 0..sequence_count {
+            collector.collect_processes(iteration).expect("Could not collect processes");
+        }
+
+        collector
+    }
+
     #[test]
     fn test_should_collect_no_process_when_no_pid_scanned() {
         let mut collector = build_process_collector(vec![]);
@@ -302,36 +310,41 @@ mod test_process_collector {
     }
 
     #[test]
-    fn test_should_mark_dead_process_as_dead() {
-        let mut boxed_scanner = Box::new(ScannerStub::new(vec![3]));
-        boxed_scanner.set_next_scanned_pids(vec![]);
+    fn test_should_correctly_marked_dead_process() {
+        let pids_sequence = vec![
+            vec![3], // Iteration=0 -> Process pid=3 is collected
+            vec![],  // Iteration=1 -> Process pid=3 is not running anymore
+        ];
+        let collector = build_collector_with_sequence_and_collect(pids_sequence);
 
-        let mut collector = ProcessCollector::new(boxed_scanner);
+        let dead_process = &collector.processes()[0];
 
-        collector.collect_processes(1).unwrap(); // Process pid=3 is collected
-        collector.collect_processes(2).unwrap(); // Process pid=3 is not running anymore
-        let processes = collector.dead_processes();
-
-        assert_eq!(processes.len(), 1);
-        assert_eq!(processes[0].status(), Status::DEAD);
-        assert_eq!(processes[0].iteration_of_death(), Some(2));
-
-        assert_eq!(collector.running_processes().len(), 0);
+        assert_eq!(dead_process.status(), Status::DEAD);
+        assert_eq!(dead_process.iteration_of_death(), Some(1));
     }
 
     #[test]
-    fn test_dead_processes_should_only_return_dead_processes() {
-        let mut boxed_scanner = Box::new(ScannerStub::new(vec![1, 2, 3]));
-        boxed_scanner.set_next_scanned_pids(vec![1, 3]);
+    fn test_should_not_classify_dead_processes_as_running() {
+        let pids_sequence = vec![
+            vec![3], // Process pid=3 is collected
+            vec![],  // Process pid=3 is not running anymore
+        ];
+        let collector = build_collector_with_sequence_and_collect(pids_sequence);
 
-        let mut collector = ProcessCollector::new(boxed_scanner);
+        assert_eq!(collector.running_processes().len(), 0);
+        assert_eq!(collector.processes().len(), 1);
+    }
 
-        collector.collect_processes(1).unwrap(); // Processes 1, 2 and 3 are running
-        collector.collect_processes(2).unwrap(); // Process 2 is not running anymore
+    #[test]
+    fn test_dead_processes_should_only_classify_dead_processes_as_non_running_dead() {
+        let pids_sequence = vec![
+            vec![1, 2, 3], // Processes 1, 2 and 3 are running
+            vec![1, 2],  // Process 2 is not running anymore
+        ];
+        let collector = build_collector_with_sequence_and_collect(pids_sequence);
 
-        let dead_processes = collector.dead_processes();
-        assert_eq!(dead_processes.len(), 1);
-        assert_eq!(dead_processes[0].pid(), 2);
+        assert_eq!(collector.running_processes().len(), 2);
+        assert_eq!(collector.processes().len(), 3);
     }
 
     #[test]
