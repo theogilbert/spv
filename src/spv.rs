@@ -5,16 +5,18 @@ use std::sync::mpsc::Receiver;
 use log::warn;
 
 use crate::core::collection::MetricCollector;
+use crate::core::iteration::{IterSpan, IterTracker};
 use crate::core::process::{ProcessCollector, ProcessMetadata, Status};
-use crate::Error;
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
+use crate::Error;
 
 pub struct SpvApplication {
     receiver: Receiver<Trigger>,
     process_view: ProcessCollector,
     ui: SpvUI,
     collectors: HashMap<String, Box<dyn MetricCollector>>,
+    iteration_tracker: IterTracker,
 }
 
 impl SpvApplication {
@@ -32,6 +34,7 @@ impl SpvApplication {
             process_view,
             ui,
             collectors: collectors_map,
+            iteration_tracker: IterTracker::default(),
         };
 
         spv_app.calibrate_probes()?;
@@ -76,13 +79,17 @@ impl SpvApplication {
     }
 
     fn collect_metrics(&mut self) -> Result<(), Error> {
+        self.iteration_tracker.tick();
+
         self.collect_running_processes()?;
         let running_pids = Self::extract_processes_pids(&self.process_view.running_processes());
 
         for collector in self.collectors.values_mut() {
-            collector.collect(&running_pids).unwrap_or_else(|e| {
-                warn!("Error reading from collector {}: {}", collector.name(), e.to_string());
-            });
+            collector
+                .collect(&running_pids, self.iteration_tracker.iteration())
+                .unwrap_or_else(|e| {
+                    warn!("Error reading from collector {}: {}", collector.name(), e.to_string());
+                });
         }
 
         let mut exposed_processes = self.exposed_processes();
@@ -94,7 +101,9 @@ impl SpvApplication {
     }
 
     fn collect_running_processes(&mut self) -> Result<(), Error> {
-        self.process_view.collect_processes().map_err(Error::CoreError)?;
+        self.process_view
+            .collect_processes(self.iteration_tracker.iteration())
+            .map_err(Error::CoreError)?;
         Ok(())
     }
 
@@ -103,18 +112,13 @@ impl SpvApplication {
     }
 
     fn exposed_processes(&self) -> Vec<ProcessMetadata> {
-        let minimum_represented_date = self.ui.chart_left_bound();
+        let cur_iteration = self.iteration_tracker.iteration();
+        let minimum_represented_iteration = IterSpan::default().begin(cur_iteration);
 
         self.process_view
             .processes()
             .into_iter()
-            .filter(|pm| {
-                if let Some(tod) = pm.time_of_death() {
-                    tod >= minimum_represented_date
-                } else {
-                    true // the process is still running
-                }
-            })
+            .filter(|pm| pm.iteration_of_death().unwrap_or(cur_iteration) >= minimum_represented_iteration)
             .collect()
     }
 
@@ -132,15 +136,13 @@ impl SpvApplication {
     fn draw_ui(&mut self) -> Result<(), Error> {
         let current_collector = self.current_collector(&self.collectors);
 
-        let current_process = self
-            .ui
-            .current_process()
-            .cloned()
-            .unwrap_or(ProcessMetadata::new(0, "default"));
+        let overview = current_collector.overview();
 
-        self.ui
-            .render(&current_collector.overview(), &current_collector.view(current_process))
-            .map_err(Error::UiError)
+        let selected_pid = self.ui.current_process().map(|pm| pm.pid()).unwrap_or(0);
+        let current_iteration = self.iteration_tracker.iteration();
+        let metrics_view = current_collector.view(selected_pid, IterSpan::default(), current_iteration);
+
+        self.ui.render(&overview, &metrics_view).map_err(Error::UiError)
     }
 
     fn current_collector<'a>(

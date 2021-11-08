@@ -1,5 +1,4 @@
 use std::io;
-use std::time::{Duration, Instant};
 
 use thiserror::Error;
 
@@ -36,13 +35,12 @@ pub struct SpvUI {
 impl SpvUI {
     pub fn new(labels: impl Iterator<Item = String>) -> Result<Self, Error> {
         let tabs = MetricTabs::new(labels.collect());
-        let chart = MetricsChart::new(Duration::from_secs(60));
 
         Ok(Self {
             terminal: Terminal::new()?,
             tabs,
             process_list: ProcessList::default(),
-            chart,
+            chart: MetricsChart::default(),
             metadata_bar: MetadataBar::default(),
         })
     }
@@ -89,9 +87,5 @@ impl SpvUI {
 
     pub fn previous_tab(&mut self) {
         self.tabs.previous();
-    }
-
-    pub fn chart_left_bound(&self) -> Instant {
-        self.chart.left_bound()
     }
 }

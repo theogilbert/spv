@@ -3,17 +3,11 @@
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::time::Duration;
 
-#[cfg(not(test))]
-use std::time::Instant;
-
-#[cfg(test)]
-use sn_fake_clock::FakeClock as Instant;
-
+use crate::core::iteration::{IterSpan, Iteration};
 use crate::core::metrics::Metric;
 use crate::core::probe::Probe;
-use crate::core::process::{Pid, ProcessMetadata};
+use crate::core::process::Pid;
 use crate::core::view::{MetricView, MetricsOverview};
 use crate::core::Error;
 
@@ -28,7 +22,8 @@ pub trait MetricCollector {
     ///
     /// # Arguments
     ///  * `pids`: A slice containing the [`Pids`](crate::core::process::Pid) to probe.
-    fn collect(&mut self, pids: &[Pid]) -> Result<(), Error>;
+    ///  * `current_iteration`: Indicates the iteration number referencing the metrics collected by this call
+    fn collect(&mut self, pids: &[Pid], current_iteration: Iteration) -> Result<(), Error>;
 
     /// Probes metrics for the given processes, without storing them.
     ///
@@ -41,9 +36,9 @@ pub trait MetricCollector {
 
     /// Compares two processes by their last collected metric.
     ///
-    /// As it is not possible to compare [`Metric`](crate::core::metrics::Metric) trait objects, we
-    /// can rely on this method to sort two processes based on their last metrics. The collector
-    /// implementation knows how to sort the metrics as it knows their concrete type.
+    /// As we do not allow comparison between [`Metric`](crate::core::metrics::Metric) trait objects, we
+    /// can rely on this method to sort two processes based on their last metrics. A given collector
+    /// instance knows how to compare metrics as it knows their concrete type.
     ///
     /// If one of the process has no collected metrics yet, the metric used for the comparison will
     /// be the default metric.
@@ -59,8 +54,10 @@ pub trait MetricCollector {
     /// metrics of a given process.
     ///
     /// # Arguments
-    ///  * `process`: The `ProcessMetadata` structure containing informations about the process
-    fn view(&self, process: ProcessMetadata) -> MetricView;
+    ///  * `pid`: The ID of the process for which to retrieve metrics
+    ///  * `span`: The span of iterations covered by the metric view
+    ///  * `current_iteration`: The iteration at the point of building this `MetricView`
+    fn view(&self, pid: Pid, span: IterSpan, current_iteration: Iteration) -> MetricView;
 
     /// Builds a [`MetricsOverview`](crate::core::view::MetricsOverview), containing the last metrics
     /// of all running processes.
@@ -76,18 +73,16 @@ where
 {
     collection: MetricCollection<M>,
     probe: Box<dyn Probe<M>>,
-    resolution: Duration,
 }
 
 impl<M> ProbeCollector<M>
 where
     M: Metric + Copy + PartialOrd + Default,
 {
-    pub fn new(probe: impl Probe<M> + 'static, resolution: Duration) -> Self {
+    pub fn new(probe: impl Probe<M> + 'static) -> Self {
         Self {
             collection: MetricCollection::<M>::new(),
             probe: Box::new(probe),
-            resolution,
         }
     }
 }
@@ -96,11 +91,11 @@ impl<M> MetricCollector for ProbeCollector<M>
 where
     M: Metric + Copy + PartialOrd + Default,
 {
-    fn collect(&mut self, pids: &[Pid]) -> Result<(), Error> {
+    fn collect(&mut self, pids: &[Pid], current_iteration: Iteration) -> Result<(), Error> {
         let metrics = self.probe.probe_processes(pids)?;
 
         for (pid, m) in metrics.into_iter() {
-            self.collection.push(pid, m)
+            self.collection.push(pid, m, current_iteration);
         }
 
         Ok(())
@@ -121,8 +116,8 @@ where
         self.probe.name()
     }
 
-    fn view(&self, process: ProcessMetadata) -> MetricView {
-        self.collection.view(process, self.resolution)
+    fn view(&self, pid: Pid, span: IterSpan, current_iteration: Iteration) -> MetricView {
+        self.collection.view(pid, span, current_iteration)
     }
 
     fn overview(&self) -> MetricsOverview {
@@ -134,14 +129,14 @@ where
 mod test_probe_collector {
     use std::cmp::Ordering;
     use std::collections::HashMap;
-    use std::time::Duration;
 
     use rstest::*;
 
     use crate::core::collection::{MetricCollector, ProbeCollector};
+    use crate::core::iteration::IterSpan;
     use crate::core::metrics::PercentMetric;
     use crate::core::probe::Probe;
-    use crate::core::process::{Pid, ProcessMetadata};
+    use crate::core::process::Pid;
     use crate::core::Error;
 
     struct ProbeFake {
@@ -164,24 +159,22 @@ mod test_probe_collector {
 
     fn create_probe_collector() -> ProbeCollector<PercentMetric> {
         let probe = ProbeFake { return_map: None };
-        ProbeCollector::new(probe, Duration::from_secs(1))
+        ProbeCollector::new(probe)
     }
 
     fn create_probe_collector_with_return_map(return_map: HashMap<Pid, f64>) -> ProbeCollector<PercentMetric> {
         let probe = ProbeFake {
             return_map: Some(return_map),
         };
-        ProbeCollector::new(probe, Duration::from_secs(1))
+        ProbeCollector::new(probe)
     }
 
     #[test]
     fn test_collector_should_be_empty_by_default() {
         let collector = create_probe_collector();
+        let view = collector.view(0, IterSpan::default(), 10);
 
-        let view = collector.view(ProcessMetadata::new(0, "cmd"));
-        let extract = view.extract(Duration::from_secs(10));
-
-        assert_eq!(extract.len(), 0);
+        assert_eq!(view.as_slice().len(), 0);
     }
 
     #[test]
@@ -189,34 +182,32 @@ mod test_probe_collector {
         let mut collector = create_probe_collector();
         collector.calibrate(&[1, 2, 3]).unwrap();
 
-        let view = collector.view(ProcessMetadata::new(1, "cmd"));
-        let extract = view.extract(Duration::from_secs(10));
+        let view = collector.view(0, IterSpan::default(), 10);
 
-        assert_eq!(extract.len(), 0);
+        assert_eq!(view.as_slice().len(), 0);
     }
 
     #[test]
     fn test_process_metrics_should_be_empty_when_process_has_not_been_collected() {
         let mut collector = create_probe_collector();
-        collector.collect(&[1, 2, 3]).unwrap();
+        collector.collect(&[1], 1).unwrap();
 
-        let view = collector.view(ProcessMetadata::new(4, "cmd"));
-        let extract = view.extract(Duration::from_secs(10));
+        let view = collector.view(2, IterSpan::default(), 10);
 
-        assert_eq!(extract.len(), 0);
+        assert_eq!(view.as_slice().len(), 0);
     }
 
     #[test]
     fn test_collector_should_not_be_empty_when_metrics_collected() {
         let return_map = hashmap!(1 => 50., 2 => 45.);
         let mut collector = create_probe_collector_with_return_map(return_map);
-        collector.collect(&[1, 2]).unwrap();
+        collector.collect(&[1, 2], 1).unwrap();
 
-        let view = collector.view(ProcessMetadata::new(1, "cmd"));
-        let extract = view.extract(Duration::from_secs(10));
+        let view = collector.view(2, IterSpan::default(), 10);
+        let extract = view.as_slice();
 
         assert_eq!(extract.len(), 1);
-        assert_eq!(extract[0], &PercentMetric::new(50.));
+        assert_eq!(extract[0], &PercentMetric::new(45.));
     }
 
     #[rstest]
@@ -230,7 +221,7 @@ mod test_probe_collector {
     ) {
         let return_map = hashmap!(1 => metric_pid1, 2 => metric_pid2);
         let mut collector = create_probe_collector_with_return_map(return_map);
-        collector.collect(&[1, 2]).unwrap();
+        collector.collect(&[1, 2], 1).unwrap();
 
         assert_eq!(collector.compare_pids_by_last_metrics(1, 2), expected_ord);
     }
@@ -245,10 +236,10 @@ mod test_probe_collector {
     }
 
     #[test]
-    fn test_collector_should_compare_pid_to_default_when_one_has_not_been_collected() {
+    fn test_collector_should_compare_process_metric_to_default_metric_when_other_process_has_not_been_collected() {
         let return_map = hashmap!(1 => 50.);
         let mut collector = create_probe_collector_with_return_map(return_map);
-        collector.collect(&[1]).unwrap();
+        collector.collect(&[1], 1).unwrap();
 
         // Pid 1 should be Ordering::Greater than Pid 2 with 50% > default=0%
         assert_eq!(collector.compare_pids_by_last_metrics(1, 2), Ordering::Greater);
@@ -264,6 +255,7 @@ where
     M: Metric + Copy + PartialOrd + Default,
 {
     series: HashMap<Pid, Vec<M>>,
+    last_pushed_iteration: HashMap<Pid, Iteration>,
     default: M,
 }
 
@@ -274,17 +266,27 @@ where
     pub fn new() -> Self {
         Self {
             series: HashMap::new(),
+            last_pushed_iteration: HashMap::new(),
             default: M::default(),
         }
     }
 
-    pub fn push(&mut self, pid: Pid, metric: M) {
+    pub fn push(&mut self, pid: Pid, metric: M, current_iteration: Iteration) {
         let process_series = match self.series.entry(pid) {
             Entry::Occupied(o) => o.into_mut(),
             Entry::Vacant(v) => v.insert(Vec::new()),
         };
 
         process_series.push(metric);
+
+        match self.last_pushed_iteration.entry(pid) {
+            Entry::Occupied(mut o) => {
+                o.insert(current_iteration);
+            }
+            Entry::Vacant(v) => {
+                v.insert(current_iteration);
+            }
+        };
     }
 
     pub fn last_or_default(&self, pid: Pid) -> &M {
@@ -300,11 +302,28 @@ where
             .ok_or(Error::InvalidPID(pid))
     }
 
-    pub fn view(&self, process: ProcessMetadata, resolution: Duration) -> MetricView {
-        let metrics = self.metrics_as_metric_trait_objects(process.pid()).unwrap_or_default();
-        let last_metric_date = process.time_of_death().unwrap_or(Instant::now());
+    pub fn view(&self, pid: Pid, span: IterSpan, current_iteration: Iteration) -> MetricView {
+        let metrics = self.extract_metrics_according_to_span(pid, &span);
+        let last_pushed_iteration = self.last_pushed_iteration.get(&pid).cloned().unwrap_or(Iteration::MIN);
 
-        MetricView::new(metrics, last_metric_date, resolution, &self.default)
+        MetricView::new(metrics, &self.default, span, last_pushed_iteration, current_iteration)
+    }
+
+    fn extract_metrics_according_to_span(&self, pid: Pid, span: &IterSpan) -> Vec<&dyn Metric> {
+        // TODO shouldn't this behavior belong to IterSpan ?
+        if let Ok(metrics) = self.metrics_of_process(pid) {
+            let collected_metrics_count = metrics.len();
+            let expected_metrics_count = span.span();
+            let skipped_metrics = collected_metrics_count.saturating_sub(expected_metrics_count);
+
+            metrics
+                .into_iter()
+                .skip(skipped_metrics)
+                .map(|m| m as &dyn Metric)
+                .collect()
+        } else {
+            vec![]
+        }
     }
 
     pub fn overview(&self) -> MetricsOverview {
@@ -315,11 +334,6 @@ where
             .collect();
 
         MetricsOverview::new(last_metrics, &self.default)
-    }
-
-    fn metrics_as_metric_trait_objects(&self, pid: Pid) -> Result<Vec<&dyn Metric>, Error> {
-        self.metrics_of_process(pid)
-            .map(|v| v.into_iter().map(|m| m as &dyn Metric).collect())
     }
 }
 
@@ -337,8 +351,8 @@ mod test_metric_collection {
     #[test]
     fn test_should_return_last_metric_when_has_metric() {
         let mut collection = MetricCollection::<PercentMetric>::new();
-        collection.push(1, PercentMetric::new(1.));
-        collection.push(1, PercentMetric::new(2.));
+        collection.push(1, PercentMetric::new(1.), 1);
+        collection.push(1, PercentMetric::new(2.), 1);
 
         assert_eq!(collection.last_or_default(1), &PercentMetric::new(2.));
     }
