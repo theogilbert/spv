@@ -11,7 +11,7 @@ use crate::core::Error;
 /// Represents the unique ID of a running process
 ///
 /// On Linux 64 bits, the maximum value for a PID is 4194304, hence u32
-pub type Pid = u32; // TODO add new type UPID (Unique PID) through the entire execution of spv
+pub type Pid = u32; // TODO add new type UPID (Unique PID) through the entire execution of spv, as PIDs might rollover
 
 /// Basic metadata of a process (PID, command, etc...)
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -141,19 +141,6 @@ impl ProcessCollector {
         }
     }
 
-    /// Scans and retrieves information about running processes
-    pub fn collect_processes(&mut self, current_iteration: Iteration) -> Result<(), Error> {
-        let running_pids = self.scanner.scan()?;
-
-        self.mark_dead_processes(&running_pids, current_iteration);
-
-        for pm in self.parse_new_processes(&running_pids) {
-            self.registered_processes.insert(pm.pid(), pm);
-        }
-
-        Ok(())
-    }
-
     /// Returns the list of all processes, regardless of their status (running or not)
     pub fn processes(&self) -> Vec<ProcessMetadata> {
         self.registered_processes.values().cloned().collect()
@@ -168,6 +155,27 @@ impl ProcessCollector {
             .collect()
     }
 
+    /// Scans and retrieves information about running processes
+    pub fn collect_processes(&mut self, current_iteration: Iteration) -> Result<(), Error> {
+        let running_pids = self.scanner.scan()?;
+
+        self.mark_dead_processes(&running_pids, current_iteration);
+
+        for pm in self.parse_new_processes(&running_pids) {
+            self.registered_processes.insert(pm.pid(), pm);
+        }
+
+        Ok(())
+    }
+
+    fn mark_dead_processes(&mut self, running_pids: &[Pid], current_iteration: Iteration) {
+        self.registered_processes
+            .values_mut()
+            .filter(|pm| pm.status() == Status::RUNNING) // No need to mark dead an already dead process
+            .filter(|pm| !running_pids.contains(&pm.pid()))
+            .for_each(|pm| pm.set_dead(current_iteration));
+    }
+
     fn parse_new_processes(&self, running_pids: &[Pid]) -> Vec<ProcessMetadata> {
         running_pids
             .iter()
@@ -180,14 +188,6 @@ impl ProcessCollector {
                 Ok(pm) => Some(pm),
             })
             .collect()
-    }
-
-    fn mark_dead_processes(&mut self, running_pids: &[Pid], current_iteration: Iteration) {
-        self.registered_processes
-            .values_mut()
-            .filter(|pm| pm.status() == Status::RUNNING) // No need to mark dead an already dead process
-            .filter(|pm| !running_pids.contains(&pm.pid()))
-            .for_each(|pm| pm.set_dead(current_iteration));
     }
 }
 
@@ -257,7 +257,9 @@ mod test_process_collector {
 
         let mut collector = ProcessCollector::new(boxed_scanner);
         for iteration in 0..sequence_count {
-            collector.collect_processes(iteration).expect("Could not collect processes");
+            collector
+                .collect_processes(iteration)
+                .expect("Could not collect processes");
         }
 
         collector
@@ -339,7 +341,7 @@ mod test_process_collector {
     fn test_dead_processes_should_only_classify_dead_processes_as_non_running_dead() {
         let pids_sequence = vec![
             vec![1, 2, 3], // Processes 1, 2 and 3 are running
-            vec![1, 2],  // Process 2 is not running anymore
+            vec![1, 2],    // Process 2 is not running anymore
         ];
         let collector = build_collector_with_sequence_and_collect(pids_sequence);
 
