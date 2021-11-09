@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use tui::layout::Rect;
 use tui::style::{Color, Style};
 use tui::text::Span;
@@ -9,38 +7,29 @@ use tui::{symbols, Frame};
 use crate::core::view::MetricView;
 use crate::ui::terminal::TuiBackend;
 
-pub struct MetricsChart {
-    // The time span the chart covers
-    span: Duration,
-    axis_origin_label: String,
+pub struct MetricsChart {}
+
+impl Default for MetricsChart {
+    fn default() -> Self {
+        MetricsChart {}
+    }
 }
 
-// TODO Keep displaying "dead" processes if they are covered by `span`
 impl MetricsChart {
-    pub fn new(span: Duration) -> Self {
-        Self {
-            span,
-            axis_origin_label: "-1m".to_string(), // TODO make this actually reflect self.span
-        }
-    }
-
+    // TODO refactor frame and chunk are always passed together. Merge them in a struct with a render_widget method
     pub fn render(&self, frame: &mut Frame<TuiBackend>, chunk: Rect, metrics_view: &MetricView) {
-        let data_frame = DataFrame::new(metrics_view, self.span);
+        let data_frame = DataFrame::new(metrics_view);
 
         let chart = Chart::new(data_frame.datasets())
             .block(Block::default().borders(Borders::ALL))
-            .x_axis(self.define_x_axis())
-            .y_axis(self.define_y_axis(
-                &data_frame,
-                metrics_view.max_concise_repr(self.span),
-                metrics_view.unit(),
-            ));
+            .x_axis(self.define_x_axis(metrics_view))
+            .y_axis(self.define_y_axis(&data_frame, metrics_view.max_concise_repr(), metrics_view.unit()));
 
         frame.render_widget(chart, chunk);
     }
 
-    fn define_x_axis(&self) -> Axis {
-        let labels = [&self.axis_origin_label, "now"]
+    fn define_x_axis(&self, metrics_view: &MetricView) -> Axis {
+        let labels = ["-1m", "now"] // TODO make this actually reflect metrics_view
             .iter()
             .cloned()
             .map(Span::from)
@@ -48,7 +37,10 @@ impl MetricsChart {
 
         Axis::default()
             .style(Style::default().fg(Color::White))
-            .bounds([0. - self.span.as_secs_f64(), 0.0])
+            .bounds([
+                metrics_view.current_iteration() as f64 - metrics_view.span() as f64,
+                metrics_view.current_iteration() as f64,
+            ])
             .labels(labels)
     }
 
@@ -64,25 +56,24 @@ impl MetricsChart {
     }
 
     fn build_y_axis_labels<'a>(upper_bound_repr: String) -> Vec<Span<'a>> {
-        return vec![Span::from("0"), Span::from(upper_bound_repr)];
+        vec![Span::from("0"), Span::from(upper_bound_repr)]
     }
 }
 
+// TODO refactor - DataFrame does not need to be an object. Replace it by functions / and test them
 /// Performs all required operations to get raw "drawable" data from `&[&Metric]`
 struct DataFrame<'a> {
     metrics_view: &'a MetricView<'a>,
     // data has to be persisted as an attr, to be able to return a Dataset which references data
     // from this vec
     data: Vec<Vec<(f64, f64)>>,
-    span: Duration,
 }
 
 impl<'a> DataFrame<'a> {
-    pub fn new(metrics_view: &'a MetricView, span: Duration) -> Self {
+    pub fn new(metrics_view: &'a MetricView) -> Self {
         Self {
             metrics_view,
-            data: Self::extract_raw_from_metrics(metrics_view, span, metrics_view.resolution()),
-            span,
+            data: Self::extract_raw_from_metrics(metrics_view),
         }
     }
 
@@ -117,18 +108,21 @@ impl<'a> DataFrame<'a> {
     /// Extract raw data from a collection of metrics
     /// Raw data consists of sets of (f64, f64) tuples, each set corresponding to a drawable
     /// `Dataset`
-    fn extract_raw_from_metrics(metrics_view: &MetricView, span: Duration, step: Duration) -> Vec<Vec<(f64, f64)>> {
+    fn extract_raw_from_metrics(metrics_view: &MetricView) -> Vec<Vec<(f64, f64)>> {
         let mut data_vecs: Vec<_> = Vec::new();
         let metrics_cardinality = metrics_view.last_or_default().cardinality();
 
+        let last_iter = metrics_view.last_iteration();
+
         for dimension_idx in 0..metrics_cardinality {
             let data: Vec<_> = metrics_view
-                .extract(span)
+                .as_slice()
                 .iter()
                 .rev()
                 .map(|m| m.as_f64(dimension_idx).expect("Error accessing raw metric value"))
                 .enumerate()
-                .map(|(t, r)| (0. - (t as f64 * step.as_secs_f64()), r))
+                .map(|(idx, raw_value)| ((last_iter - idx) as f64, raw_value))
+                .rev()
                 .collect();
 
             data_vecs.push(data);
@@ -138,6 +132,6 @@ impl<'a> DataFrame<'a> {
     }
 
     pub fn max_value(&self) -> f64 {
-        self.metrics_view.max_f64(self.span)
+        self.metrics_view.max_f64()
     }
 }

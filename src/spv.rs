@@ -1,10 +1,12 @@
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::mpsc::Receiver;
 
 use log::warn;
 
 use crate::core::collection::MetricCollector;
-use crate::core::process::{ProcessCollector, ProcessMetadata};
+use crate::core::iteration::{IterSpan, IterTracker};
+use crate::core::process::{ProcessCollector, ProcessMetadata, Status};
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
 use crate::Error;
@@ -14,6 +16,7 @@ pub struct SpvApplication {
     process_view: ProcessCollector,
     ui: SpvUI,
     collectors: HashMap<String, Box<dyn MetricCollector>>,
+    iteration_tracker: IterTracker,
 }
 
 impl SpvApplication {
@@ -31,6 +34,7 @@ impl SpvApplication {
             process_view,
             ui,
             collectors: collectors_map,
+            iteration_tracker: IterTracker::default(),
         };
 
         spv_app.calibrate_probes()?;
@@ -64,8 +68,8 @@ impl SpvApplication {
     }
 
     fn calibrate_probes(&mut self) -> Result<(), Error> {
-        let processes = self.collect_processes()?;
-        let pids = SpvApplication::extract_processes_pids(&processes);
+        self.collect_running_processes()?;
+        let pids = Self::extract_processes_pids(&self.process_view.running_processes());
 
         for c in self.collectors.values_mut() {
             c.calibrate(&pids)?;
@@ -75,41 +79,70 @@ impl SpvApplication {
     }
 
     fn collect_metrics(&mut self) -> Result<(), Error> {
-        let mut processes = self.collect_processes()?;
-        let pids = SpvApplication::extract_processes_pids(&processes);
+        self.iteration_tracker.tick();
+
+        self.collect_running_processes()?;
+        let running_pids = Self::extract_processes_pids(&self.process_view.running_processes());
 
         for collector in self.collectors.values_mut() {
-            collector.collect(&pids).unwrap_or_else(|e| {
-                warn!("Error reading from collector {}: {}", collector.name(), e);
-            });
+            collector
+                .collect(&running_pids, self.iteration_tracker.iteration())
+                .unwrap_or_else(|e| {
+                    warn!("Error reading from collector {}: {}", collector.name(), e.to_string());
+                });
         }
 
-        processes.sort_by(|pm1, pm2| {
-            self.current_collector(&self.collectors)
-                .compare_pids_by_last_metrics(pm1.pid(), pm2.pid())
-                .reverse()
-        });
-        self.ui.set_processes(processes);
+        let mut exposed_processes = self.exposed_processes();
+
+        self.sort_processes_by_status_and_metric(&mut exposed_processes);
+        self.ui.set_processes(exposed_processes);
 
         Ok(())
     }
 
-    fn collect_processes(&mut self) -> Result<Vec<ProcessMetadata>, Error> {
-        self.process_view.processes().map_err(Error::CoreError)
+    fn collect_running_processes(&mut self) -> Result<(), Error> {
+        self.process_view
+            .collect_processes(self.iteration_tracker.iteration())
+            .map_err(Error::CoreError)?;
+        Ok(())
     }
 
     fn extract_processes_pids(processes: &[ProcessMetadata]) -> Vec<u32> {
         processes.iter().map(|pm| pm.pid()).collect()
     }
 
-    fn draw_ui(&mut self) -> Result<(), Error> {
-        let selected_pid = self.ui.current_process().map_or(0, |pm| pm.pid());
+    fn exposed_processes(&self) -> Vec<ProcessMetadata> {
+        let cur_iteration = self.iteration_tracker.iteration();
+        let minimum_represented_iteration = IterSpan::default().begin(cur_iteration);
 
+        self.process_view
+            .processes()
+            .into_iter()
+            .filter(|pm| pm.iteration_of_death().unwrap_or(cur_iteration) >= minimum_represented_iteration)
+            .collect()
+    }
+
+    fn sort_processes_by_status_and_metric(&self, processes: &mut Vec<ProcessMetadata>) {
+        processes.sort_by(|pm1, pm2| match (pm1.status(), pm2.status()) {
+            (Status::RUNNING, Status::DEAD) => Ordering::Less,
+            (Status::DEAD, Status::RUNNING) => Ordering::Greater,
+            (_, _) => self
+                .current_collector(&self.collectors)
+                .compare_pids_by_last_metrics(pm1.pid(), pm2.pid())
+                .reverse(),
+        });
+    }
+
+    fn draw_ui(&mut self) -> Result<(), Error> {
         let current_collector = self.current_collector(&self.collectors);
 
-        self.ui
-            .render(&current_collector.overview(), &current_collector.view(selected_pid))
-            .map_err(Error::UiError)
+        let overview = current_collector.overview();
+
+        let selected_pid = self.ui.current_process().map(|pm| pm.pid()).unwrap_or(0);
+        let current_iteration = self.iteration_tracker.iteration();
+        let metrics_view = current_collector.view(selected_pid, IterSpan::default(), current_iteration);
+
+        self.ui.render(&overview, &metrics_view).map_err(Error::UiError)
     }
 
     fn current_collector<'a>(

@@ -29,7 +29,7 @@ fn main() -> anyhow::Result<()> {
     let process_scanner = ProcfsScanner::new();
     let process_view = ProcessCollector::new(Box::new(process_scanner));
 
-    let collectors = build_collectors(refresh_period)?;
+    let collectors = build_collectors()?;
 
     let app = SpvApplication::new(rx, collectors, process_view)?;
     app.run()?;
@@ -62,21 +62,21 @@ fn init_logging() {
     WriteLogger::init(LevelFilter::Debug, log_config, log_file).expect("Could not initialize logging");
 }
 
-fn build_collectors(resolution: Duration) -> Result<Vec<Box<dyn MetricCollector>>, Error> {
+fn build_collectors() -> Result<Vec<Box<dyn MetricCollector>>, Error> {
     let mut collectors = vec![];
 
     let cpu_probe = CpuProbe::new().map_err(Error::CoreError)?;
-    let cpu_collector = ProbeCollector::new(cpu_probe, resolution);
+    let cpu_collector = ProbeCollector::new(cpu_probe);
     collectors.push(Box::new(cpu_collector) as Box<dyn MetricCollector>);
 
     let disk_io_probe = DiskIOProbe::default();
-    let disk_io_collector = ProbeCollector::new(disk_io_probe, resolution);
+    let disk_io_collector = ProbeCollector::new(disk_io_probe);
     collectors.push(Box::new(disk_io_collector) as Box<dyn MetricCollector>);
 
     #[cfg(feature = "netio")]
     {
         let netio_probe = NetIoProbe::new().map_err(Error::CoreError)?;
-        let net_collector = ProbeCollector::new(netio_probe, resolution);
+        let net_collector = ProbeCollector::new(netio_probe);
         collectors.push(Box::new(net_collector) as Box<dyn MetricCollector>);
     }
 

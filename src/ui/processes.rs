@@ -3,7 +3,7 @@ use tui::style::{Color, Modifier, Style};
 use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 use tui::Frame;
 
-use crate::core::process::{Pid, ProcessMetadata};
+use crate::core::process::{Pid, ProcessMetadata, Status};
 use crate::core::view::MetricsOverview;
 use crate::ui::terminal::TuiBackend;
 
@@ -185,7 +185,10 @@ impl ProcessList {
         let str_metrics: Vec<String> = self
             .processes
             .iter()
-            .map(|pm| self.formatted_process_metric(pm, metrics_overview))
+            .map(|pm| match pm.status() {
+                Status::RUNNING => self.formatted_process_metric(pm, metrics_overview),
+                Status::DEAD => self.justify_metric_repr("DEAD".to_string()),
+            })
             .collect();
 
         let items: Vec<ListItem> = str_metrics.iter().map(|pm| ListItem::new(pm.as_str())).collect();

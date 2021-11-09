@@ -1,5 +1,4 @@
 use std::io;
-use std::time::Duration;
 
 use thiserror::Error;
 
@@ -36,33 +35,26 @@ pub struct SpvUI {
 impl SpvUI {
     pub fn new(labels: impl Iterator<Item = String>) -> Result<Self, Error> {
         let tabs = MetricTabs::new(labels.collect());
-        let chart = MetricsChart::new(Duration::from_secs(60));
 
         Ok(Self {
             terminal: Terminal::new()?,
             tabs,
             process_list: ProcessList::default(),
-            chart,
+            chart: MetricsChart::default(),
             metadata_bar: MetadataBar::default(),
         })
     }
 
     pub fn render(&mut self, metrics_overview: &MetricsOverview, metrics_view: &MetricView) -> Result<(), Error> {
-        // We need to do this because the borrow checker does not like having &self.foo in a closure
-        // while borrowing &mut self.terminal
-        let tabs = &self.tabs;
-        let process_list = &mut self.process_list;
-        let chart = &self.chart;
-        let metadata_bar = &self.metadata_bar;
-
         self.terminal.draw(|mut frame| {
             let layout = UiLayout::new(frame);
 
-            tabs.render(&mut frame, layout.tabs_chunk());
+            self.tabs.render(&mut frame, layout.tabs_chunk());
 
-            process_list.render(&mut frame, layout.processes_chunk(), metrics_overview);
-            chart.render(&mut frame, layout.chart_chunk(), metrics_view);
-            metadata_bar.render(&mut frame, layout.metadata_chunk());
+            self.process_list
+                .render(&mut frame, layout.processes_chunk(), metrics_overview);
+            self.chart.render(&mut frame, layout.chart_chunk(), metrics_view);
+            self.metadata_bar.render(&mut frame, layout.metadata_chunk());
         })
     }
 

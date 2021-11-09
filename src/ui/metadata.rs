@@ -23,7 +23,9 @@ impl MetadataBar {
     fn build_text(process: Option<&ProcessMetadata>) -> String {
         match process.as_ref() {
             None => "No process is currently selected".to_string(),
-            Some(pm) => format!("{} - {}", pm.pid(), pm.command()),
+            Some(pm) => {
+                format!("{} ({}) - {}", pm.pid(), pm.status(), pm.command())
+            }
         }
     }
 

@@ -2,8 +2,8 @@
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::time::Duration;
 
+use crate::core::iteration::{IterSpan, Iteration};
 use crate::core::metrics::Metric;
 use crate::core::process::Pid;
 
@@ -12,54 +12,38 @@ use crate::core::process::Pid;
 /// Refer to the [`MetricCollector`](crate::core::collection::MetricCollector) trait to instanciate a `MetricView`
 pub struct MetricView<'a> {
     metrics: Vec<&'a dyn Metric>,
-    resolution: Duration,
     default: &'a dyn Metric,
+    span: IterSpan,
+    last_metric_iteration: Iteration,
+    current_iteration: Iteration,
 }
 
 impl<'a> MetricView<'a> {
-    pub(crate) fn new(metrics: Vec<&'a dyn Metric>, resolution: Duration, default: &'a dyn Metric) -> Self {
+    pub(crate) fn new(
+        metrics: Vec<&'a dyn Metric>,
+        default: &'a dyn Metric,
+        span: IterSpan,
+        last_metric_iteration: Iteration,
+        current_iteration: Iteration,
+    ) -> Self {
         Self {
             metrics,
-            resolution,
             default,
+            span,
+            last_metric_iteration,
+            current_iteration,
         }
     }
 
     /// Returns a slice of the metrics contained in this view.
     /// The slice only covers the last metrics covered by the `span` parameter.
-    ///
-    /// For example, if the view has a resolution of 1 second, `extract(Duration::from_secs(10))`
-    /// will return the last 10 metrics.
-    ///
-    /// # Arguments
-    ///  * span: Indicates from how long ago the metrics should be compared
-    pub fn extract(&'a self, span: Duration) -> &[&'a dyn Metric] {
-        let collected_metrics_count = self.metrics.len();
-        let expected_metrics_count = self.calculate_number_of_expected_metrics(span);
-        let skipped_metrics = collected_metrics_count.saturating_sub(expected_metrics_count);
-
-        &self.metrics[skipped_metrics..]
-    }
-
-    /// Indicates how many metrics should be returned by extract() with the given span, according
-    /// to this view's resolution.
-    /// Note that the value returned by this function is only an upper bound.
-    /// `self.extract()` may return less metrics.
-    ///
-    /// # Arguments
-    ///  * span: Indicates from how long ago should metrics be returned
-    fn calculate_number_of_expected_metrics(&self, span: Duration) -> usize {
-        (span.as_secs() / self.resolution.as_secs()) as usize
+    pub fn as_slice(&'a self) -> &[&'a dyn Metric] {
+        &self.metrics
     }
 
     /// Returns the unit representation of the metrics contained in this view
     pub fn unit(&self) -> &'static str {
         self.default.unit()
-    }
-
-    /// Indicates the `Duration` step between each metric
-    pub fn resolution(&self) -> Duration {
-        self.resolution
     }
 
     /// Returns the latest collected metric, or its default value if no metric has
@@ -76,8 +60,8 @@ impl<'a> MetricView<'a> {
     ///
     /// # Arguments
     ///  * span: Indicates from how long ago the metrics should be compared
-    pub fn max_f64(&self, span: Duration) -> f64 {
-        self.max_metric(span).max_value()
+    pub fn max_f64(&self) -> f64 {
+        self.max_metric().max_value()
     }
 
     /// Returns a concise representation of the greatest metric in the given span. See [`MetricView::new()`](#method.extract) for
@@ -88,13 +72,13 @@ impl<'a> MetricView<'a> {
     ///
     /// # Arguments
     ///  * span: Indicates from how long ago the metrics should be compared
-    pub fn max_concise_repr(&self, span: Duration) -> String {
-        self.max_metric(span).concise_repr()
+    pub fn max_concise_repr(&self) -> String {
+        self.max_metric().concise_repr()
     }
 
-    fn max_metric(&self, span: Duration) -> &dyn Metric {
+    fn max_metric(&self) -> &dyn Metric {
         *(self
-            .extract(span)
+            .metrics
             .iter()
             .max_by(|m1, m2| {
                 let v1 = m1.max_value();
@@ -103,6 +87,19 @@ impl<'a> MetricView<'a> {
                 v1.partial_cmp(&v2).unwrap_or(Ordering::Equal)
             })
             .unwrap_or(&self.default))
+    }
+
+    pub fn span(&self) -> usize {
+        self.span.span()
+    }
+
+    /// Indicates from when dates the last metric in this view
+    pub fn last_iteration(&self) -> Iteration {
+        self.last_metric_iteration
+    }
+
+    pub fn current_iteration(&self) -> Iteration {
+        self.current_iteration
     }
 }
 
@@ -136,21 +133,15 @@ impl<'a> MetricsOverview<'a> {
 
 #[cfg(test)]
 mod test_metric_view {
-    use std::time::Duration;
-
     use crate::core::collection::MetricCollection;
+    use crate::core::iteration::IterSpan;
     use crate::core::metrics::{Metric, PercentMetric};
     use crate::core::view::test_helpers::produce_metrics_collection;
-    use crate::core::view::MetricView;
-
-    fn build_view_of_pid_0(collection: &MetricCollection<PercentMetric>) -> MetricView {
-        collection.view(0, Duration::from_secs(1))
-    }
 
     #[test]
     fn test_last_or_default_should_be_latest_metric_when_exists() {
         let collection = produce_metrics_collection(1, vec![0., 1.]);
-        let view = build_view_of_pid_0(&collection);
+        let view = collection.view(0, IterSpan::default(), 10);
 
         assert_eq!(view.last_or_default(), &PercentMetric::new(1.));
     }
@@ -158,7 +149,7 @@ mod test_metric_view {
     #[test]
     fn test_last_or_default_should_be_default_when_pid_unknown() {
         let collection = MetricCollection::<PercentMetric>::new();
-        let view = build_view_of_pid_0(&collection);
+        let view = collection.view(0, IterSpan::default(), 10);
 
         assert_eq!(view.last_or_default(), &PercentMetric::default());
     }
@@ -166,53 +157,42 @@ mod test_metric_view {
     #[test]
     fn test_unit_should_be_metric_unit() {
         let collection = MetricCollection::<PercentMetric>::new();
-        let view = build_view_of_pid_0(&collection);
+        let view = collection.view(0, IterSpan::default(), 10);
 
         assert_eq!(view.unit(), PercentMetric::default().unit());
     }
 
     #[test]
-    fn test_resolution_should_return_resolution_given_in_constructor() {
-        let collection = MetricCollection::<PercentMetric>::new();
-        let view = collection.view(1, Duration::from_secs(123));
-
-        assert_eq!(view.resolution(), Duration::from_secs(123));
-    }
-
-    #[test]
     fn test_extract_should_extract_nothing_if_collection_is_empty() {
         let collection = MetricCollection::<PercentMetric>::new();
-        let view = build_view_of_pid_0(&collection);
+        let view = collection.view(0, IterSpan::default(), 10);
 
-        assert_eq!(view.extract(Duration::from_secs(60)), &[]);
+        assert_eq!(view.as_slice(), &[]);
     }
 
     #[test]
-    fn test_extract_should_return_only_last_metric_if_span_equals_duration() {
+    fn test_extract_should_return_only_last_metric_if_span_coveres_1_iteration() {
         let collection = produce_metrics_collection(1, vec![0., 1.]);
-        let view = build_view_of_pid_0(&collection);
+        let view = collection.view(0, IterSpan::new(1), 10);
 
-        assert_eq!(view.extract(view.resolution()), &[view.last_or_default()]);
+        assert_eq!(view.as_slice(), &[view.last_or_default()]);
     }
 
     #[test]
-    fn test_extract_should_return_two_last_metric_if_span_is_double_duration() {
+    fn test_extract_should_return_two_last_metric_if_span_covers_2_iterations() {
         let collection = produce_metrics_collection(1, vec![0., 1., 2., 3.]);
-        let view = build_view_of_pid_0(&collection);
-
-        let extract = view.extract(view.resolution() * 2);
+        let view = collection.view(0, IterSpan::new(2), 10);
 
         let expected: &[&dyn Metric; 2] = &[&PercentMetric::new(2.), &PercentMetric::new(3.)];
 
-        assert_eq!(extract, expected);
+        assert_eq!(view.as_slice(), expected);
     }
 
     #[test]
     fn test_should_only_return_existing_items_when_span_greater_than_metric_count() {
         let collection = produce_metrics_collection(1, vec![0., 1., 2.]);
-        let view = build_view_of_pid_0(&collection);
-
-        let extract = view.extract(view.resolution() * 20);
+        let view = collection.view(0, IterSpan::new(20), 10);
+        let extract = view.as_slice();
 
         assert_eq!(extract.len(), 3);
         assert_eq!(extract[0], &PercentMetric::new(0.));
@@ -222,33 +202,61 @@ mod test_metric_view {
     #[test]
     fn test_max_f64_should_return_max_value() {
         let collection = produce_metrics_collection(1, vec![10., 0., 2.]);
-        let view = build_view_of_pid_0(&collection);
+        let view = collection.view(0, IterSpan::default(), 10);
 
-        assert_eq!(view.max_f64(Duration::from_secs(3)), 10.);
+        assert_eq!(view.max_f64(), 10.);
     }
 
     #[test]
     fn test_max_f64_should_not_return_values_out_of_span() {
         let collection = produce_metrics_collection(1, vec![10., 0., 2.]);
-        let view = build_view_of_pid_0(&collection);
+        let view = collection.view(0, IterSpan::new(2), 10);
 
-        assert_eq!(view.max_f64(Duration::from_secs(2)), 2.);
+        assert_eq!(view.max_f64(), 2.);
     }
 
     #[test]
     fn test_max_f64_should_return_0_when_empty() {
         let collection = MetricCollection::<PercentMetric>::new();
-        let view = build_view_of_pid_0(&collection);
+        let view = collection.view(0, IterSpan::default(), 10);
 
-        assert_eq!(view.max_f64(Duration::from_secs(2)), 0.);
+        assert_eq!(view.max_f64(), 0.);
     }
 
     #[test]
     fn test_max_repr_should_return_repr_of_max_value() {
         let collection = produce_metrics_collection(1, vec![0., 10., 2.]);
-        let view = build_view_of_pid_0(&collection);
+        let view = collection.view(0, IterSpan::default(), 10);
 
-        assert_eq!(view.max_concise_repr(Duration::from_secs(3)), "10.0".to_string());
+        assert_eq!(view.max_concise_repr(), "10.0".to_string());
+    }
+
+    #[test]
+    fn test_should_return_0_as_default_last_iteration() {
+        let collection = MetricCollection::<PercentMetric>::new();
+
+        let view = collection.view(1, IterSpan::default(), 10);
+        assert_eq!(view.last_iteration(), 0);
+    }
+
+    #[test]
+    fn test_should_return_last_iteration() {
+        let mut collection = MetricCollection::new();
+        collection.push(1, PercentMetric::new(10.), 1);
+        collection.push(1, PercentMetric::new(10.), 2);
+
+        let view = collection.view(1, IterSpan::default(), 10);
+        assert_eq!(view.last_iteration(), 2);
+    }
+
+    #[test]
+    fn test_should_return_correct_span() {
+        let mut collection = MetricCollection::new();
+        collection.push(1, PercentMetric::new(10.), 1);
+        collection.push(1, PercentMetric::new(10.), 2);
+
+        let view = collection.view(1, IterSpan::new(123), 10);
+        assert_eq!(view.span(), 123);
     }
 }
 
@@ -300,9 +308,9 @@ mod test_helpers {
     pub(crate) fn produce_metrics_collection(proc_count: usize, values: Vec<f64>) -> MetricCollection<PercentMetric> {
         let mut collection = MetricCollection::new();
 
-        for value in values.into_iter() {
+        for (iteration, value) in values.into_iter().enumerate() {
             for proc_idx in 0..proc_count {
-                collection.push(proc_idx as Pid, PercentMetric::new(value));
+                collection.push(proc_idx as Pid, PercentMetric::new(value), iteration);
             }
         }
 
