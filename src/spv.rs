@@ -5,7 +5,7 @@ use std::sync::mpsc::Receiver;
 use log::warn;
 
 use crate::core::collection::MetricCollector;
-use crate::core::iteration::{Span, IterationTracker, Iteration};
+use crate::core::iteration::{Iteration, IterationTracker, Span};
 use crate::core::process::{ProcessCollector, ProcessMetadata, Status};
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
@@ -30,6 +30,7 @@ impl SpvApplication {
 
         let collectors_map = collectors.into_iter().map(|mc| (mc.name().to_string(), mc)).collect();
 
+        /// TODO calculate this value according to probing frequency (resolution)
         const DEFAULT_REPRESENTED_SPAN_SIZE: Iteration = 60;
         let mut spv_app = Self {
             receiver,
@@ -83,7 +84,8 @@ impl SpvApplication {
 
     fn collect_metrics(&mut self) -> Result<(), Error> {
         self.iteration_tracker.tick();
-        self.represented_span.set_end_and_update_begin(self.iteration_tracker.current());
+        self.represented_span
+            .set_end_and_update_begin(self.iteration_tracker.current());
 
         self.collect_running_processes()?;
         let running_pids = Self::extract_processes_pids(&self.process_view.running_processes());
@@ -96,7 +98,7 @@ impl SpvApplication {
                 });
         }
 
-        let mut exposed_processes = self.exposed_processes();
+        let mut exposed_processes = self.represented_processes();
 
         self.sort_processes_by_status_and_metric(&mut exposed_processes);
         self.ui.set_processes(exposed_processes);
@@ -115,15 +117,11 @@ impl SpvApplication {
         processes.iter().map(|pm| pm.pid()).collect()
     }
 
-    fn exposed_processes(&self) -> Vec<ProcessMetadata> {
-        // TODO once IterationSpan is reworked, use span::intersects(span) to check which processes should be exposed
-        let cur_iteration = self.iteration_tracker.current();
-        let minimum_represented_iteration = self.represented_span.begin();
-
+    fn represented_processes(&self) -> Vec<ProcessMetadata> {
         self.process_view
             .processes()
             .into_iter()
-            .filter(|pm| pm.iteration_of_death().unwrap_or(cur_iteration) >= minimum_represented_iteration)
+            .filter(|pm| pm.running_span().intersects(&self.represented_span))
             .collect()
     }
 

@@ -5,7 +5,7 @@ use std::fmt::{Display, Formatter};
 
 use log::warn;
 
-use crate::core::iteration::Iteration;
+use crate::core::iteration::{Iteration, Span};
 use crate::core::Error;
 
 /// Represents the unique ID of a running process
@@ -19,7 +19,7 @@ pub struct ProcessMetadata {
     pid: Pid,
     command: String,
     status: Status,
-    iteration_of_death: Option<Iteration>,
+    running_span: Span,
 }
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
@@ -40,7 +40,7 @@ impl Display for Status {
 /// Describes a process
 impl ProcessMetadata {
     /// Returns a new instance of a ProcessMetadata
-    pub fn new<T>(pid: Pid, command: T) -> Self
+    pub fn new<T>(pid: Pid, spawn_iteration: Iteration, command: T) -> Self
     where
         T: Into<String>,
     {
@@ -48,7 +48,7 @@ impl ProcessMetadata {
             pid,
             command: command.into(),
             status: Status::RUNNING,
-            iteration_of_death: None,
+            running_span: Span::from_begin(spawn_iteration),
         }
     }
 
@@ -72,17 +72,21 @@ impl ProcessMetadata {
     }
 
     /// Marks a process as dead
-    ///
-    /// # Arguments
-    /// * `current_iteration`: Indicates at which `Iteration` the process was discovered not running anymore
-    pub fn set_dead(&mut self, current_iteration: Iteration) {
+    pub fn mark_dead(&mut self) {
         self.status = Status::DEAD;
-        self.iteration_of_death = Some(current_iteration);
     }
 
-    /// Indicates when the process stopped running
-    pub fn iteration_of_death(&self) -> Option<Iteration> {
-        self.iteration_of_death
+    /// Indicates the span of iterations during which the process is running
+    pub fn running_span(&self) -> &Span {
+        &self.running_span
+    }
+
+    /// Updates the span of the process, indicating that it is still running at the given iteration
+    ///
+    /// # Arguments
+    /// * `current_iteration`: The iteration at which the process is still running
+    fn mark_alive_at_iteration(&mut self, current_iteration: Iteration) {
+        self.running_span.set_end_and_update_size(current_iteration);
     }
 }
 
@@ -92,38 +96,45 @@ mod test_process_metadata {
 
     #[test]
     fn test_pid_should_be_pm_pid() {
-        assert_eq!(ProcessMetadata::new(123, "command").pid(), 123);
+        assert_eq!(ProcessMetadata::new(123, 0, "command").pid(), 123);
     }
 
     #[test]
     fn test_command_should_be_pm_command() {
-        assert_eq!(ProcessMetadata::new(123, "command").command(), "command");
+        assert_eq!(ProcessMetadata::new(123, 0, "command").command(), "command");
     }
 
     #[test]
     fn test_status_should_be_running_by_default() {
-        assert_eq!(ProcessMetadata::new(123, "command").status(), Status::RUNNING);
+        assert_eq!(ProcessMetadata::new(123, 0, "command").status(), Status::RUNNING);
     }
 
     #[test]
     fn test_status_should_be_dead_once_marked_as_dead() {
-        let mut pm = ProcessMetadata::new(123, "command");
-        pm.set_dead(42);
+        let mut pm = ProcessMetadata::new(123, 0, "command");
+        pm.mark_dead();
         assert_eq!(pm.status(), Status::DEAD);
     }
 
     #[test]
-    fn test_time_of_death_should_be_none_by_default() {
-        assert_eq!(ProcessMetadata::new(123, "command").iteration_of_death(), None);
+    fn test_span_should_only_include_spawn_iteration_by_default() {
+        let pm = ProcessMetadata::new(456, 42, "command");
+        let running_span = pm.running_span();
+
+        assert_eq!(running_span.begin(), 42);
+        assert_eq!(running_span.end(), 42);
+        assert_eq!(running_span.size(), 1);
     }
 
     #[test]
-    fn test_time_of_death_should_be_set_when_process_set_dead() {
-        let mut pm = ProcessMetadata::new(456, "command");
+    fn test_span_should_increase_when_process_marked_alive() {
+        let mut pm = ProcessMetadata::new(456, 50, "command");
+        pm.mark_alive_at_iteration(59);
+        let running_span = pm.running_span();
 
-        pm.set_dead(42);
-
-        assert_eq!(pm.iteration_of_death(), Some(42));
+        assert_eq!(running_span.begin(), 50);
+        assert_eq!(running_span.end(), 59);
+        assert_eq!(running_span.size(), 10);
     }
 }
 
@@ -159,28 +170,20 @@ impl ProcessCollector {
     pub fn collect_processes(&mut self, current_iteration: Iteration) -> Result<(), Error> {
         let running_pids = self.scanner.scan()?;
 
-        self.mark_dead_processes(&running_pids, current_iteration);
-
-        for pm in self.parse_new_processes(&running_pids) {
+        for pm in self.parse_new_processes(&running_pids, current_iteration) {
             self.registered_processes.insert(pm.pid(), pm);
         }
+
+        self.update_processes_statuses(&running_pids, current_iteration);
 
         Ok(())
     }
 
-    fn mark_dead_processes(&mut self, running_pids: &[Pid], current_iteration: Iteration) {
-        self.registered_processes
-            .values_mut()
-            .filter(|pm| pm.status() == Status::RUNNING) // No need to mark dead an already dead process
-            .filter(|pm| !running_pids.contains(&pm.pid()))
-            .for_each(|pm| pm.set_dead(current_iteration));
-    }
-
-    fn parse_new_processes(&self, running_pids: &[Pid]) -> Vec<ProcessMetadata> {
+    fn parse_new_processes(&self, running_pids: &[Pid], current_iteration: Iteration) -> Vec<ProcessMetadata> {
         running_pids
             .iter()
             .filter(|p| !self.registered_processes.contains_key(*p))
-            .filter_map(|pid| match self.scanner.fetch_metadata(*pid) {
+            .filter_map(|pid| match self.scanner.fetch_metadata(*pid, current_iteration) {
                 Err(e) => {
                     warn!("Error fetching process metadata: {:?}", e);
                     None
@@ -189,10 +192,25 @@ impl ProcessCollector {
             })
             .collect()
     }
+
+    /// Mark new dead processes as dead, and update the running span of processes still running
+    fn update_processes_statuses(&mut self, running_pids: &[Pid], current_iteration: Iteration) {
+        self.registered_processes
+            .values_mut()
+            .filter(|pm| pm.status() == Status::RUNNING) // No need to mark dead processes
+            .for_each(|pm| {
+                if !running_pids.contains(&pm.pid()) {
+                    pm.mark_dead();
+                } else {
+                    pm.mark_alive_at_iteration(current_iteration);
+                }
+            });
+    }
 }
 
 #[cfg(test)]
 mod test_process_collector {
+    use crate::core::iteration::{Iteration, Span};
     use crate::core::process::{Pid, ProcessCollector, ProcessMetadata, ProcessScanner, Status};
     use crate::core::Error;
     use crate::core::Error::InvalidPID;
@@ -227,11 +245,11 @@ mod test_process_collector {
             Ok(self.scanned_pids[self.scan_count - 1].clone())
         }
 
-        fn fetch_metadata(&self, pid: Pid) -> Result<ProcessMetadata, Error> {
+        fn fetch_metadata(&self, pid: Pid, spawn_iteration: Iteration) -> Result<ProcessMetadata, Error> {
             if self.failing_processes.contains(&pid) {
                 Err(InvalidPID(pid))
             } else {
-                Ok(ProcessMetadata::new(pid, "command"))
+                Ok(ProcessMetadata::new(pid, spawn_iteration, "command"))
             }
         }
     }
@@ -246,8 +264,7 @@ mod test_process_collector {
         ProcessCollector::new(boxed_scanner)
     }
 
-    fn build_collector_with_sequence_and_collect(mut pids_sequence: Vec<Vec<Pid>>) -> ProcessCollector {
-        let sequence_count = pids_sequence.len();
+    fn build_collector_with_sequence(mut pids_sequence: Vec<Vec<Pid>>) -> ProcessCollector {
         pids_sequence.reverse();
 
         let mut boxed_scanner = Box::new(ScannerStub::new(pids_sequence.pop().unwrap()));
@@ -255,7 +272,12 @@ mod test_process_collector {
             .into_iter()
             .for_each(|pids| boxed_scanner.set_next_scanned_pids(pids));
 
-        let mut collector = ProcessCollector::new(boxed_scanner);
+        ProcessCollector::new(boxed_scanner)
+    }
+
+    fn build_collector_with_sequence_and_collect(pids_sequence: Vec<Vec<Pid>>) -> ProcessCollector {
+        let sequence_count = pids_sequence.len();
+        let mut collector = build_collector_with_sequence(pids_sequence);
         for iteration in 0..sequence_count {
             collector
                 .collect_processes(iteration)
@@ -322,7 +344,6 @@ mod test_process_collector {
         let dead_process = &collector.processes()[0];
 
         assert_eq!(dead_process.status(), Status::DEAD);
-        assert_eq!(dead_process.iteration_of_death(), Some(1));
     }
 
     #[test]
@@ -363,6 +384,19 @@ mod test_process_collector {
         assert_eq!(running_processes.len(), 1);
         assert_eq!(running_processes[0].pid(), 1);
     }
+
+    #[test]
+    fn test_span_of_running_processes_should_be_updated_when_collected() {
+        let mut collector = build_collector_with_sequence(vec![vec![1], vec![1]]);
+
+        collector.collect_processes(0).unwrap();
+        let running_process = &collector.running_processes()[0];
+        assert_eq!(running_process.running_span(), &Span::from_end_and_size(0, 1));
+
+        collector.collect_processes(1).unwrap();
+        let running_process = &collector.running_processes()[0];
+        assert_eq!(running_process.running_span(), &Span::from_end_and_size(1, 2));
+    }
 }
 
 /// Trait with methods to retrieve basic information about running processes
@@ -375,5 +409,6 @@ pub trait ProcessScanner {
     /// # Arguments
     ///
     /// * `pid`: The process identifier of the currently running process
-    fn fetch_metadata(&self, pid: Pid) -> Result<ProcessMetadata, Error>;
+    /// * `spawn_iteration`: The process identifier of the currently running process
+    fn fetch_metadata(&self, pid: Pid, spawn_iteration: Iteration) -> Result<ProcessMetadata, Error>;
 }
