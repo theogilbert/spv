@@ -51,42 +51,73 @@ mod test_iteration {
 }
 
 /// Represents a temporal region, expressed using iterations
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Span {
-    size: Iteration,
+    begin: Iteration,
     end: Iteration,
-}
-
-impl Default for Span {
-    fn default() -> Self {
-        const DEFAULT_SPAN_WIDTH: Iteration = 60;
-        Span {
-            end: 0,
-            size: DEFAULT_SPAN_WIDTH,
-        }
-    }
+    size: Iteration, // iteration is required as an attribute, for the cases where size > end (as begin cannot be < 0)
 }
 
 impl Span {
     #[cfg(test)]
-    pub fn new(span: Iteration, end: Iteration) -> Self {
-        Span { size: span, end }
+    pub fn from_end_and_size(end: Iteration, size: Iteration) -> Self {
+        Span {
+            begin: end.checked_sub(size).unwrap_or(Iteration::MIN),
+            end,
+            size,
+        }
+    }
+    pub fn from_begin(begin: Iteration) -> Self {
+        Span {
+            begin,
+            end: begin,
+            size: 1,
+        }
     }
 
-    pub fn set_end(&mut self, iteration: Iteration) {
-        self.end = iteration;
+    pub fn from_size(size: Iteration) -> Self {
+        Span { begin: 0, end: 0, size }
     }
 
-    pub fn size(&self) -> Iteration {
-        self.size
+    /// Updates the end of the span and updates the `begin` attribute using the `size` attribute
+    /// # Arguments
+    /// * `end`: The last iteration covered by the span
+    pub fn set_end_and_update_begin(&mut self, end: Iteration) {
+        self.end = end;
+        self.begin = end
+            .checked_sub(self.size)
+            .and_then(|v| Some(v + 1))
+            .unwrap_or(Iteration::MIN);
     }
 
+    /// Updates the end of the span and updates the `size` attribute using the `begin` attribute
+    ///
+    /// This method panics if `end` is less than `begin`.
+    ///
+    /// # Arguments
+    /// * `end`: The last iteration covered by the span
+    pub fn set_end_and_update_size(&mut self, end: Iteration) {
+        self.end = end;
+        self.size = self.end.checked_sub(self.begin).unwrap() + 1;
+    }
+
+    /// Returns the first iteration covered by the span
     pub fn begin(&self) -> Iteration {
-        self.end.checked_sub(self.size).unwrap_or(Iteration::MIN)
+        self.begin
     }
 
+    /// Returns the last iteration covered by the span
     pub fn end(&self) -> Iteration {
         self.end
+    }
+
+    /// Returns the amount of iterations covered by the span.<br/>
+    /// Note that the `size` does not necessarily represent the difference between the `begin` and `end` of the span.
+    /// That can be the case when we want to represent a span with a fixed `size` greater than the `end` of the span.
+    /// As the first iteration of the span cannot have a negative value (represented as a `usize`), `size` will be
+    /// greater than the difference between `begin` and `end`.
+    pub fn size(&self) -> Iteration {
+        self.size
     }
 
     // TODO implement intersect(span) and contains(iteration) if needed
@@ -97,18 +128,76 @@ mod test_iteration_span {
     use crate::core::iteration::Span;
 
     #[test]
-    fn test_should_update_begin_when_setting_end() {
-        let mut span = Span::default();
-        span.set_end(180);
+    fn test_should_correctly_define_span_when_creating_from_begin() {
+        let span = Span::from_begin(60);
 
-        assert_eq!(span.begin(), 180 - span.size());
+        assert_eq!(span.begin(), 60);
+        assert_eq!(span.end(), 60);
+        assert_eq!(span.size(), 1);
     }
 
     #[test]
-    fn test_should_update_end_when_setting_end() {
-        let mut span = Span::default();
-        span.set_end(123);
+    fn test_should_correctly_define_span_when_creating_from_size() {
+        let span = Span::from_size(60);
 
-        assert_eq!(span.end(), 123);
+        assert_eq!(span.begin(), 0);
+        assert_eq!(span.end(), 0);
+        assert_eq!(span.size(), 60);
+    }
+
+    #[test]
+    fn test_should_update_begin_when_setting_end_and_updating_begin() {
+        let mut span = Span::from_size(60);
+        span.set_end_and_update_begin(180);
+
+        assert_eq!(span.begin(), 121);
+    }
+
+    #[test]
+    fn test_should_prevent_underflow_when_setting_end_and_updating_begin() {
+        let mut span = Span::from_size(60);
+        span.set_end_and_update_begin(30);
+
+        assert_eq!(span.begin(), 0);
+    }
+
+    #[test]
+    fn test_should_update_end_when_setting_end_and_updating_begin() {
+        let mut span = Span::from_size(60);
+        span.set_end_and_update_begin(180);
+
+        assert_eq!(span.end(), 180);
+    }
+
+    #[test]
+    fn test_should_not_update_size_when_setting_end_and_updating_begin() {
+        let mut span = Span::from_size(60);
+        span.set_end_and_update_begin(180);
+
+        assert_eq!(span.size(), 60);
+    }
+
+    #[test]
+    fn test_should_update_size_when_setting_end_and_updating_size() {
+        let mut span = Span::from_begin(121);
+        span.set_end_and_update_size(240);
+
+        assert_eq!(span.size(), 120);
+    }
+
+    #[test]
+    fn test_should_update_end_when_setting_end_and_updating_size() {
+        let mut span = Span::from_begin(121);
+        span.set_end_and_update_size(180);
+
+        assert_eq!(span.end(), 180);
+    }
+
+    #[test]
+    fn test_should_not_update_begin_when_setting_end_and_updating_size() {
+        let mut span = Span::from_begin(121);
+        span.set_end_and_update_size(180);
+
+        assert_eq!(span.begin(), 121);
     }
 }

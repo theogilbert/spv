@@ -5,7 +5,7 @@ use std::sync::mpsc::Receiver;
 use log::warn;
 
 use crate::core::collection::MetricCollector;
-use crate::core::iteration::{Span, IterationTracker};
+use crate::core::iteration::{Span, IterationTracker, Iteration};
 use crate::core::process::{ProcessCollector, ProcessMetadata, Status};
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
@@ -30,13 +30,14 @@ impl SpvApplication {
 
         let collectors_map = collectors.into_iter().map(|mc| (mc.name().to_string(), mc)).collect();
 
+        const DEFAULT_REPRESENTED_SPAN_SIZE: Iteration = 60;
         let mut spv_app = Self {
             receiver,
             process_view,
             ui,
             collectors: collectors_map,
             iteration_tracker: IterationTracker::default(),
-            represented_span: Span::default(),
+            represented_span: Span::from_size(DEFAULT_REPRESENTED_SPAN_SIZE),
         };
 
         spv_app.calibrate_probes()?;
@@ -82,7 +83,7 @@ impl SpvApplication {
 
     fn collect_metrics(&mut self) -> Result<(), Error> {
         self.iteration_tracker.tick();
-        self.represented_span.set_end(self.iteration_tracker.current());
+        self.represented_span.set_end_and_update_begin(self.iteration_tracker.current());
 
         self.collect_running_processes()?;
         let running_pids = Self::extract_processes_pids(&self.process_view.running_processes());

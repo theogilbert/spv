@@ -134,7 +134,7 @@ mod test_metric_view {
     #[test]
     fn test_last_or_default_should_be_latest_metric_when_exists() {
         let collection = produce_metrics_collection(1, vec![0., 1.]);
-        let view = collection.view(0, Span::default());
+        let view = collection.view(0, Span::from_end_and_size(60, 60));
 
         assert_eq!(view.last_or_default(), &PercentMetric::new(1.));
     }
@@ -142,7 +142,7 @@ mod test_metric_view {
     #[test]
     fn test_last_or_default_should_be_default_when_pid_unknown() {
         let collection = MetricCollection::<PercentMetric>::new();
-        let view = collection.view(0, Span::default());
+        let view = collection.view(0, Span::from_end_and_size(60, 60));
 
         assert_eq!(view.last_or_default(), &PercentMetric::default());
     }
@@ -150,7 +150,7 @@ mod test_metric_view {
     #[test]
     fn test_unit_should_be_metric_unit() {
         let collection = MetricCollection::<PercentMetric>::new();
-        let view = collection.view(0, Span::default());
+        let view = collection.view(0, Span::from_end_and_size(60, 60));
 
         assert_eq!(view.unit(), PercentMetric::default().unit());
     }
@@ -158,7 +158,7 @@ mod test_metric_view {
     #[test]
     fn test_extract_should_extract_nothing_if_collection_is_empty() {
         let collection = MetricCollection::<PercentMetric>::new();
-        let view = collection.view(0, Span::default());
+        let view = collection.view(0, Span::from_end_and_size(60, 60));
 
         assert_eq!(view.as_slice(), &[]);
     }
@@ -166,7 +166,7 @@ mod test_metric_view {
     #[test]
     fn test_extract_should_return_only_last_metric_if_span_coveres_1_iteration() {
         let collection = produce_metrics_collection(1, vec![0., 1.]);
-        let view = collection.view(0, Span::new(1, 1));
+        let view = collection.view(0, Span::from_end_and_size(1, 1));
 
         assert_eq!(view.as_slice(), &[view.last_or_default()]);
     }
@@ -174,7 +174,7 @@ mod test_metric_view {
     #[test]
     fn test_extract_should_return_two_last_metric_if_span_covers_2_iterations() {
         let collection = produce_metrics_collection(1, vec![0., 1., 2., 3.]);
-        let view = collection.view(0, Span::new(2, 3));
+        let view = collection.view(0, Span::from_end_and_size(3, 2));
 
         let expected: &[&dyn Metric; 2] = &[&PercentMetric::new(2.), &PercentMetric::new(3.)];
 
@@ -184,7 +184,7 @@ mod test_metric_view {
     #[test]
     fn test_should_only_return_existing_items_when_span_greater_than_metric_count() {
         let collection = produce_metrics_collection(1, vec![0., 1., 2.]);
-        let view = collection.view(0, Span::new(20, 2));
+        let view = collection.view(0, Span::from_end_and_size(60, 60));
         let extract = view.as_slice();
 
         assert_eq!(extract.len(), 3);
@@ -195,7 +195,7 @@ mod test_metric_view {
     #[test]
     fn test_max_f64_should_return_max_value() {
         let collection = produce_metrics_collection(1, vec![10., 0., 2.]);
-        let view = collection.view(0, Span::default());
+        let view = collection.view(0, Span::from_end_and_size(60, 60));
 
         assert_eq!(view.max_f64(), 10.);
     }
@@ -203,7 +203,7 @@ mod test_metric_view {
     #[test]
     fn test_max_f64_should_not_return_values_out_of_span() {
         let collection = produce_metrics_collection(1, vec![10., 0., 2.]);
-        let view = collection.view(0, Span::new(2, 2));
+        let view = collection.view(0, Span::from_end_and_size(2, 2));
 
         assert_eq!(view.max_f64(), 2.);
     }
@@ -211,7 +211,7 @@ mod test_metric_view {
     #[test]
     fn test_max_f64_should_return_0_when_empty() {
         let collection = MetricCollection::<PercentMetric>::new();
-        let view = collection.view(0, Span::default());
+        let view = collection.view(0, Span::from_end_and_size(60, 60));
 
         assert_eq!(view.max_f64(), 0.);
     }
@@ -219,7 +219,7 @@ mod test_metric_view {
     #[test]
     fn test_max_repr_should_return_repr_of_max_value() {
         let collection = produce_metrics_collection(1, vec![0., 10., 2.]);
-        let view = collection.view(0, Span::default());
+        let view = collection.view(0, Span::from_end_and_size(60, 60));
 
         assert_eq!(view.max_concise_repr(), "10.0".to_string());
     }
@@ -228,7 +228,7 @@ mod test_metric_view {
     fn test_should_return_0_as_default_last_iteration() {
         let collection = MetricCollection::<PercentMetric>::new();
 
-        let view = collection.view(1, Span::default());
+        let view = collection.view(1, Span::from_end_and_size(60, 60));
         assert_eq!(view.last_iteration(), 0);
     }
 
@@ -238,7 +238,7 @@ mod test_metric_view {
         collection.push(1, PercentMetric::new(10.), 1);
         collection.push(1, PercentMetric::new(10.), 2);
 
-        let view = collection.view(1, Span::default());
+        let view = collection.view(1, Span::from_end_and_size(60, 60));
         assert_eq!(view.last_iteration(), 2);
     }
 
@@ -248,8 +248,8 @@ mod test_metric_view {
         collection.push(1, PercentMetric::new(10.), 1);
         collection.push(1, PercentMetric::new(10.), 2);
 
-        let view = collection.view(1, Span::new(123, 2));
-        assert_eq!(view.span().size(), 123);
+        let view = collection.view(1, Span::from_end_and_size(123, 456));
+        assert_eq!(view.span(), &Span::from_end_and_size(123, 456));
     }
 }
 

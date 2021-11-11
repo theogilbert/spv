@@ -171,7 +171,7 @@ mod test_probe_collector {
     #[test]
     fn test_collector_should_be_empty_by_default() {
         let collector = create_probe_collector();
-        let view = collector.view(0, Span::default());
+        let view = collector.view(0, Span::from_end_and_size(60, 60));
 
         assert_eq!(view.as_slice().len(), 0);
     }
@@ -181,7 +181,7 @@ mod test_probe_collector {
         let mut collector = create_probe_collector();
         collector.calibrate(&[1, 2, 3]).unwrap();
 
-        let view = collector.view(0, Span::default());
+        let view = collector.view(0, Span::from_end_and_size(60, 60));
 
         assert_eq!(view.as_slice().len(), 0);
     }
@@ -191,7 +191,7 @@ mod test_probe_collector {
         let mut collector = create_probe_collector();
         collector.collect(&[1], 1).unwrap();
 
-        let view = collector.view(2, Span::default());
+        let view = collector.view(2, Span::from_end_and_size(60, 60));
 
         assert_eq!(view.as_slice().len(), 0);
     }
@@ -202,7 +202,7 @@ mod test_probe_collector {
         let mut collector = create_probe_collector_with_return_map(return_map);
         collector.collect(&[1, 2], 1).unwrap();
 
-        let view = collector.view(2, Span::default());
+        let view = collector.view(2, Span::from_end_and_size(60, 60));
         let extract = view.as_slice();
 
         assert_eq!(extract.len(), 1);
