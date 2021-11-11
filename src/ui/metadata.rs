@@ -1,11 +1,9 @@
-use tui::layout::Rect;
 use tui::style::{Color, Style};
 use tui::text::Span;
 use tui::widgets::Paragraph;
-use tui::Frame;
 
 use crate::core::process::ProcessMetadata;
-use crate::ui::terminal::TuiBackend;
+use crate::ui::terminal::FrameRegion;
 
 pub struct MetadataBar {
     current_text: String,
@@ -37,8 +35,8 @@ impl MetadataBar {
         self.current_text = Self::build_text(process_data);
     }
 
-    pub fn render(&self, frame: &mut Frame<TuiBackend>, chunk: Rect) {
+    pub fn render(&self, frame: &mut FrameRegion) {
         let paragraph = self.build_paragraph();
-        frame.render_widget(paragraph, chunk);
+        frame.render_widget(paragraph);
     }
 }

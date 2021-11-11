@@ -1,11 +1,10 @@
-use tui::layout::Rect;
 use tui::style::{Color, Style};
+use tui::symbols;
 use tui::text::Span;
 use tui::widgets::{Axis, Block, Borders, Chart, Dataset, GraphType};
-use tui::{symbols, Frame};
 
 use crate::core::view::MetricView;
-use crate::ui::terminal::TuiBackend;
+use crate::ui::terminal::FrameRegion;
 
 pub struct MetricsChart {}
 
@@ -16,8 +15,7 @@ impl Default for MetricsChart {
 }
 
 impl MetricsChart {
-    // TODO refactor frame and chunk are always passed together. Merge them in a struct with a render_widget method
-    pub fn render(&self, frame: &mut Frame<TuiBackend>, chunk: Rect, metrics_view: &MetricView) {
+    pub fn render(&self, frame: &mut FrameRegion, metrics_view: &MetricView) {
         let data_frame = DataFrame::new(metrics_view);
 
         let chart = Chart::new(data_frame.datasets())
@@ -25,7 +23,7 @@ impl MetricsChart {
             .x_axis(self.define_x_axis(metrics_view))
             .y_axis(self.define_y_axis(&data_frame, metrics_view.max_concise_repr(), metrics_view.unit()));
 
-        frame.render_widget(chart, chunk);
+        frame.render_widget(chart);
     }
 
     fn define_x_axis(&self, metrics_view: &MetricView) -> Axis {

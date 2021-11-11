@@ -1,11 +1,10 @@
 use tui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
-use tui::Frame;
 
 use crate::core::process::{Pid, ProcessMetadata, Status};
 use crate::core::view::MetricsOverview;
-use crate::ui::terminal::TuiBackend;
+use crate::ui::terminal::FrameRegion;
 
 /// Width of the process name column
 const CMD_COL_WIDTH: usize = 16;
@@ -37,17 +36,17 @@ impl ProcessList {
     ///   * `chunk`: The region within the `frame` reserved for this widget
     ///   * `archive`: The metrics archive, to display the current metric of each process
     ///   * `label`: The name of the metric to display
-    pub fn render(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect, metrics_overview: &MetricsOverview) {
+    pub fn render(&mut self, frame: &mut FrameRegion, metrics_overview: &MetricsOverview) {
         let rows_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(2), Constraint::Min(1)])
-            .split(chunk);
+            .split(frame.region());
 
         let (proc_chunk, metric_chunk) = Self::split_column_chunks(rows_chunks[1]);
 
-        Self::render_title_row(frame, rows_chunks[0], metrics_overview.unit());
-        self.render_name_column(frame, proc_chunk);
-        self.render_metric_column(frame, metric_chunk, metrics_overview);
+        Self::render_title_row(frame.with_region(rows_chunks[0]), metrics_overview.unit());
+        self.render_name_column(frame.with_region(proc_chunk));
+        self.render_metric_column(frame.with_region(metric_chunk), metrics_overview);
     }
 
     /// Define the processes to render in the process list
@@ -139,8 +138,8 @@ impl ProcessList {
         (columns_chunks[0], columns_chunks[1])
     }
 
-    fn render_title_row(frame: &mut Frame<TuiBackend>, chunk: Rect, metric_unit: &'static str) {
-        let (proc_chunk, metric_chunk) = Self::split_column_chunks(chunk);
+    fn render_title_row(frame: &mut FrameRegion, metric_unit: &'static str) {
+        let (proc_chunk, metric_chunk) = Self::split_column_chunks(frame.region());
 
         let proc_paragraph = Paragraph::new("Process name")
             .block(Block::default().borders(Borders::LEFT | Borders::TOP))
@@ -151,11 +150,11 @@ impl ProcessList {
             .block(Block::default().borders(Borders::TOP))
             .alignment(Alignment::Right);
 
-        frame.render_widget(proc_paragraph, proc_chunk);
-        frame.render_widget(metric_title, metric_chunk);
+        frame.with_region(proc_chunk).render_widget(proc_paragraph);
+        frame.with_region(metric_chunk).render_widget(metric_title);
     }
 
-    fn render_name_column(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect) {
+    fn render_name_column(&mut self, frame: &mut FrameRegion) {
         let processes_names: Vec<_> = self
             .processes
             .iter()
@@ -168,7 +167,7 @@ impl ProcessList {
             .block(Block::default().borders(Borders::LEFT | Borders::BOTTOM))
             .highlight_symbol(">> ");
 
-        frame.render_stateful_widget(list, chunk, &mut self.state);
+        frame.render_stateful_widget(list, &mut self.state);
     }
 
     /// Returns the formatted command name of `process_metadata` so that its length does not exceed
@@ -181,7 +180,7 @@ impl ProcessList {
         }
     }
 
-    fn render_metric_column(&mut self, frame: &mut Frame<TuiBackend>, chunk: Rect, metrics_overview: &MetricsOverview) {
+    fn render_metric_column(&mut self, frame: &mut FrameRegion, metrics_overview: &MetricsOverview) {
         let str_metrics: Vec<String> = self
             .processes
             .iter()
@@ -195,7 +194,7 @@ impl ProcessList {
 
         let list = Self::build_default_list_widget(items).block(Block::default().borders(Borders::BOTTOM));
 
-        frame.render_stateful_widget(list, chunk, &mut self.state);
+        frame.render_stateful_widget(list, &mut self.state);
     }
 
     fn formatted_process_metric(&self, process: &ProcessMetadata, metrics_overview: &MetricsOverview) -> String {
