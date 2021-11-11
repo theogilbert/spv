@@ -62,10 +62,7 @@ impl Span {
     #[cfg(test)]
     pub fn from_end_and_size(end: Iteration, size: Iteration) -> Self {
         Span {
-            begin: end
-                .checked_sub(size)
-                .and_then(|v| Some(v + 1))
-                .unwrap_or(Iteration::MIN),
+            begin: end.checked_sub(size).map(|v| v + 1).unwrap_or(Iteration::MIN),
             end,
             size,
         }
@@ -87,10 +84,7 @@ impl Span {
     /// * `end`: The last iteration covered by the span
     pub fn set_end_and_update_begin(&mut self, end: Iteration) {
         self.end = end;
-        self.begin = end
-            .checked_sub(self.size)
-            .and_then(|v| Some(v + 1))
-            .unwrap_or(Iteration::MIN);
+        self.begin = end.checked_sub(self.size).map(|v| v + 1).unwrap_or(Iteration::MIN);
     }
 
     /// Updates the end of the span and updates the `size` attribute using the `begin` attribute

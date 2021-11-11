@@ -91,11 +91,9 @@ impl SpvApplication {
         let running_pids = Self::extract_processes_pids(&self.process_view.running_processes());
 
         for collector in self.collectors.values_mut() {
-            collector
-                .collect(&running_pids, self.iteration_tracker.current())
-                .unwrap_or_else(|e| {
-                    warn!("Error reading from collector {}: {}", collector.name(), e.to_string());
-                });
+            collector.collect(&running_pids).unwrap_or_else(|e| {
+                warn!("Error reading from collector {}: {}", collector.name(), e.to_string());
+            });
         }
 
         let mut exposed_processes = self.represented_processes();
@@ -142,8 +140,10 @@ impl SpvApplication {
 
         let overview = current_collector.overview();
 
-        let selected_pid = self.ui.current_process().map(|pm| pm.pid()).unwrap_or(0);
-        let metrics_view = current_collector.view(selected_pid, self.represented_span);
+        let metrics_view = self
+            .ui
+            .current_process()
+            .map(|pm| current_collector.view(pm, self.represented_span));
 
         self.ui.render(&overview, &metrics_view).map_err(Error::UiError)
     }

@@ -60,7 +60,7 @@ impl MetricsChart {
     }
 }
 
-fn build_datasets<'a>(raw_data: &'a Vec<Vec<(f64, f64)>>, metrics_view: &MetricView) -> Vec<Dataset<'a>> {
+fn build_datasets<'a>(raw_data: &'a [Vec<(f64, f64)>], metrics_view: &MetricView) -> Vec<Dataset<'a>> {
     const COLORS: [Color; 2] = [Color::Blue, Color::Green];
 
     raw_data
@@ -89,17 +89,15 @@ fn build_raw_vecs(metrics_view: &MetricView) -> Vec<Vec<(f64, f64)>> {
     let mut data_vecs: Vec<_> = Vec::new();
     let metrics_cardinality = metrics_view.last_or_default().cardinality();
 
-    let last_iter = metrics_view.last_iteration();
+    let first_iteration = metrics_view.first_iteration();
 
     for dimension_idx in 0..metrics_cardinality {
         let data: Vec<_> = metrics_view
             .as_slice()
             .iter()
-            .rev()
             .map(|m| m.as_f64(dimension_idx).expect("Error accessing raw metric value"))
             .enumerate()
-            .map(|(idx, raw_value)| ((last_iter - idx) as f64, raw_value))
-            .rev()
+            .map(|(idx, raw_value)| ((first_iteration + idx) as f64, raw_value))
             .collect();
 
         data_vecs.push(data);
@@ -110,7 +108,7 @@ fn build_raw_vecs(metrics_view: &MetricView) -> Vec<Vec<(f64, f64)>> {
 
 #[cfg(test)]
 mod test_raw_data_from_metrics_view {
-    use crate::core::iteration::{Iteration, Span};
+    use crate::core::iteration::Span;
     use crate::core::metrics::{IOMetric, Metric};
     use crate::core::view::MetricView;
     use crate::ui::chart::build_raw_vecs;
@@ -121,7 +119,7 @@ mod test_raw_data_from_metrics_view {
         let default = IOMetric::default();
 
         let dyn_metrics_vec = metrics_data.iter().map(|m| m as &dyn Metric).collect();
-        let metrics_view = MetricView::new(dyn_metrics_vec, &default, Span::from_end_and_size(10, 10), 8);
+        let metrics_view = MetricView::new(dyn_metrics_vec, &default, Span::from_end_and_size(10, 10), 7);
         let raw_vecs = build_raw_vecs(&metrics_view);
 
         let expected_raw_vecs = vec![vec![(7.0, 10.0), (8.0, 30.0)], vec![(7.0, 20.0), (8.0, 40.0)]];
