@@ -5,7 +5,7 @@ use std::sync::mpsc::Receiver;
 use log::warn;
 
 use crate::core::collection::MetricCollector;
-use crate::core::iteration::{IterSpan, IterTracker};
+use crate::core::iteration::{IterSpan, IterationTracker};
 use crate::core::process::{ProcessCollector, ProcessMetadata, Status};
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
@@ -16,7 +16,8 @@ pub struct SpvApplication {
     process_view: ProcessCollector,
     ui: SpvUI,
     collectors: HashMap<String, Box<dyn MetricCollector>>,
-    iteration_tracker: IterTracker,
+    iteration_tracker: IterationTracker,
+    iteration_span: IterSpan,
 }
 
 impl SpvApplication {
@@ -34,7 +35,8 @@ impl SpvApplication {
             process_view,
             ui,
             collectors: collectors_map,
-            iteration_tracker: IterTracker::default(),
+            iteration_tracker: IterationTracker::default(),
+            iteration_span: IterSpan::default(),
         };
 
         spv_app.calibrate_probes()?;
@@ -86,7 +88,7 @@ impl SpvApplication {
 
         for collector in self.collectors.values_mut() {
             collector
-                .collect(&running_pids, self.iteration_tracker.iteration())
+                .collect(&running_pids, self.iteration_tracker.current())
                 .unwrap_or_else(|e| {
                     warn!("Error reading from collector {}: {}", collector.name(), e.to_string());
                 });
@@ -102,7 +104,7 @@ impl SpvApplication {
 
     fn collect_running_processes(&mut self) -> Result<(), Error> {
         self.process_view
-            .collect_processes(self.iteration_tracker.iteration())
+            .collect_processes(self.iteration_tracker.current())
             .map_err(Error::CoreError)?;
         Ok(())
     }
@@ -112,8 +114,9 @@ impl SpvApplication {
     }
 
     fn exposed_processes(&self) -> Vec<ProcessMetadata> {
-        let cur_iteration = self.iteration_tracker.iteration();
-        let minimum_represented_iteration = IterSpan::default().begin(cur_iteration);
+        // TODO once IterSpan is reworked, use span::intersects(span) to check which processes should be exposed
+        let cur_iteration = self.iteration_tracker.current();
+        let minimum_represented_iteration = self.iteration_span.begin(self.iteration_tracker.current());
 
         self.process_view
             .processes()
@@ -123,6 +126,7 @@ impl SpvApplication {
     }
 
     fn sort_processes_by_status_and_metric(&self, processes: &mut Vec<ProcessMetadata>) {
+        // TODO move this to ProcessCollector
         processes.sort_by(|pm1, pm2| match (pm1.status(), pm2.status()) {
             (Status::RUNNING, Status::DEAD) => Ordering::Less,
             (Status::DEAD, Status::RUNNING) => Ordering::Greater,
@@ -139,8 +143,8 @@ impl SpvApplication {
         let overview = current_collector.overview();
 
         let selected_pid = self.ui.current_process().map(|pm| pm.pid()).unwrap_or(0);
-        let current_iteration = self.iteration_tracker.iteration();
-        let metrics_view = current_collector.view(selected_pid, IterSpan::default(), current_iteration);
+        let current_iteration = self.iteration_tracker.current(); // TODO once IterSpan is reworked, no need to pass current_iteration here anymore
+        let metrics_view = current_collector.view(selected_pid, self.iteration_span, current_iteration);
 
         self.ui.render(&overview, &metrics_view).map_err(Error::UiError)
     }

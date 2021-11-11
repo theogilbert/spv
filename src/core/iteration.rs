@@ -2,23 +2,22 @@
 /// An Iteration value refers to one of these iterations
 pub type Iteration = usize;
 
-// TODO It would be simpler if this were a singleton, no need to pass an `Iteration` value everywhere
-pub struct IterTracker {
+pub struct IterationTracker {
     counter: usize,
 }
 
-impl Default for IterTracker {
+impl Default for IterationTracker {
     fn default() -> Self {
-        IterTracker { counter: 0 }
+        IterationTracker { counter: 0 }
     }
 }
 
-impl IterTracker {
+impl IterationTracker {
     pub fn tick(&mut self) {
         self.counter += 1
     }
 
-    pub fn iteration(&self) -> usize {
+    pub fn current(&self) -> usize {
         self.counter
     }
 }
@@ -27,27 +26,27 @@ impl IterTracker {
 mod test_iteration {
     use rstest::*;
 
-    use crate::core::iteration::IterTracker;
+    use crate::core::iteration::IterationTracker;
 
     #[fixture]
-    fn iteration_tracker() -> IterTracker {
-        IterTracker::default()
+    fn iteration_tracker() -> IterationTracker {
+        IterationTracker::default()
     }
 
     #[rstest]
-    fn test_iteration_should_be_0_by_default(iteration_tracker: IterTracker) {
-        assert_eq!(iteration_tracker.iteration(), 0);
+    fn test_iteration_should_be_0_by_default(iteration_tracker: IterationTracker) {
+        assert_eq!(iteration_tracker.current(), 0);
     }
 
     #[rstest]
     #[case(1)]
     #[case(5)]
-    fn test_iteration_should_increase_on_tick(mut iteration_tracker: IterTracker, #[case] tick_count: usize) {
+    fn test_iteration_should_increase_on_tick(mut iteration_tracker: IterationTracker, #[case] tick_count: usize) {
         for _ in 0..tick_count {
             iteration_tracker.tick();
         }
 
-        assert_eq!(iteration_tracker.iteration(), tick_count);
+        assert_eq!(iteration_tracker.current(), tick_count);
     }
 }
 
