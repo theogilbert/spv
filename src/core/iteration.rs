@@ -62,7 +62,10 @@ impl Span {
     #[cfg(test)]
     pub fn from_end_and_size(end: Iteration, size: Iteration) -> Self {
         Span {
-            begin: end.checked_sub(size).unwrap_or(Iteration::MIN),
+            begin: end
+                .checked_sub(size)
+                .and_then(|v| Some(v + 1))
+                .unwrap_or(Iteration::MIN),
             end,
             size,
         }
@@ -102,11 +105,13 @@ impl Span {
     }
 
     /// Returns the first iteration covered by the span
+    /// This value can never be greater than `self.end()`
     pub fn begin(&self) -> Iteration {
         self.begin
     }
 
     /// Returns the last iteration covered by the span
+    /// This value can never be less than `self.begin()`
     pub fn end(&self) -> Iteration {
         self.end
     }
@@ -120,12 +125,20 @@ impl Span {
         self.size
     }
 
-    // TODO implement intersect(span) and contains(iteration) if needed
+    /// Returns true if `self` intersects with `other`
+    ///
+    /// # Arguments
+    /// * `other`: A `Span` reference for which to test an intersection with `self`
+    pub fn intersects(&self, other: &Span) -> bool {
+        !(self.end < other.begin || self.begin > other.end)
+    }
 }
 
 #[cfg(test)]
-mod test_iteration_span {
-    use crate::core::iteration::Span;
+mod test_span {
+    use rstest::*;
+
+    use crate::core::iteration::{Iteration, Span};
 
     #[test]
     fn test_should_correctly_define_span_when_creating_from_begin() {
@@ -199,5 +212,30 @@ mod test_iteration_span {
         span.set_end_and_update_size(180);
 
         assert_eq!(span.begin(), 121);
+    }
+
+    #[rstest]
+    #[case(50, 250)]
+    #[case(50, 101)]
+    #[case(120, 170)]
+    #[case(200, 250)]
+    fn test_should_return_true_if_spans_intersect(#[case] begin_other: Iteration, #[case] end_other: Iteration) {
+        let span = Span::from_end_and_size(200, 100);
+        let other_span = Span::from_end_and_size(end_other, end_other - begin_other + 1);
+
+        assert!(span.intersects(&other_span));
+    }
+
+    #[rstest]
+    #[case(50, 75)]
+    #[case(250, 275)]
+    fn test_should_return_false_if_spans_do_not_intersect(
+        #[case] begin_other: Iteration,
+        #[case] end_other: Iteration,
+    ) {
+        let span = Span::from_end_and_size(200, 100);
+        let other_span = Span::from_end_and_size(end_other, end_other - begin_other + 1);
+
+        assert!(!span.intersects(&other_span));
     }
 }
