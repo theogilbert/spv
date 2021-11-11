@@ -5,7 +5,7 @@ use std::sync::mpsc::Receiver;
 use log::warn;
 
 use crate::core::collection::MetricCollector;
-use crate::core::iteration::{IterSpan, IterationTracker};
+use crate::core::iteration::{Span, IterationTracker};
 use crate::core::process::{ProcessCollector, ProcessMetadata, Status};
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
@@ -17,7 +17,7 @@ pub struct SpvApplication {
     ui: SpvUI,
     collectors: HashMap<String, Box<dyn MetricCollector>>,
     iteration_tracker: IterationTracker,
-    iteration_span: IterSpan,
+    represented_span: Span,
 }
 
 impl SpvApplication {
@@ -36,7 +36,7 @@ impl SpvApplication {
             ui,
             collectors: collectors_map,
             iteration_tracker: IterationTracker::default(),
-            iteration_span: IterSpan::default(),
+            represented_span: Span::default(),
         };
 
         spv_app.calibrate_probes()?;
@@ -82,6 +82,7 @@ impl SpvApplication {
 
     fn collect_metrics(&mut self) -> Result<(), Error> {
         self.iteration_tracker.tick();
+        self.represented_span.set_end(self.iteration_tracker.current());
 
         self.collect_running_processes()?;
         let running_pids = Self::extract_processes_pids(&self.process_view.running_processes());
@@ -114,9 +115,9 @@ impl SpvApplication {
     }
 
     fn exposed_processes(&self) -> Vec<ProcessMetadata> {
-        // TODO once IterSpan is reworked, use span::intersects(span) to check which processes should be exposed
+        // TODO once IterationSpan is reworked, use span::intersects(span) to check which processes should be exposed
         let cur_iteration = self.iteration_tracker.current();
-        let minimum_represented_iteration = self.iteration_span.begin(self.iteration_tracker.current());
+        let minimum_represented_iteration = self.represented_span.begin();
 
         self.process_view
             .processes()
@@ -143,8 +144,7 @@ impl SpvApplication {
         let overview = current_collector.overview();
 
         let selected_pid = self.ui.current_process().map(|pm| pm.pid()).unwrap_or(0);
-        let current_iteration = self.iteration_tracker.current(); // TODO once IterSpan is reworked, no need to pass current_iteration here anymore
-        let metrics_view = current_collector.view(selected_pid, self.iteration_span, current_iteration);
+        let metrics_view = current_collector.view(selected_pid, self.represented_span);
 
         self.ui.render(&overview, &metrics_view).map_err(Error::UiError)
     }

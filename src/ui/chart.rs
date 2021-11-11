@@ -36,8 +36,10 @@ impl MetricsChart {
         Axis::default()
             .style(Style::default().fg(Color::White))
             .bounds([
-                metrics_view.current_iteration() as f64 - metrics_view.span() as f64,
-                metrics_view.current_iteration() as f64,
+                // We do not use span.begin() here, as it has a min value of 0. On application startup, the bounds
+                // would be squashed between 0 and span.end() until span.end() would be greater than span.size()
+                metrics_view.span().end() as f64 - metrics_view.span().size() as f64,
+                metrics_view.span().end() as f64,
             ])
             .labels(labels)
     }

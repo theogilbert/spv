@@ -50,41 +50,65 @@ mod test_iteration {
     }
 }
 
+/// Represents a temporal region, expressed using iterations
 #[derive(Copy, Clone)]
-pub struct IterSpan {
-    span: usize,
+pub struct Span {
+    size: Iteration,
+    end: Iteration,
 }
 
-impl Default for IterSpan {
+impl Default for Span {
     fn default() -> Self {
-        IterSpan {
-            span: 60, // Default hard-coded value, at 1 iteration/s, is a span of 1 minute
+        const DEFAULT_SPAN_WIDTH: Iteration = 60;
+        Span {
+            end: 0,
+            size: DEFAULT_SPAN_WIDTH,
         }
     }
 }
 
-impl IterSpan {
+impl Span {
     #[cfg(test)]
-    pub fn new(span: usize) -> Self {
-        IterSpan { span }
+    pub fn new(span: Iteration, end: Iteration) -> Self {
+        Span { size: span, end }
     }
 
-    pub fn begin(&self, current_iteration: Iteration) -> Iteration {
-        current_iteration.checked_sub(self.span).unwrap_or(Iteration::MIN)
+    pub fn set_end(&mut self, iteration: Iteration) {
+        self.end = iteration;
     }
 
-    pub fn span(&self) -> usize {
-        self.span
+    pub fn size(&self) -> Iteration {
+        self.size
     }
+
+    pub fn begin(&self) -> Iteration {
+        self.end.checked_sub(self.size).unwrap_or(Iteration::MIN)
+    }
+
+    pub fn end(&self) -> Iteration {
+        self.end
+    }
+
+    // TODO implement intersect(span) and contains(iteration) if needed
 }
 
 #[cfg(test)]
-mod test_iter_span {
-    use crate::core::iteration::IterSpan;
+mod test_iteration_span {
+    use crate::core::iteration::Span;
 
     #[test]
-    fn test_should_substract_60_iteration_to_get_begin() {
-        let span = IterSpan::default();
-        assert_eq!(span.begin(120), 60);
+    fn test_should_update_begin_when_setting_end() {
+        let mut span = Span::default();
+        span.set_end(180);
+
+        assert_eq!(span.begin(), 180 - span.size());
+    }
+
+    #[test]
+    fn test_should_update_end_when_setting_end() {
+        let mut span = Span::default();
+        span.set_end(123);
+
+        assert_eq!(span.end(), 123);
     }
 }

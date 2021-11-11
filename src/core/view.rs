@@ -3,7 +3,7 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
-use crate::core::iteration::{IterSpan, Iteration};
+use crate::core::iteration::{Span, Iteration};
 use crate::core::metrics::Metric;
 use crate::core::process::Pid;
 
@@ -13,25 +13,22 @@ use crate::core::process::Pid;
 pub struct MetricView<'a> {
     metrics: Vec<&'a dyn Metric>,
     default: &'a dyn Metric,
-    span: IterSpan,
+    span: Span,
     last_metric_iteration: Iteration,
-    current_iteration: Iteration,
 }
 
 impl<'a> MetricView<'a> {
     pub(crate) fn new(
         metrics: Vec<&'a dyn Metric>,
         default: &'a dyn Metric,
-        span: IterSpan,
+        span: Span,
         last_metric_iteration: Iteration,
-        current_iteration: Iteration,
     ) -> Self {
         Self {
             metrics,
             default,
             span,
             last_metric_iteration,
-            current_iteration,
         }
     }
 
@@ -89,17 +86,13 @@ impl<'a> MetricView<'a> {
             .unwrap_or(&self.default))
     }
 
-    pub fn span(&self) -> usize {
-        self.span.span()
+    pub fn span(&self) -> &Span {
+        &self.span
     }
 
     /// Indicates from when dates the last metric in this view
     pub fn last_iteration(&self) -> Iteration {
         self.last_metric_iteration
-    }
-
-    pub fn current_iteration(&self) -> Iteration {
-        self.current_iteration
     }
 }
 
@@ -134,14 +127,14 @@ impl<'a> MetricsOverview<'a> {
 #[cfg(test)]
 mod test_metric_view {
     use crate::core::collection::MetricCollection;
-    use crate::core::iteration::IterSpan;
+    use crate::core::iteration::Span;
     use crate::core::metrics::{Metric, PercentMetric};
     use crate::core::view::test_helpers::produce_metrics_collection;
 
     #[test]
     fn test_last_or_default_should_be_latest_metric_when_exists() {
         let collection = produce_metrics_collection(1, vec![0., 1.]);
-        let view = collection.view(0, IterSpan::default(), 10);
+        let view = collection.view(0, Span::default());
 
         assert_eq!(view.last_or_default(), &PercentMetric::new(1.));
     }
@@ -149,7 +142,7 @@ mod test_metric_view {
     #[test]
     fn test_last_or_default_should_be_default_when_pid_unknown() {
         let collection = MetricCollection::<PercentMetric>::new();
-        let view = collection.view(0, IterSpan::default(), 10);
+        let view = collection.view(0, Span::default());
 
         assert_eq!(view.last_or_default(), &PercentMetric::default());
     }
@@ -157,7 +150,7 @@ mod test_metric_view {
     #[test]
     fn test_unit_should_be_metric_unit() {
         let collection = MetricCollection::<PercentMetric>::new();
-        let view = collection.view(0, IterSpan::default(), 10);
+        let view = collection.view(0, Span::default());
 
         assert_eq!(view.unit(), PercentMetric::default().unit());
     }
@@ -165,7 +158,7 @@ mod test_metric_view {
     #[test]
     fn test_extract_should_extract_nothing_if_collection_is_empty() {
         let collection = MetricCollection::<PercentMetric>::new();
-        let view = collection.view(0, IterSpan::default(), 10);
+        let view = collection.view(0, Span::default());
 
         assert_eq!(view.as_slice(), &[]);
     }
@@ -173,7 +166,7 @@ mod test_metric_view {
     #[test]
     fn test_extract_should_return_only_last_metric_if_span_coveres_1_iteration() {
         let collection = produce_metrics_collection(1, vec![0., 1.]);
-        let view = collection.view(0, IterSpan::new(1), 10);
+        let view = collection.view(0, Span::new(1, 1));
 
         assert_eq!(view.as_slice(), &[view.last_or_default()]);
     }
@@ -181,7 +174,7 @@ mod test_metric_view {
     #[test]
     fn test_extract_should_return_two_last_metric_if_span_covers_2_iterations() {
         let collection = produce_metrics_collection(1, vec![0., 1., 2., 3.]);
-        let view = collection.view(0, IterSpan::new(2), 10);
+        let view = collection.view(0, Span::new(2, 3));
 
         let expected: &[&dyn Metric; 2] = &[&PercentMetric::new(2.), &PercentMetric::new(3.)];
 
@@ -191,7 +184,7 @@ mod test_metric_view {
     #[test]
     fn test_should_only_return_existing_items_when_span_greater_than_metric_count() {
         let collection = produce_metrics_collection(1, vec![0., 1., 2.]);
-        let view = collection.view(0, IterSpan::new(20), 10);
+        let view = collection.view(0, Span::new(20, 2));
         let extract = view.as_slice();
 
         assert_eq!(extract.len(), 3);
@@ -202,7 +195,7 @@ mod test_metric_view {
     #[test]
     fn test_max_f64_should_return_max_value() {
         let collection = produce_metrics_collection(1, vec![10., 0., 2.]);
-        let view = collection.view(0, IterSpan::default(), 10);
+        let view = collection.view(0, Span::default());
 
         assert_eq!(view.max_f64(), 10.);
     }
@@ -210,7 +203,7 @@ mod test_metric_view {
     #[test]
     fn test_max_f64_should_not_return_values_out_of_span() {
         let collection = produce_metrics_collection(1, vec![10., 0., 2.]);
-        let view = collection.view(0, IterSpan::new(2), 10);
+        let view = collection.view(0, Span::new(2, 2));
 
         assert_eq!(view.max_f64(), 2.);
     }
@@ -218,7 +211,7 @@ mod test_metric_view {
     #[test]
     fn test_max_f64_should_return_0_when_empty() {
         let collection = MetricCollection::<PercentMetric>::new();
-        let view = collection.view(0, IterSpan::default(), 10);
+        let view = collection.view(0, Span::default());
 
         assert_eq!(view.max_f64(), 0.);
     }
@@ -226,7 +219,7 @@ mod test_metric_view {
     #[test]
     fn test_max_repr_should_return_repr_of_max_value() {
         let collection = produce_metrics_collection(1, vec![0., 10., 2.]);
-        let view = collection.view(0, IterSpan::default(), 10);
+        let view = collection.view(0, Span::default());
 
         assert_eq!(view.max_concise_repr(), "10.0".to_string());
     }
@@ -235,7 +228,7 @@ mod test_metric_view {
     fn test_should_return_0_as_default_last_iteration() {
         let collection = MetricCollection::<PercentMetric>::new();
 
-        let view = collection.view(1, IterSpan::default(), 10);
+        let view = collection.view(1, Span::default());
         assert_eq!(view.last_iteration(), 0);
     }
 
@@ -245,7 +238,7 @@ mod test_metric_view {
         collection.push(1, PercentMetric::new(10.), 1);
         collection.push(1, PercentMetric::new(10.), 2);
 
-        let view = collection.view(1, IterSpan::default(), 10);
+        let view = collection.view(1, Span::default());
         assert_eq!(view.last_iteration(), 2);
     }
 
@@ -255,8 +248,8 @@ mod test_metric_view {
         collection.push(1, PercentMetric::new(10.), 1);
         collection.push(1, PercentMetric::new(10.), 2);
 
-        let view = collection.view(1, IterSpan::new(123), 10);
-        assert_eq!(view.span(), 123);
+        let view = collection.view(1, Span::new(123, 2));
+        assert_eq!(view.span().size(), 123);
     }
 }
 

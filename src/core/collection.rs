@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
-use crate::core::iteration::{IterSpan, Iteration};
+use crate::core::iteration::{Span, Iteration};
 use crate::core::metrics::Metric;
 use crate::core::probe::Probe;
 use crate::core::process::Pid;
@@ -56,8 +56,7 @@ pub trait MetricCollector {
     /// # Arguments
     ///  * `pid`: The ID of the process for which to retrieve metrics
     ///  * `span`: The span of iterations covered by the metric view
-    ///  * `current_iteration`: The iteration at the point of building this `MetricView`
-    fn view(&self, pid: Pid, span: IterSpan, current_iteration: Iteration) -> MetricView;
+    fn view(&self, pid: Pid, span: Span) -> MetricView;
 
     /// Builds a [`MetricsOverview`](crate::core::view::MetricsOverview), containing the last metrics
     /// of all running processes.
@@ -116,8 +115,8 @@ where
         self.probe.name()
     }
 
-    fn view(&self, pid: Pid, span: IterSpan, current_iteration: Iteration) -> MetricView {
-        self.collection.view(pid, span, current_iteration)
+    fn view(&self, pid: Pid, span: Span) -> MetricView {
+        self.collection.view(pid, span)
     }
 
     fn overview(&self) -> MetricsOverview {
@@ -133,7 +132,7 @@ mod test_probe_collector {
     use rstest::*;
 
     use crate::core::collection::{MetricCollector, ProbeCollector};
-    use crate::core::iteration::IterSpan;
+    use crate::core::iteration::Span;
     use crate::core::metrics::PercentMetric;
     use crate::core::probe::Probe;
     use crate::core::process::Pid;
@@ -172,7 +171,7 @@ mod test_probe_collector {
     #[test]
     fn test_collector_should_be_empty_by_default() {
         let collector = create_probe_collector();
-        let view = collector.view(0, IterSpan::default(), 10);
+        let view = collector.view(0, Span::default());
 
         assert_eq!(view.as_slice().len(), 0);
     }
@@ -182,7 +181,7 @@ mod test_probe_collector {
         let mut collector = create_probe_collector();
         collector.calibrate(&[1, 2, 3]).unwrap();
 
-        let view = collector.view(0, IterSpan::default(), 10);
+        let view = collector.view(0, Span::default());
 
         assert_eq!(view.as_slice().len(), 0);
     }
@@ -192,7 +191,7 @@ mod test_probe_collector {
         let mut collector = create_probe_collector();
         collector.collect(&[1], 1).unwrap();
 
-        let view = collector.view(2, IterSpan::default(), 10);
+        let view = collector.view(2, Span::default());
 
         assert_eq!(view.as_slice().len(), 0);
     }
@@ -203,7 +202,7 @@ mod test_probe_collector {
         let mut collector = create_probe_collector_with_return_map(return_map);
         collector.collect(&[1, 2], 1).unwrap();
 
-        let view = collector.view(2, IterSpan::default(), 10);
+        let view = collector.view(2, Span::default());
         let extract = view.as_slice();
 
         assert_eq!(extract.len(), 1);
@@ -302,18 +301,17 @@ where
             .ok_or(Error::InvalidPID(pid))
     }
 
-    pub fn view(&self, pid: Pid, span: IterSpan, current_iteration: Iteration) -> MetricView {
+    pub fn view(&self, pid: Pid, span: Span) -> MetricView {
         let metrics = self.extract_metrics_according_to_span(pid, &span);
         let last_pushed_iteration = self.last_pushed_iteration.get(&pid).cloned().unwrap_or(Iteration::MIN);
 
-        MetricView::new(metrics, &self.default, span, last_pushed_iteration, current_iteration)
+        MetricView::new(metrics, &self.default, span, last_pushed_iteration)
     }
 
-    fn extract_metrics_according_to_span(&self, pid: Pid, span: &IterSpan) -> Vec<&dyn Metric> {
-        // TODO shouldn't this behavior belong to IterSpan ?
+    fn extract_metrics_according_to_span(&self, pid: Pid, span: &Span) -> Vec<&dyn Metric> {
         if let Ok(metrics) = self.metrics_of_process(pid) {
             let collected_metrics_count = metrics.len();
-            let expected_metrics_count = span.span();
+            let expected_metrics_count = span.size();
             let skipped_metrics = collected_metrics_count.saturating_sub(expected_metrics_count);
 
             metrics
