@@ -45,9 +45,9 @@ impl Terminal {
             .map_err(Error::IOError)
     }
 
-    fn render_on_frame<'a, 'b: 'a, F>(mut frame: &'a mut Frame<'b, TuiBackend>, render_fn: F)
+    fn render_on_frame<F>(mut frame: &mut Frame<TuiBackend>, render_fn: F)
     where
-        for<'f, 'g> F: FnOnce(&'f mut FrameRegion<'f, 'g>),
+        for<'a, 'b> F: FnOnce(&'a mut FrameRegion<'a, 'b>),
     {
         let mut frame_region = FrameRegion::new(&mut frame);
         render_fn(&mut frame_region);
