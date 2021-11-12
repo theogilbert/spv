@@ -86,7 +86,7 @@ impl ProcessMetadata {
     /// # Arguments
     /// * `current_iteration`: The iteration at which the process is still running
     fn mark_alive_at_iteration(&mut self, current_iteration: Iteration) {
-        self.running_span.set_end_and_update_size(current_iteration);
+        self.running_span.set_end_and_resize(current_iteration);
     }
 }
 

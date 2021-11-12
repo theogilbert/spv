@@ -85,7 +85,7 @@ impl SpvApplication {
     fn collect_metrics(&mut self) -> Result<(), Error> {
         self.iteration_tracker.tick();
         self.represented_span
-            .set_end_and_update_begin(self.iteration_tracker.current());
+            .set_end_and_shift(self.iteration_tracker.current());
 
         self.scan_processes()?;
         let running_pids = self.process_view.running_pids();
@@ -104,7 +104,7 @@ impl SpvApplication {
         Ok(())
     }
 
-    fn collect_running_processes(&mut self) -> Result<(), Error> {
+    fn scan_processes(&mut self) -> Result<(), Error> {
         self.process_view
             .collect_processes(self.iteration_tracker.current())
             .map_err(Error::CoreError)?;

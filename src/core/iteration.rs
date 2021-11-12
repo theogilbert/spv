@@ -79,21 +79,24 @@ impl Span {
         Span { begin: 0, end: 0, size }
     }
 
-    /// Updates the end of the span and updates the `begin` attribute using the `size` attribute
+    /// Updates the end of the span and updates the `begin` attribute using the `size` attribute.
+    /// After this operation, the size of the span will remain the same.
+    ///
     /// # Arguments
     /// * `end`: The last iteration covered by the span
-    pub fn set_end_and_update_begin(&mut self, end: Iteration) {
+    pub fn set_end_and_shift(&mut self, end: Iteration) {
         self.end = end;
         self.begin = end.checked_sub(self.size).map(|v| v + 1).unwrap_or(Iteration::MIN);
     }
 
     /// Updates the end of the span and updates the `size` attribute using the `begin` attribute
+    /// After this operation, the `begin` iteration of the span will remain the same.
     ///
     /// This method panics if `end` is less than `begin`.
     ///
     /// # Arguments
     /// * `end`: The last iteration covered by the span
-    pub fn set_end_and_update_size(&mut self, end: Iteration) {
+    pub fn set_end_and_resize(&mut self, end: Iteration) {
         self.end = end;
         self.size = self.end.checked_sub(self.begin).unwrap() + 1;
     }
@@ -155,7 +158,7 @@ mod test_span {
     #[test]
     fn test_should_update_begin_when_setting_end_and_updating_begin() {
         let mut span = Span::from_size(60);
-        span.set_end_and_update_begin(180);
+        span.set_end_and_shift(180);
 
         assert_eq!(span.begin(), 121);
     }
@@ -163,7 +166,7 @@ mod test_span {
     #[test]
     fn test_should_prevent_underflow_when_setting_end_and_updating_begin() {
         let mut span = Span::from_size(60);
-        span.set_end_and_update_begin(30);
+        span.set_end_and_shift(30);
 
         assert_eq!(span.begin(), 0);
     }
@@ -171,7 +174,7 @@ mod test_span {
     #[test]
     fn test_should_update_end_when_setting_end_and_updating_begin() {
         let mut span = Span::from_size(60);
-        span.set_end_and_update_begin(180);
+        span.set_end_and_shift(180);
 
         assert_eq!(span.end(), 180);
     }
@@ -179,7 +182,7 @@ mod test_span {
     #[test]
     fn test_should_not_update_size_when_setting_end_and_updating_begin() {
         let mut span = Span::from_size(60);
-        span.set_end_and_update_begin(180);
+        span.set_end_and_shift(180);
 
         assert_eq!(span.size(), 60);
     }
@@ -187,7 +190,7 @@ mod test_span {
     #[test]
     fn test_should_update_size_when_setting_end_and_updating_size() {
         let mut span = Span::from_begin(121);
-        span.set_end_and_update_size(240);
+        span.set_end_and_resize(240);
 
         assert_eq!(span.size(), 120);
     }
@@ -195,7 +198,7 @@ mod test_span {
     #[test]
     fn test_should_update_end_when_setting_end_and_updating_size() {
         let mut span = Span::from_begin(121);
-        span.set_end_and_update_size(180);
+        span.set_end_and_resize(180);
 
         assert_eq!(span.end(), 180);
     }
@@ -203,7 +206,7 @@ mod test_span {
     #[test]
     fn test_should_not_update_begin_when_setting_end_and_updating_size() {
         let mut span = Span::from_begin(121);
-        span.set_end_and_update_size(180);
+        span.set_end_and_resize(180);
 
         assert_eq!(span.begin(), 121);
     }
