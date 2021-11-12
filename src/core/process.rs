@@ -166,6 +166,15 @@ impl ProcessCollector {
             .collect()
     }
 
+    /// Returns the list of pids of the processes that were still running as of the last collection
+    pub fn running_pids(&self) -> Vec<Pid> {
+        self.registered_processes
+            .values()
+            .filter(|pm| pm.status == Status::RUNNING)
+            .map(|pm| pm.pid())
+            .collect()
+    }
+
     /// Scans and retrieves information about running processes
     pub fn collect_processes(&mut self, current_iteration: Iteration) -> Result<(), Error> {
         let running_pids = self.scanner.scan()?;
@@ -359,30 +368,27 @@ mod test_process_collector {
     }
 
     #[test]
-    fn test_dead_processes_should_only_classify_dead_processes_as_non_running_dead() {
+    fn test_running_processes_should_only_return_running_processes() {
         let pids_sequence = vec![
             vec![1, 2, 3], // Processes 1, 2 and 3 are running
-            vec![1, 2],    // Process 2 is not running anymore
+            vec![1],    // Only process 1 is still running
         ];
         let collector = build_collector_with_sequence_and_collect(pids_sequence);
-
-        assert_eq!(collector.running_processes().len(), 2);
-        assert_eq!(collector.processes().len(), 3);
-    }
-
-    #[test]
-    fn test_running_processes_should_only_return_running_processes() {
-        let mut boxed_scanner = Box::new(ScannerStub::new(vec![1, 2, 3]));
-        boxed_scanner.set_next_scanned_pids(vec![1]);
-
-        let mut collector = ProcessCollector::new(boxed_scanner);
-
-        collector.collect_processes(1).unwrap(); // Processes 1, 2 and 3 are running
-        collector.collect_processes(2).unwrap(); // Only process 1 is still running
 
         let running_processes = collector.running_processes();
         assert_eq!(running_processes.len(), 1);
         assert_eq!(running_processes[0].pid(), 1);
+    }
+
+    #[test]
+    fn test_running_pids_should_only_return_running_processes() {
+        let pids_sequence = vec![
+            vec![1, 2, 3], // Processes 1, 2 and 3 are running
+            vec![1],    // Only process 1 is still running
+        ];
+        let collector = build_collector_with_sequence_and_collect(pids_sequence);
+
+        assert_eq!(collector.running_pids(), vec![1]);
     }
 
     #[test]

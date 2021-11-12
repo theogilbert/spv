@@ -72,8 +72,8 @@ impl SpvApplication {
     }
 
     fn calibrate_probes(&mut self) -> Result<(), Error> {
-        self.collect_running_processes()?;
-        let pids = Self::extract_processes_pids(&self.process_view.running_processes());
+        self.scan_processes()?;
+        let pids = self.process_view.running_pids();
 
         for c in self.collectors.values_mut() {
             c.calibrate(&pids)?;
@@ -87,8 +87,8 @@ impl SpvApplication {
         self.represented_span
             .set_end_and_update_begin(self.iteration_tracker.current());
 
-        self.collect_running_processes()?;
-        let running_pids = Self::extract_processes_pids(&self.process_view.running_processes());
+        self.scan_processes()?;
+        let running_pids = self.process_view.running_pids();
 
         for collector in self.collectors.values_mut() {
             collector.collect(&running_pids).unwrap_or_else(|e| {
@@ -111,10 +111,6 @@ impl SpvApplication {
         Ok(())
     }
 
-    fn extract_processes_pids(processes: &[ProcessMetadata]) -> Vec<u32> {
-        processes.iter().map(|pm| pm.pid()).collect()
-    }
-
     fn represented_processes(&self) -> Vec<ProcessMetadata> {
         self.process_view
             .processes()
@@ -124,7 +120,6 @@ impl SpvApplication {
     }
 
     fn sort_processes_by_status_and_metric(&self, processes: &mut Vec<ProcessMetadata>) {
-        // TODO move this to ProcessCollector
         processes.sort_by(|pm1, pm2| match (pm1.status(), pm2.status()) {
             (Status::RUNNING, Status::DEAD) => Ordering::Less,
             (Status::DEAD, Status::RUNNING) => Ordering::Greater,
