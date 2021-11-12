@@ -199,7 +199,7 @@ mod test_probe_collector {
     #[rstest]
     fn test_collector_should_be_empty_by_default(process_metadata: ProcessMetadata) {
         let collector = create_collector();
-        let view = collector.view(&process_metadata, Span::from_end_and_size(60, 60));
+        let view = collector.view(&process_metadata, Span::from_end_and_size(59, 60));
 
         assert_eq!(view.as_slice().len(), 0);
     }
@@ -209,7 +209,7 @@ mod test_probe_collector {
         let mut collector = create_collector();
         collector.calibrate(&[1, 2, 3]).unwrap();
 
-        let view = collector.view(&process_metadata, Span::from_end_and_size(60, 60));
+        let view = collector.view(&process_metadata, Span::from_end_and_size(59, 60));
 
         assert_eq!(view.as_slice().len(), 0);
     }
@@ -219,9 +219,20 @@ mod test_probe_collector {
         let mut collector = create_collector();
         collector.collect(&[1]).unwrap();
 
-        let view = collector.view(&process_metadata, Span::from_end_and_size(60, 60));
+        let view = collector.view(&process_metadata, Span::from_end_and_size(59, 60));
 
         assert_eq!(view.as_slice().len(), 0);
+    }
+
+    #[rstest]
+    fn test_too_old_metrics_should_not_be_extracted_when_process_has_few_metrics(process_metadata: ProcessMetadata) {
+        let collector = create_collector_with_sequence_and_collect(process_metadata.pid(), vec![0., 1., 2., 3.]);
+        let view = collector.view(&process_metadata, Span::from_end_and_size(61, 60));
+        // with the specified span (begin=2), only the metrics 2 and 3 should be exported in the view
+        // as process_metadata has a spawn_iteration value of 0 (first metric created at iteration 0)
+        let expected: &[&dyn Metric; 2] = &[&PercentMetric::new(2.), &PercentMetric::new(3.)];
+
+        assert_eq!(view.as_slice(), expected);
     }
 
     #[rstest]
@@ -230,7 +241,7 @@ mod test_probe_collector {
         let mut collector = create_collector_with_map(return_map);
         collector.collect(&[1, 2]).unwrap();
 
-        let view = collector.view(&process_metadata, Span::from_end_and_size(60, 60));
+        let view = collector.view(&process_metadata, Span::from_end_and_size(59, 60));
         let extract = view.as_slice();
 
         assert_eq!(extract.len(), 1);
@@ -258,7 +269,7 @@ mod test_probe_collector {
     #[rstest]
     fn test_should_only_return_existing_items_when_span_greater_than_metric_count(process_metadata: ProcessMetadata) {
         let collector = create_collector_with_sequence_and_collect(process_metadata.pid(), vec![0., 1., 2., 3.]);
-        let view = collector.view(&process_metadata, Span::from_end_and_size(60, 60));
+        let view = collector.view(&process_metadata, Span::from_end_and_size(59, 60));
         let extract = view.as_slice();
 
         assert_eq!(extract.len(), 4);
@@ -356,19 +367,18 @@ where
     }
 
     pub fn view(&self, pm: &ProcessMetadata, span: Span) -> MetricView {
-        let metrics = self.extract_metrics_according_to_span(pm.pid(), &span);
+        let metrics = self.extract_metrics_according_to_span(pm, &span);
         MetricView::new(metrics, &self.default, span, pm.running_span().begin())
     }
 
-    fn extract_metrics_according_to_span(&self, pid: Pid, span: &Span) -> Vec<&dyn Metric> {
-        if let Ok(metrics) = self.metrics_of_process(pid) {
-            let collected_metrics_count = metrics.len();
-            let expected_metrics_count = span.size();
-            let skipped_metrics = collected_metrics_count.saturating_sub(expected_metrics_count);
+    fn extract_metrics_according_to_span(&self, pm: &ProcessMetadata, span: &Span) -> Vec<&dyn Metric> {
+        if let Ok(metrics) = self.metrics_of_process(pm.pid()) {
+            let first_metric_iteration = pm.running_span().begin();
+            let expired_metrics_count = span.begin().checked_sub(first_metric_iteration).unwrap_or(usize::MIN);
 
             metrics
                 .into_iter()
-                .skip(skipped_metrics)
+                .skip(expired_metrics_count)
                 .map(|m| m as &dyn Metric)
                 .collect()
         } else {

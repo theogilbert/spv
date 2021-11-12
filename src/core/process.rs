@@ -371,7 +371,7 @@ mod test_process_collector {
     fn test_running_processes_should_only_return_running_processes() {
         let pids_sequence = vec![
             vec![1, 2, 3], // Processes 1, 2 and 3 are running
-            vec![1],    // Only process 1 is still running
+            vec![1],       // Only process 1 is still running
         ];
         let collector = build_collector_with_sequence_and_collect(pids_sequence);
 
@@ -384,7 +384,7 @@ mod test_process_collector {
     fn test_running_pids_should_only_return_running_processes() {
         let pids_sequence = vec![
             vec![1, 2, 3], // Processes 1, 2 and 3 are running
-            vec![1],    // Only process 1 is still running
+            vec![1],       // Only process 1 is still running
         ];
         let collector = build_collector_with_sequence_and_collect(pids_sequence);
 

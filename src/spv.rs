@@ -32,22 +32,19 @@ impl SpvApplication {
 
         /// TODO calculate this value according to probing frequency (resolution)
         const DEFAULT_REPRESENTED_SPAN_SIZE: Iteration = 60;
-        let mut spv_app = Self {
+
+        Ok(Self {
             receiver,
             process_view,
             ui,
             collectors: collectors_map,
             iteration_tracker: IterationTracker::default(),
             represented_span: Span::from_size(DEFAULT_REPRESENTED_SPAN_SIZE),
-        };
-
-        spv_app.calibrate_probes()?;
-        spv_app.collect_metrics()?;
-
-        Ok(spv_app)
+        })
     }
 
     pub fn run(mut self) -> Result<(), Error> {
+        self.calibrate_probes()?;
         self.collect_metrics()?;
 
         loop {
@@ -55,7 +52,10 @@ impl SpvApplication {
 
             match trigger {
                 Trigger::Exit => break,
-                Trigger::Impulse => self.collect_metrics()?,
+                Trigger::Impulse => {
+                    self.increment_iteration();
+                    self.collect_metrics()?;
+                }
                 Trigger::NextProcess => self.ui.next_process(),
                 Trigger::PreviousProcess => self.ui.previous_process(),
                 Trigger::Resize => {
@@ -82,11 +82,13 @@ impl SpvApplication {
         Ok(())
     }
 
-    fn collect_metrics(&mut self) -> Result<(), Error> {
+    fn increment_iteration(&mut self) {
         self.iteration_tracker.tick();
         self.represented_span
             .set_end_and_shift(self.iteration_tracker.current());
+    }
 
+    fn collect_metrics(&mut self) -> Result<(), Error> {
         self.scan_processes()?;
         let running_pids = self.process_view.running_pids();
 
