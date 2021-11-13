@@ -71,7 +71,7 @@ fn build_datasets<'a>(raw_data: &'a [Vec<(f64, f64)>], metrics_view: &MetricView
                 // panic should never happen as index should never be greater than cardinality:
                 .expect("Invalid index when building dataframe");
 
-            let ds_style = Style::default().fg(COLORS[index % COLORS.len()]);
+            let ds_style = Style::default().fg(COLORS[index]);
 
             Dataset::default()
                 .name(name)
