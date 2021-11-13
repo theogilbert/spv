@@ -64,7 +64,7 @@ impl SpvApplication {
                 Trigger::NextTab => self.ui.next_tab(),
                 Trigger::PreviousTab => self.ui.previous_tab(),
                 Trigger::ScrollLeft => self.scroll(-1),
-                Trigger::ScrollRight => self.scroll(1)
+                Trigger::ScrollRight => self.scroll(1),
             }
 
             self.draw_ui()?;
@@ -90,9 +90,16 @@ impl SpvApplication {
     }
 
     fn increment_iteration(&mut self) {
+        let span_should_follow_current_iteration = self
+            .represented_span
+            .is_fully_scrolled_right(self.iteration_tracker.current());
+
         self.iteration_tracker.tick();
-        self.represented_span
-            .set_end_and_shift(self.iteration_tracker.current());
+
+        if span_should_follow_current_iteration {
+            self.represented_span
+                .set_end_and_shift(self.iteration_tracker.current());
+        }
     }
 
     fn collect_metrics(&mut self) -> Result<(), Error> {
@@ -123,6 +130,7 @@ impl SpvApplication {
     }
 
     fn represented_processes(&self) -> Vec<ProcessMetadata> {
+        // TODO selected process should be represented even if it expired
         self.process_view
             .processes()
             .into_iter()

@@ -139,6 +139,15 @@ impl Span {
         self.set_end_and_shift(bounded_end);
     }
 
+    /// Indicates if the span is fully scrolled to the right (toward the current iteration) or if it can be further
+    /// scrolled to the right.
+    ///
+    /// # Arguments
+    /// * `current_iteration` The current iteration of the program
+    pub fn is_fully_scrolled_right(&self, current_iteration: Iteration) -> bool {
+        current_iteration == self.end
+    }
+
     /// Returns the first iteration covered by the span.
     /// This value can never be greater than `self.end()`
     pub fn begin(&self) -> Iteration {
@@ -327,5 +336,27 @@ mod test_span {
         span.scroll(100, 100);
 
         assert_eq!(span, Span::new(90, 100));
+    }
+
+    #[test]
+    fn test_should_be_fully_scrolled_to_the_right_by_default() {
+        let span = Span::from_size(60);
+
+        assert!(span.is_fully_scrolled_right(0));
+    }
+
+    #[test]
+    fn test_should_be_fully_scrolled_to_the_right_when_shifted_to_current_iteration() {
+        let mut span = Span::from_size(60);
+        span.set_end_and_shift(1);
+
+        assert!(span.is_fully_scrolled_right(1));
+    }
+
+    #[test]
+    fn test_should_not_be_fully_scrolled_to_the_right_when_not_ends_at_current_iteration() {
+        let span = Span::from_size(60);
+
+        assert!(!span.is_fully_scrolled_right(1));
     }
 }
