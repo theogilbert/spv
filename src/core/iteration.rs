@@ -3,7 +3,6 @@
 /// Represents an iteration of the program's main loop
 pub type Iteration = usize;
 
-
 /// Keeps track of the current iteration of the program
 pub struct IterationTracker {
     counter: usize,
@@ -94,11 +93,7 @@ impl Span {
     /// # Arguments
     /// * `size`: The size of the `Span`
     pub fn from_size(size: Iteration) -> Self {
-        Span {
-            begin: 0,
-            end: 0,
-            size,
-        }
+        Span { begin: 0, end: 0, size }
     }
 
     /// Updates the end of the span and updates the `begin` attribute using the `size` attribute.
@@ -127,6 +122,13 @@ impl Span {
     /// This value can never be greater than `self.end()`
     pub fn begin(&self) -> Iteration {
         self.begin
+    }
+
+    /// Returns the first iteration covered by the span, even if this iteration is negative.
+    ///
+    /// It is possible for a `Span` to start at a negative iteration, if `size` is greater than `end`.
+    pub fn signed_begin(&self) -> i128 {
+        self.end as i128 - self.size as i128 + 1
     }
 
     /// Returns the last iteration covered by the span
@@ -256,5 +258,21 @@ mod test_span {
         let other_span = Span::new(begin_other, end_other);
 
         assert!(!span.intersects(&other_span));
+    }
+
+    #[test]
+    fn test_should_return_negative_begin_when_size_greater_than_end() {
+        let mut span = Span::from_size(60);
+        span.set_end_and_shift(30);
+
+        assert_eq!(span.signed_begin(), -29);
+    }
+
+    #[test]
+    fn test_should_return_positive_begin_when_size_less_than_end() {
+        let mut span = Span::from_size(60);
+        span.set_end_and_shift(120);
+
+        assert_eq!(span.signed_begin(), 61);
     }
 }
