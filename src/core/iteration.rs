@@ -55,7 +55,7 @@ mod test_iteration {
 pub struct Span {
     begin: Iteration,
     end: Iteration,
-    size: Iteration, // iteration is required as an attribute, for the cases where size > end (as begin cannot be < 0)
+    size: Iteration, // size is required as an attribute, to represent spans including the iteration 0 (e.g. [-59;0])
 }
 
 impl Span {

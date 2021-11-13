@@ -249,7 +249,7 @@ mod test_probe_collector {
     }
 
     #[rstest]
-    fn test_extract_should_return_only_last_metric_if_span_coveres_1_iteration(process_metadata: ProcessMetadata) {
+    fn test_extract_should_return_only_last_metric_if_span_covers_1_iteration(process_metadata: ProcessMetadata) {
         let collector = create_collector_with_sequence_and_collect(process_metadata.pid(), vec![0., 1.]);
         let view = collector.view(&process_metadata, Span::new(1, 1));
 
