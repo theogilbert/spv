@@ -148,7 +148,7 @@ mod test_metric_view {
     #[rstest]
     fn test_last_or_default_should_be_latest_metric_when_metrics_exists(metrics: Vec<PercentMetric>) {
         let default = PercentMetric::default();
-        let view = MetricView::new(metrics_to_dyn(&metrics), &default, Span::from_end_and_size(10, 10), 1);
+        let view = MetricView::new(metrics_to_dyn(&metrics), &default, Span::new(10, 10), 1);
 
         assert_eq!(view.last_or_default(), metrics.last().unwrap());
     }
@@ -156,7 +156,7 @@ mod test_metric_view {
     #[test]
     fn test_last_or_default_should_be_default_when_pid_unknown() {
         let default = PercentMetric::default();
-        let view = MetricView::new(vec![], &default, Span::from_end_and_size(10, 10), 1);
+        let view = MetricView::new(vec![], &default, Span::new(1, 10), 1);
 
         assert_eq!(view.last_or_default(), &default);
     }
@@ -164,7 +164,7 @@ mod test_metric_view {
     #[rstest]
     fn test_unit_should_be_metric_unit() {
         let default = PercentMetric::default();
-        let view = MetricView::new(vec![], &default, Span::from_end_and_size(10, 10), 1);
+        let view = MetricView::new(vec![], &default, Span::new(1, 10), 1);
 
         assert_eq!(view.unit(), default.unit());
     }
@@ -172,7 +172,7 @@ mod test_metric_view {
     #[rstest]
     fn test_max_f64_should_return_max_value(metrics: Vec<PercentMetric>) {
         let default = PercentMetric::default();
-        let view = MetricView::new(metrics_to_dyn(&metrics), &default, Span::from_end_and_size(10, 10), 1);
+        let view = MetricView::new(metrics_to_dyn(&metrics), &default, Span::new(1, 10), 1);
 
         assert_eq!(view.max_f64(), 20.);
     }
@@ -180,7 +180,7 @@ mod test_metric_view {
     #[test]
     fn test_max_f64_should_return_default_f64_when_empty() {
         let default = PercentMetric::default();
-        let view = MetricView::new(vec![], &default, Span::from_end_and_size(10, 10), 1);
+        let view = MetricView::new(vec![], &default, Span::new(1, 10), 1);
 
         assert_eq!(view.max_f64(), default.as_f64(0).unwrap());
     }
@@ -188,7 +188,7 @@ mod test_metric_view {
     #[rstest]
     fn test_max_repr_should_return_repr_of_max_value(metrics: Vec<PercentMetric>) {
         let default = PercentMetric::default();
-        let view = MetricView::new(metrics_to_dyn(&metrics), &default, Span::from_end_and_size(10, 10), 1);
+        let view = MetricView::new(metrics_to_dyn(&metrics), &default, Span::new(1, 10), 1);
 
         assert_eq!(view.max_concise_repr(), "20.0".to_string());
     }
@@ -196,7 +196,7 @@ mod test_metric_view {
     #[test]
     fn test_should_return_first_iteration() {
         let default = PercentMetric::default();
-        let view = MetricView::new(vec![], &default, Span::from_end_and_size(10, 10), 1);
+        let view = MetricView::new(vec![], &default, Span::new(1, 10), 1);
 
         assert_eq!(view.first_iteration(), 1);
     }
@@ -204,7 +204,7 @@ mod test_metric_view {
     #[test]
     fn test_should_return_span_begin_as_first_iteration_if_greater_than_first_iteration() {
         let default = PercentMetric::default();
-        let view = MetricView::new(vec![], &default, Span::from_end_and_size(100, 10), 1);
+        let view = MetricView::new(vec![], &default, Span::new(91, 100), 1);
 
         assert_eq!(view.first_iteration(), 91);
     }
@@ -212,9 +212,9 @@ mod test_metric_view {
     #[test]
     fn test_should_return_correct_span() {
         let default = PercentMetric::default();
-        let view = MetricView::new(vec![], &default, Span::from_end_and_size(10, 10), 1);
+        let view = MetricView::new(vec![], &default, Span::new(1, 10), 1);
 
-        assert_eq!(view.span(), &Span::from_end_and_size(10, 10));
+        assert_eq!(view.span(), &Span::new(1, 10));
     }
 }
 

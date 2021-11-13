@@ -60,13 +60,14 @@ pub struct Span {
 
 impl Span {
     #[cfg(test)]
-    pub fn from_end_and_size(end: Iteration, size: Iteration) -> Self {
+    pub fn new(begin: Iteration, end: Iteration) -> Self {
         Span {
-            begin: end.checked_sub(size).map(|v| v + 1).unwrap_or(Iteration::MIN),
+            begin,
             end,
-            size,
+            size: end - begin + 1,
         }
     }
+
     pub fn from_begin(begin: Iteration) -> Self {
         Span {
             begin,
@@ -76,7 +77,7 @@ impl Span {
     }
 
     pub fn from_size(size: Iteration) -> Self {
-        Span { begin: 0, end: 0, size }
+        Span { begin: 0, end: size - 1, size }
     }
 
     /// Updates the end of the span and updates the `begin` attribute using the `size` attribute.
@@ -151,7 +152,7 @@ mod test_span {
         let span = Span::from_size(60);
 
         assert_eq!(span.begin(), 0);
-        assert_eq!(span.end(), 0);
+        assert_eq!(span.end(), 59);
         assert_eq!(span.size(), 60);
     }
 
@@ -213,12 +214,12 @@ mod test_span {
 
     #[rstest]
     #[case(50, 250)]
-    #[case(50, 101)]
+    #[case(50, 100)]
     #[case(120, 170)]
-    #[case(200, 250)]
+    #[case(199, 250)]
     fn test_should_return_true_if_spans_intersect(#[case] begin_other: Iteration, #[case] end_other: Iteration) {
-        let span = Span::from_end_and_size(200, 100);
-        let other_span = Span::from_end_and_size(end_other, end_other - begin_other + 1);
+        let span = Span::new(100, 199);
+        let other_span = Span::new(begin_other, end_other);
 
         assert!(span.intersects(&other_span));
     }
@@ -230,8 +231,8 @@ mod test_span {
         #[case] begin_other: Iteration,
         #[case] end_other: Iteration,
     ) {
-        let span = Span::from_end_and_size(200, 100);
-        let other_span = Span::from_end_and_size(end_other, end_other - begin_other + 1);
+        let span = Span::new(100, 199);
+        let other_span = Span::new(begin_other, end_other);
 
         assert!(!span.intersects(&other_span));
     }

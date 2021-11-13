@@ -397,11 +397,11 @@ mod test_process_collector {
 
         collector.collect_processes(0).unwrap();
         let running_process = &collector.running_processes()[0];
-        assert_eq!(running_process.running_span(), &Span::from_end_and_size(0, 1));
+        assert_eq!(running_process.running_span(), &Span::new(0, 0));
 
         collector.collect_processes(1).unwrap();
         let running_process = &collector.running_processes()[0];
-        assert_eq!(running_process.running_span(), &Span::from_end_and_size(1, 2));
+        assert_eq!(running_process.running_span(), &Span::new(0, 1));
     }
 }
 

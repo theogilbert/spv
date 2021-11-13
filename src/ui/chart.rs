@@ -119,7 +119,7 @@ mod test_raw_data_from_metrics_view {
         let default = IOMetric::default();
 
         let dyn_metrics_vec = metrics_data.iter().map(|m| m as &dyn Metric).collect();
-        let metrics_view = MetricView::new(dyn_metrics_vec, &default, Span::from_end_and_size(10, 10), 7);
+        let metrics_view = MetricView::new(dyn_metrics_vec, &default, Span::new(0, 10), 7);
         let raw_vecs = build_raw_vecs(&metrics_view);
 
         let expected_raw_vecs = vec![vec![(7.0, 10.0), (8.0, 30.0)], vec![(7.0, 20.0), (8.0, 40.0)]];

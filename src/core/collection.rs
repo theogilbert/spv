@@ -199,7 +199,7 @@ mod test_probe_collector {
     #[rstest]
     fn test_collector_should_be_empty_by_default(process_metadata: ProcessMetadata) {
         let collector = create_collector();
-        let view = collector.view(&process_metadata, Span::from_end_and_size(59, 60));
+        let view = collector.view(&process_metadata, Span::new(0, 59));
 
         assert_eq!(view.as_slice().len(), 0);
     }
@@ -209,7 +209,7 @@ mod test_probe_collector {
         let mut collector = create_collector();
         collector.calibrate(&[1, 2, 3]).unwrap();
 
-        let view = collector.view(&process_metadata, Span::from_end_and_size(59, 60));
+        let view = collector.view(&process_metadata, Span::new(0, 59));
 
         assert_eq!(view.as_slice().len(), 0);
     }
@@ -219,7 +219,7 @@ mod test_probe_collector {
         let mut collector = create_collector();
         collector.collect(&[1]).unwrap();
 
-        let view = collector.view(&process_metadata, Span::from_end_and_size(59, 60));
+        let view = collector.view(&process_metadata, Span::new(0, 59));
 
         assert_eq!(view.as_slice().len(), 0);
     }
@@ -227,7 +227,7 @@ mod test_probe_collector {
     #[rstest]
     fn test_too_old_metrics_should_not_be_extracted_when_process_has_few_metrics(process_metadata: ProcessMetadata) {
         let collector = create_collector_with_sequence_and_collect(process_metadata.pid(), vec![0., 1., 2., 3.]);
-        let view = collector.view(&process_metadata, Span::from_end_and_size(61, 60));
+        let view = collector.view(&process_metadata, Span::new(2, 3));
         // with the specified span (begin=2), only the metrics 2 and 3 should be exported in the view
         // as process_metadata has a spawn_iteration value of 0 (first metric created at iteration 0)
         let expected: &[&dyn Metric; 2] = &[&PercentMetric::new(2.), &PercentMetric::new(3.)];
@@ -241,7 +241,7 @@ mod test_probe_collector {
         let mut collector = create_collector_with_map(return_map);
         collector.collect(&[1, 2]).unwrap();
 
-        let view = collector.view(&process_metadata, Span::from_end_and_size(59, 60));
+        let view = collector.view(&process_metadata, Span::new(0, 59));
         let extract = view.as_slice();
 
         assert_eq!(extract.len(), 1);
@@ -251,7 +251,7 @@ mod test_probe_collector {
     #[rstest]
     fn test_extract_should_return_only_last_metric_if_span_coveres_1_iteration(process_metadata: ProcessMetadata) {
         let collector = create_collector_with_sequence_and_collect(process_metadata.pid(), vec![0., 1.]);
-        let view = collector.view(&process_metadata, Span::from_end_and_size(1, 1));
+        let view = collector.view(&process_metadata, Span::new(1, 1));
 
         assert_eq!(view.as_slice(), &[view.last_or_default()]);
     }
@@ -259,7 +259,7 @@ mod test_probe_collector {
     #[rstest]
     fn test_extract_should_return_two_last_metric_if_span_covers_2_iterations(process_metadata: ProcessMetadata) {
         let collector = create_collector_with_sequence_and_collect(process_metadata.pid(), vec![0., 1., 2., 3.]);
-        let view = collector.view(&process_metadata, Span::from_end_and_size(3, 2));
+        let view = collector.view(&process_metadata, Span::new(2, 3));
 
         let expected: &[&dyn Metric; 2] = &[&PercentMetric::new(2.), &PercentMetric::new(3.)];
 
@@ -269,7 +269,7 @@ mod test_probe_collector {
     #[rstest]
     fn test_should_only_return_existing_items_when_span_greater_than_metric_count(process_metadata: ProcessMetadata) {
         let collector = create_collector_with_sequence_and_collect(process_metadata.pid(), vec![0., 1., 2., 3.]);
-        let view = collector.view(&process_metadata, Span::from_end_and_size(59, 60));
+        let view = collector.view(&process_metadata, Span::new(0, 59));
         let extract = view.as_slice();
 
         assert_eq!(extract.len(), 4);
@@ -280,7 +280,7 @@ mod test_probe_collector {
     #[rstest]
     fn test_max_f64_should_not_return_values_out_of_span(process_metadata: ProcessMetadata) {
         let collector = create_collector_with_sequence_and_collect(process_metadata.pid(), vec![10., 0., 2.]);
-        let view = collector.view(&process_metadata, Span::from_end_and_size(2, 2));
+        let view = collector.view(&process_metadata, Span::new(1, 2));
 
         assert_eq!(view.max_f64(), 2.);
     }
