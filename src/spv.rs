@@ -93,9 +93,11 @@ impl SpvApplication {
         let running_pids = self.process_view.running_pids();
 
         for collector in self.collectors.values_mut() {
-            collector.collect(&running_pids).unwrap_or_else(|e| {
-                warn!("Error reading from collector {}: {}", collector.name(), e.to_string());
-            });
+            collector
+                .collect(&running_pids, self.iteration_tracker.current())
+                .unwrap_or_else(|e| {
+                    warn!("Error reading from collector {}: {}", collector.name(), e.to_string());
+                });
         }
 
         let mut exposed_processes = self.represented_processes();

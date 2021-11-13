@@ -12,7 +12,7 @@ use crate::core::process::Pid;
 /// Refer to the [`MetricCollector`](crate::core::collection::MetricCollector) trait to instanciate a `MetricView`
 pub struct MetricView<'a> {
     metrics: Vec<&'a dyn Metric>,
-    default: &'a dyn Metric,
+    default: Box<dyn Metric>,
     span: Span,
     first_metric_iteration: Iteration,
 }
@@ -20,7 +20,7 @@ pub struct MetricView<'a> {
 impl<'a> MetricView<'a> {
     pub(crate) fn new(
         metrics: Vec<&'a dyn Metric>,
-        default: &'a dyn Metric,
+        default: Box<dyn Metric>,
         span: Span,
         first_metric_iteration: Iteration,
     ) -> Self {
@@ -46,7 +46,7 @@ impl<'a> MetricView<'a> {
     /// Returns the latest collected metric, or its default value if no metric has
     /// been collected for this process.
     pub fn last_or_default(&self) -> &dyn Metric {
-        *(self.metrics.last().unwrap_or(&self.default))
+        *(self.metrics.last().unwrap_or(&&*self.default))
     }
 
     /// Returns the greatest f64 value of the metric in the given span. See [`MetricView::new()`](#method.extract) for
@@ -83,7 +83,7 @@ impl<'a> MetricView<'a> {
 
                 v1.partial_cmp(&v2).unwrap_or(Ordering::Equal)
             })
-            .unwrap_or(&self.default))
+            .unwrap_or(&&*self.default))
     }
 
     pub fn span(&self) -> &Span {
@@ -141,78 +141,74 @@ mod test_metric_view {
         ]
     }
 
+    #[fixture]
+    fn default() -> Box<dyn Metric> {
+        Box::new(PercentMetric::default()) as Box<dyn Metric>
+    }
+
     fn metrics_to_dyn(metrics: &Vec<PercentMetric>) -> Vec<&dyn Metric> {
         metrics.iter().map(|m| m as &dyn Metric).collect()
     }
 
     #[rstest]
-    fn test_last_or_default_should_be_latest_metric_when_metrics_exists(metrics: Vec<PercentMetric>) {
-        let default = PercentMetric::default();
-        let view = MetricView::new(metrics_to_dyn(&metrics), &default, Span::new(10, 10), 1);
+    fn test_last_or_default_should_be_latest_metric(metrics: Vec<PercentMetric>, default: Box<dyn Metric>) {
+        let view = MetricView::new(metrics_to_dyn(&metrics), default, Span::new(10, 10), 1);
 
         assert_eq!(view.last_or_default(), metrics.last().unwrap());
     }
 
-    #[test]
-    fn test_last_or_default_should_be_default_when_pid_unknown() {
-        let default = PercentMetric::default();
-        let view = MetricView::new(vec![], &default, Span::new(1, 10), 1);
+    #[rstest]
+    fn test_last_or_default_should_be_default_when_view_is_empty(default: Box<dyn Metric>) {
+        let view = MetricView::new(vec![], default, Span::new(1, 10), 1);
 
-        assert_eq!(view.last_or_default(), &default);
+        assert_eq!(view.last_or_default(), &PercentMetric::default());
     }
 
     #[rstest]
-    fn test_unit_should_be_metric_unit() {
-        let default = PercentMetric::default();
-        let view = MetricView::new(vec![], &default, Span::new(1, 10), 1);
+    fn test_unit_should_be_metric_unit(default: Box<dyn Metric>) {
+        let view = MetricView::new(vec![], default, Span::new(1, 10), 1);
 
-        assert_eq!(view.unit(), default.unit());
+        assert_eq!(view.unit(), PercentMetric::default().unit());
     }
 
     #[rstest]
-    fn test_max_f64_should_return_max_value(metrics: Vec<PercentMetric>) {
-        let default = PercentMetric::default();
-        let view = MetricView::new(metrics_to_dyn(&metrics), &default, Span::new(1, 10), 1);
+    fn test_max_f64_should_return_max_value(metrics: Vec<PercentMetric>, default: Box<dyn Metric>) {
+        let view = MetricView::new(metrics_to_dyn(&metrics), default, Span::new(1, 10), 1);
 
         assert_eq!(view.max_f64(), 20.);
     }
 
-    #[test]
-    fn test_max_f64_should_return_default_f64_when_empty() {
-        let default = PercentMetric::default();
-        let view = MetricView::new(vec![], &default, Span::new(1, 10), 1);
+    #[rstest]
+    fn test_max_f64_should_return_default_f64_when_empty(default: Box<dyn Metric>) {
+        let view = MetricView::new(vec![], default, Span::new(1, 10), 1);
 
-        assert_eq!(view.max_f64(), default.as_f64(0).unwrap());
+        assert_eq!(view.max_f64(), PercentMetric::default().as_f64(0).unwrap());
     }
 
     #[rstest]
-    fn test_max_repr_should_return_repr_of_max_value(metrics: Vec<PercentMetric>) {
-        let default = PercentMetric::default();
-        let view = MetricView::new(metrics_to_dyn(&metrics), &default, Span::new(1, 10), 1);
+    fn test_max_repr_should_return_repr_of_max_value(metrics: Vec<PercentMetric>, default: Box<dyn Metric>) {
+        let view = MetricView::new(metrics_to_dyn(&metrics), default, Span::new(1, 10), 1);
 
         assert_eq!(view.max_concise_repr(), "20.0".to_string());
     }
 
-    #[test]
-    fn test_should_return_first_iteration() {
-        let default = PercentMetric::default();
-        let view = MetricView::new(vec![], &default, Span::new(1, 10), 1);
+    #[rstest]
+    fn test_should_return_first_iteration(default: Box<dyn Metric>) {
+        let view = MetricView::new(vec![], default, Span::new(1, 10), 1);
 
         assert_eq!(view.first_iteration(), 1);
     }
 
-    #[test]
-    fn test_should_return_span_begin_as_first_iteration_if_greater_than_first_iteration() {
-        let default = PercentMetric::default();
-        let view = MetricView::new(vec![], &default, Span::new(91, 100), 1);
+    #[rstest]
+    fn test_should_return_span_begin_as_first_iteration_if_begin_greater_than_first_iter(default: Box<dyn Metric>) {
+        let view = MetricView::new(vec![], default, Span::new(91, 100), 1);
 
         assert_eq!(view.first_iteration(), 91);
     }
 
-    #[test]
-    fn test_should_return_correct_span() {
-        let default = PercentMetric::default();
-        let view = MetricView::new(vec![], &default, Span::new(1, 10), 1);
+    #[rstest]
+    fn test_should_return_correct_span(default: Box<dyn Metric>) {
+        let view = MetricView::new(vec![], default, Span::new(1, 10), 1);
 
         assert_eq!(view.span(), &Span::new(1, 10));
     }
@@ -266,9 +262,9 @@ mod test_helpers {
     pub(crate) fn produce_metrics_collection(proc_count: usize, values: Vec<f64>) -> MetricCollection<PercentMetric> {
         let mut collection = MetricCollection::new();
 
-        for value in values.into_iter() {
+        for (iteration, value) in values.into_iter().enumerate() {
             for proc_idx in 0..proc_count {
-                collection.push(proc_idx as Pid, PercentMetric::new(value));
+                collection.push(proc_idx as Pid, PercentMetric::new(value), iteration);
             }
         }
 
