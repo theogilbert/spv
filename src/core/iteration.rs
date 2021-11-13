@@ -1,7 +1,10 @@
-/// On every iteration of the application's main loop, all processes will be probed for their metrics
-/// An Iteration value refers to one of these iterations
+//! Time measure and associated tools
+
+/// Represents an iteration of the program's main loop
 pub type Iteration = usize;
 
+
+/// Keeps track of the current iteration of the program
 pub struct IterationTracker {
     counter: usize,
 }
@@ -51,6 +54,9 @@ mod test_iteration {
 }
 
 /// Represents a temporal region, expressed using iterations
+///
+/// A `Span` has a `begin`, an `end` and a `size`.
+/// The `begin` and `end` are inclusive.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Span {
     begin: Iteration,
@@ -68,6 +74,11 @@ impl Span {
         }
     }
 
+    /// Creates a `Span` starting at the given `Iteration`
+    /// The `Span` will have a size of 1. This means that it ends at the same `Iteration` than `begin`.
+    ///
+    /// # Arguments
+    /// * `begin`: The left-bound iteration of the span
     pub fn from_begin(begin: Iteration) -> Self {
         Span {
             begin,
@@ -76,8 +87,18 @@ impl Span {
         }
     }
 
+    /// Creates a `Span` with the given size
+    /// The `Span` ends at the `Iteration` 0.
+    /// To update the end of the span, see [`set_end_and_shift`](#method.set_end_and_shift)
+    ///
+    /// # Arguments
+    /// * `size`: The size of the `Span`
     pub fn from_size(size: Iteration) -> Self {
-        Span { begin: 0, end: size - 1, size }
+        Span {
+            begin: 0,
+            end: 0,
+            size,
+        }
     }
 
     /// Updates the end of the span and updates the `begin` attribute using the `size` attribute.
@@ -102,7 +123,7 @@ impl Span {
         self.size = self.end.checked_sub(self.begin).unwrap() + 1;
     }
 
-    /// Returns the first iteration covered by the span
+    /// Returns the first iteration covered by the span.
     /// This value can never be greater than `self.end()`
     pub fn begin(&self) -> Iteration {
         self.begin
@@ -152,7 +173,7 @@ mod test_span {
         let span = Span::from_size(60);
 
         assert_eq!(span.begin(), 0);
-        assert_eq!(span.end(), 59);
+        assert_eq!(span.end(), 0);
         assert_eq!(span.size(), 60);
     }
 
