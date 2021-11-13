@@ -264,7 +264,7 @@ where
         self.processes_data
             .get(&pm.pid())
             .map(|pd| pd.view(span))
-            .unwrap_or(Self::build_default_view(pm, span))
+            .unwrap_or_else(|| Self::build_default_view(pm, span))
     }
 
     fn build_default_view<'a, 'b>(pm: &'a ProcessMetadata, span: Span) -> MetricView<'b> {
