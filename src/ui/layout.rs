@@ -1,7 +1,4 @@
 use tui::layout::{Constraint, Direction, Layout, Rect};
-use tui::Frame;
-
-use crate::ui::terminal::TuiBackend;
 
 pub struct UiLayout {
     main_chunks: Vec<Rect>,
@@ -9,7 +6,7 @@ pub struct UiLayout {
 }
 
 impl UiLayout {
-    pub fn new(frame: &Frame<TuiBackend>) -> Self {
+    pub fn new(region: Rect) -> Self {
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints(
@@ -20,7 +17,7 @@ impl UiLayout {
                 ]
                 .as_ref(),
             )
-            .split(frame.size());
+            .split(region);
 
         let center_chunks = Layout::default()
             .direction(Direction::Horizontal)

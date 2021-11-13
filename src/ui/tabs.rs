@@ -1,10 +1,8 @@
-use tui::layout::Rect;
 use tui::style::{Color, Style};
 use tui::text::Spans;
 use tui::widgets::Tabs;
-use tui::Frame;
 
-use crate::ui::terminal::TuiBackend;
+use crate::ui::terminal::FrameRegion;
 
 pub struct MetricTabs {
     selected_index: usize,
@@ -19,7 +17,7 @@ impl MetricTabs {
         }
     }
 
-    pub fn render(&self, frame: &mut Frame<TuiBackend>, chunk: Rect) {
+    pub fn render(&self, frame: &mut FrameRegion) {
         let tabs_spans = self.tabs.iter().cloned().map(Spans::from).collect();
 
         let tabs = Tabs::new(tabs_spans)
@@ -28,7 +26,7 @@ impl MetricTabs {
             .divider("|")
             .select(self.selected_index);
 
-        frame.render_widget(tabs, chunk);
+        frame.render_widget(tabs);
     }
 
     pub fn current(&self) -> &str {

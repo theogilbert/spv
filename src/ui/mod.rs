@@ -45,16 +45,20 @@ impl SpvUI {
         })
     }
 
-    pub fn render(&mut self, metrics_overview: &MetricsOverview, metrics_view: &MetricView) -> Result<(), Error> {
-        self.terminal.draw(|mut frame| {
-            let layout = UiLayout::new(frame);
+    pub fn render(&mut self, overview: &MetricsOverview, view: &Option<MetricView>) -> Result<(), Error> {
+        self.terminal.draw(|frame| {
+            let layout = UiLayout::new(frame.region());
 
-            self.tabs.render(&mut frame, layout.tabs_chunk());
+            self.tabs.render(frame.with_region(layout.tabs_chunk()));
 
             self.process_list
-                .render(&mut frame, layout.processes_chunk(), metrics_overview);
-            self.chart.render(&mut frame, layout.chart_chunk(), metrics_view);
-            self.metadata_bar.render(&mut frame, layout.metadata_chunk());
+                .render(frame.with_region(layout.processes_chunk()), overview);
+
+            if let Some(view) = view {
+                self.chart.render(frame.with_region(layout.chart_chunk()), view);
+            }
+
+            self.metadata_bar.render(frame.with_region(layout.metadata_chunk()));
         })
     }
 
