@@ -349,6 +349,7 @@ where
         self.metrics
             .iter()
             .skip(expired_metrics_count)
+            .take(span.size())
             .map(|m| m as &dyn Metric)
             .collect()
     }
@@ -415,9 +416,9 @@ mod test_process_data {
     #[rstest]
     fn test_extract_should_only_return_1_metric_if_span_covers_1_iteration() {
         let process_data = build_process_data_and_push(&[0., 1., 2., 3.]);
-        let view = process_data.view(Span::new(3, 3));
+        let view = process_data.view(Span::new(1, 1));
 
-        assert_view_slice_equals_percent_metrics_slice(view.as_slice(), &[3.]);
+        assert_view_slice_equals_percent_metrics_slice(view.as_slice(), &[1.]);
     }
 
     #[rstest]
