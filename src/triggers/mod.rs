@@ -29,6 +29,8 @@ pub enum Trigger {
     Resize,
     NextTab,
     PreviousTab,
+    ScrollLeft,
+    ScrollRight,
 }
 
 pub struct TriggersEmitter;

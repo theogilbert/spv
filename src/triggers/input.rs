@@ -48,9 +48,12 @@ impl InputListener {
     }
 
     fn on_key_pressed(&mut self, key: char) {
-        if let 'q' = key {
-            self.send_exit();
-        }
+        match key {
+            'q' => self.send_exit(),
+            'h' => self.send(Trigger::ScrollLeft),
+            'l' => self.send(Trigger::ScrollRight),
+            _ => {}
+        };
     }
 
     fn send_exit(&mut self) {

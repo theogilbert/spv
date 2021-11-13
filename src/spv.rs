@@ -63,12 +63,19 @@ impl SpvApplication {
                 }
                 Trigger::NextTab => self.ui.next_tab(),
                 Trigger::PreviousTab => self.ui.previous_tab(),
+                Trigger::ScrollLeft => self.scroll(-1),
+                Trigger::ScrollRight => self.scroll(1)
             }
 
             self.draw_ui()?;
         }
 
         Ok(())
+    }
+
+    fn scroll(&mut self, delta: i64) {
+        let current_iteration = self.iteration_tracker.current();
+        self.represented_span.scroll(current_iteration, delta)
     }
 
     fn calibrate_probes(&mut self) -> Result<(), Error> {
