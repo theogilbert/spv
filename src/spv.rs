@@ -65,6 +65,7 @@ impl SpvApplication {
                 Trigger::PreviousTab => self.ui.previous_tab(),
                 Trigger::ScrollLeft => self.scroll(-1),
                 Trigger::ScrollRight => self.scroll(1),
+                Trigger::ScrollReset => self.scroll(self.iteration_tracker.current() as i64),
             }
 
             self.draw_ui()?;

@@ -29,8 +29,12 @@ pub enum Trigger {
     Resize,
     NextTab,
     PreviousTab,
+    /// Scroll the chart toward the left
     ScrollLeft,
+    /// Scroll the chart toward the right
     ScrollRight,
+    /// Reset the chart's default position to the current iteration
+    ScrollReset,
 }
 
 pub struct TriggersEmitter;

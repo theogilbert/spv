@@ -52,6 +52,7 @@ impl InputListener {
             'q' => self.send_exit(),
             'h' => self.send(Trigger::ScrollLeft),
             'l' => self.send(Trigger::ScrollRight),
+            'g' => self.send(Trigger::ScrollReset),
             _ => {}
         };
     }
