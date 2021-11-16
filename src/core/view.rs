@@ -69,8 +69,8 @@ impl<'a> MetricView<'a> {
     ///
     /// # Arguments
     ///  * span: Indicates from how long ago the metrics should be compared
-    pub fn max_concise_repr(&self) -> String {
-        self.max_metric().concise_repr()
+    pub fn concise_repr_of_value(&self, value: f64) -> String {
+        self.default.concise_repr_of_value(value)
     }
 
     fn max_metric(&self) -> &dyn Metric {
@@ -129,7 +129,7 @@ mod test_metric_view {
     use rstest::*;
 
     use crate::core::iteration::Span;
-    use crate::core::metrics::{Metric, PercentMetric};
+    use crate::core::metrics::{IOMetric, Metric, PercentMetric};
     use crate::core::view::MetricView;
 
     #[fixture]
@@ -186,10 +186,11 @@ mod test_metric_view {
     }
 
     #[rstest]
-    fn test_max_repr_should_return_repr_of_max_value(metrics: Vec<PercentMetric>, default: Box<dyn Metric>) {
-        let view = MetricView::new(metrics_to_dyn(&metrics), default, Span::new(1, 10), 1);
+    fn test_concise_repr_should_return_repr_of_default_metric() {
+        let default = Box::new(IOMetric::default()) as Box<dyn Metric>;
+        let view = MetricView::new(vec![], default, Span::new(1, 10), 1);
 
-        assert_eq!(view.max_concise_repr(), "20.0".to_string());
+        assert_eq!(view.concise_repr_of_value(2048.), "2.0k".to_string());
     }
 
     #[rstest]

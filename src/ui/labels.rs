@@ -63,8 +63,8 @@ mod test_relative_time_label {
 
     use rstest::*;
 
-    use crate::ui::Error;
     use crate::ui::labels::{format_time_delta, TimeLabelMaker};
+    use crate::ui::Error;
 
     #[test]
     fn test_should_return_error_if_iter_greater_than_current_iter() {

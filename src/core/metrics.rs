@@ -35,6 +35,13 @@ pub trait Metric: Debug {
     /// This representation may not include all components of the metric
     fn concise_repr(&self) -> String;
 
+    /// For a given value to be interpreted as the value returned by [`max_value()`](#method.max_value), return a
+    /// concise representation of it.
+    ///
+    /// # Arguments
+    /// * `value`: The value for which to generate a concise representation
+    fn concise_repr_of_value(&self, value: f64) -> String;
+
     /// Returns an explicit representation of a component of the metric
     ///
     /// # Arguments
@@ -102,7 +109,11 @@ impl Metric for PercentMetric {
     }
 
     fn concise_repr(&self) -> String {
-        format!("{:.1}", self.percent_usage)
+        self.concise_repr_of_value(self.percent_usage)
+    }
+
+    fn concise_repr_of_value(&self, value: f64) -> String {
+        format!("{:.1}", value)
     }
 
     fn explicit_repr(&self, index: usize) -> Result<String, Error> {
@@ -183,7 +194,11 @@ impl Metric for IOMetric {
     }
 
     fn concise_repr(&self) -> String {
-        format_bytes(self.max_value() as usize, 1)
+        self.concise_repr_of_value(self.max_value())
+    }
+
+    fn concise_repr_of_value(&self, value: f64) -> String {
+        format_bytes(value as usize, 1)
     }
 
     fn explicit_repr(&self, index: usize) -> Result<String, Error> {

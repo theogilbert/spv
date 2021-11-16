@@ -1,4 +1,5 @@
 use std::time::Duration;
+
 use tui::style::{Color, Style};
 use tui::symbols;
 use tui::text::Span;
@@ -27,7 +28,7 @@ impl MetricsChart {
         let chart = Chart::new(build_datasets(&raw_data, view))
             .block(Block::default().borders(Borders::ALL))
             .x_axis(self.define_x_axis(view, current_iter)?)
-            .y_axis(self.define_y_axis(view, view.max_concise_repr(), view.unit()));
+            .y_axis(self.define_y_axis(view));
 
         frame.render_widget(chart);
         Ok(())
@@ -49,19 +50,20 @@ impl MetricsChart {
             .labels(labels))
     }
 
-    fn define_y_axis(&self, metrics_view: &MetricView, upper_bound_repr: String, unit: &'static str) -> Axis {
+    fn define_y_axis(&self, metrics_view: &MetricView) -> Axis {
         const MINIMUM_UPPER_BOUND: f64 = 10.;
         let upper_bound = (1.1 * metrics_view.max_f64()).max(MINIMUM_UPPER_BOUND);
 
+        let labels = vec![
+            Span::from("0"),
+            Span::from(metrics_view.concise_repr_of_value(upper_bound)),
+        ];
+
         Axis::default()
-            .title(unit)
+            .title(metrics_view.unit())
             .style(Style::default().fg(Color::White))
             .bounds([0., upper_bound]) // 0 to 1.1 * max(dataset.y)
-            .labels(MetricsChart::build_y_axis_labels(upper_bound_repr))
-    }
-
-    fn build_y_axis_labels<'a>(upper_bound_repr: String) -> Vec<Span<'a>> {
-        vec![Span::from("0"), Span::from(upper_bound_repr)]
+            .labels(labels)
     }
 }
 
