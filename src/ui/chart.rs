@@ -1,45 +1,52 @@
+use std::time::Duration;
 use tui::style::{Color, Style};
 use tui::symbols;
 use tui::text::Span;
 use tui::widgets::{Axis, Block, Borders, Chart, Dataset, GraphType};
 
+use crate::core::iteration::Iteration;
 use crate::core::view::MetricView;
+use crate::ui::labels::TimeLabelMaker;
 use crate::ui::terminal::FrameRegion;
+use crate::ui::Error;
 
-pub struct MetricsChart {}
-
-impl Default for MetricsChart {
-    fn default() -> Self {
-        MetricsChart {}
-    }
+pub struct MetricsChart {
+    time_label_maker: TimeLabelMaker,
 }
 
 impl MetricsChart {
-    pub fn render(&self, frame: &mut FrameRegion, metrics_view: &MetricView) {
-        let raw_data = build_raw_vecs(metrics_view);
-
-        let chart = Chart::new(build_datasets(&raw_data, metrics_view))
-            .block(Block::default().borders(Borders::ALL))
-            .x_axis(self.define_x_axis(metrics_view))
-            .y_axis(self.define_y_axis(metrics_view, metrics_view.max_concise_repr(), metrics_view.unit()));
-
-        frame.render_widget(chart);
+    pub fn new(resolution: Duration) -> Self {
+        MetricsChart {
+            time_label_maker: TimeLabelMaker::new(resolution),
+        }
     }
 
-    fn define_x_axis(&self, metrics_view: &MetricView) -> Axis {
-        let labels = ["-1m", "now"] // TODO make this actually reflect metrics_view
-            .iter()
-            .cloned()
-            .map(Span::from)
-            .collect();
+    pub fn render(&self, frame: &mut FrameRegion, view: &MetricView, current_iter: Iteration) -> Result<(), Error> {
+        let raw_data = build_raw_vecs(view);
 
-        Axis::default()
+        let chart = Chart::new(build_datasets(&raw_data, view))
+            .block(Block::default().borders(Borders::ALL))
+            .x_axis(self.define_x_axis(view, current_iter)?)
+            .y_axis(self.define_y_axis(view, view.max_concise_repr(), view.unit()));
+
+        frame.render_widget(chart);
+        Ok(())
+    }
+
+    fn define_x_axis(&self, metrics_view: &MetricView, current_iter: Iteration) -> Result<Axis, Error> {
+        let (begin, end) = (metrics_view.span().begin(), metrics_view.span().end());
+        let labels = vec![
+            Span::from(self.time_label_maker.relative_label(current_iter, begin)?),
+            Span::from(self.time_label_maker.relative_label(current_iter, end)?),
+        ];
+
+        Ok(Axis::default()
             .style(Style::default().fg(Color::White))
             .bounds([
                 metrics_view.span().signed_begin() as f64,
                 metrics_view.span().end() as f64,
             ])
-            .labels(labels)
+            .labels(labels))
     }
 
     fn define_y_axis(&self, metrics_view: &MetricView, upper_bound_repr: String, unit: &'static str) -> Axis {

@@ -1,5 +1,7 @@
 use std::io;
+use std::time::Duration;
 
+use log::error;
 use thiserror::Error;
 
 use crate::core::iteration::Iteration;
@@ -44,12 +46,17 @@ impl SpvUI {
             terminal: Terminal::new()?,
             tabs,
             process_list: ProcessList::default(),
-            chart: MetricsChart::default(),
+            chart: MetricsChart::new(resolution),
             metadata_bar: MetadataBar::default(),
         })
     }
 
-    pub fn render(&mut self, overview: &MetricsOverview, view: &Option<MetricView>) -> Result<(), Error> {
+    pub fn render(
+        &mut self,
+        overview: &MetricsOverview,
+        view: &Option<MetricView>,
+        current_iter: Iteration,
+    ) -> Result<(), Error> {
         self.terminal.draw(|frame| {
             let layout = UiLayout::new(frame.region());
 
@@ -59,7 +66,9 @@ impl SpvUI {
                 .render(frame.with_region(layout.processes_chunk()), overview);
 
             if let Some(view) = view {
-                self.chart.render(frame.with_region(layout.chart_chunk()), view);
+                self.chart
+                    .render(frame.with_region(layout.chart_chunk()), view, current_iter)
+                    .unwrap_or_else(|e| error!("Error rendering chart: {:?}", e));
             }
 
             self.metadata_bar.render(frame.with_region(layout.metadata_chunk()));

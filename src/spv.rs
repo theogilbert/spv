@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::mpsc::Receiver;
+use std::time::Duration;
 
 use log::warn;
 
@@ -25,8 +26,9 @@ impl SpvApplication {
         receiver: Receiver<Trigger>,
         collectors: Vec<Box<dyn MetricCollector>>,
         process_view: ProcessCollector,
+        resolution: Duration,
     ) -> Result<Self, Error> {
-        let ui = SpvUI::new(collectors.iter().map(|p| p.name().to_string()))?;
+        let ui = SpvUI::new(collectors.iter().map(|p| p.name().to_string()), resolution)?;
 
         let collectors_map = collectors.into_iter().map(|mc| (mc.name().to_string(), mc)).collect();
 
@@ -58,9 +60,7 @@ impl SpvApplication {
                 }
                 Trigger::NextProcess => self.ui.next_process(),
                 Trigger::PreviousProcess => self.ui.previous_process(),
-                Trigger::Resize => {
-                    // No need to do anything, just receiving a signal will refresh UI
-                }
+                Trigger::Resize => (), // No need to do anything, just receiving a signal will refresh UI at the end of the loop
                 Trigger::NextTab => self.ui.next_tab(),
                 Trigger::PreviousTab => self.ui.previous_tab(),
                 Trigger::ScrollLeft => self.scroll(-1),
@@ -160,7 +160,9 @@ impl SpvApplication {
             .current_process()
             .map(|pm| current_collector.view(pm, self.represented_span));
 
-        self.ui.render(&overview, &metrics_view).map_err(Error::UiError)
+        self.ui
+            .render(&overview, &metrics_view, self.iteration_tracker.current())
+            .map_err(Error::UiError)
     }
 
     fn current_collector<'a>(
