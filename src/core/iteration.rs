@@ -86,13 +86,18 @@ impl Span {
         }
     }
 
-    /// Creates a `Span` with the given size
+    /// Creates a `Span` with the given size.
     /// The `Span` ends at the `Iteration` 0.
     /// To update the end of the span, see [`set_end_and_shift`](#method.set_end_and_shift)
     ///
+    /// A span must have a span of at least 1 iteration. Attempting to create a span with a size of 0 will panic.
+    ///
     /// # Arguments
-    /// * `size`: The size of the `Span`
+    /// * `size`: The size of the `Span`. It must at least 1.
     pub fn from_size(size: Iteration) -> Self {
+        if size == 0 {
+            panic!("Invalid size for span: 0")
+        }
         Span { begin: 0, end: 0, size }
     }
 
@@ -115,7 +120,32 @@ impl Span {
     /// * `end`: The last iteration covered by the span
     pub fn set_end_and_resize(&mut self, end: Iteration) {
         self.end = end;
-        self.size = self.end.checked_sub(self.begin).unwrap() + 1;
+        self.size = self.end - self.begin + 1;
+    }
+
+    /// Updates the span by offseting the `begin` and `end` attributes of the span
+    ///
+    /// The span cannot be scrolled before the iteration 0 or after the current iteration.
+    /// This means that `begin` can never be less than 0, and `end` can never be greater than the current iteration.
+    ///
+    /// # Arguments
+    /// * `current_iteration`: Indicates the rightmost limit of the span
+    /// * `delta`: Indicates by how many iterations to shift the span.<br/>
+    ///             A negative number shifts the span toward the iteration 0.<br/>
+    ///             A positive number shifts the span toward the current iteration. <br/>
+    pub fn scroll(&mut self, current_iteration: Iteration, delta: i64) {
+        let projected_end = (self.end as i64 + delta).max(0) as Iteration;
+        let bounded_end = projected_end.max(self.size - 1).min(current_iteration);
+        self.set_end_and_shift(bounded_end);
+    }
+
+    /// Indicates if the span is fully scrolled to the right (toward the current iteration) or if it can be further
+    /// scrolled to the right.
+    ///
+    /// # Arguments
+    /// * `current_iteration` The current iteration of the program
+    pub fn is_fully_scrolled_right(&self, current_iteration: Iteration) -> bool {
+        current_iteration == self.end
     }
 
     /// Returns the first iteration covered by the span.
@@ -274,5 +304,59 @@ mod test_span {
         span.set_end_and_shift(120);
 
         assert_eq!(span.signed_begin(), 61);
+    }
+
+    #[test]
+    fn test_should_scroll_to_the_right() {
+        let mut span = Span::new(10, 20);
+        span.scroll(100, 10);
+
+        assert_eq!(span, Span::new(20, 30));
+    }
+
+    #[test]
+    fn test_should_scroll_to_the_left() {
+        let mut span = Span::new(20, 30);
+        span.scroll(100, -10);
+
+        assert_eq!(span, Span::new(10, 20));
+    }
+
+    #[test]
+    fn test_should_not_scroll_before_iteration_0() {
+        let mut span = Span::new(20, 30);
+        span.scroll(100, -50);
+
+        assert_eq!(span, Span::new(0, 10));
+    }
+
+    #[test]
+    fn test_should_not_scroll_after_current_iteration() {
+        let mut span = Span::new(20, 30);
+        span.scroll(100, 100);
+
+        assert_eq!(span, Span::new(90, 100));
+    }
+
+    #[test]
+    fn test_should_be_fully_scrolled_to_the_right_by_default() {
+        let span = Span::from_size(60);
+
+        assert!(span.is_fully_scrolled_right(0));
+    }
+
+    #[test]
+    fn test_should_be_fully_scrolled_to_the_right_when_shifted_to_current_iteration() {
+        let mut span = Span::from_size(60);
+        span.set_end_and_shift(1);
+
+        assert!(span.is_fully_scrolled_right(1));
+    }
+
+    #[test]
+    fn test_should_not_be_fully_scrolled_to_the_right_when_not_ends_at_current_iteration() {
+        let span = Span::from_size(60);
+
+        assert!(!span.is_fully_scrolled_right(1));
     }
 }

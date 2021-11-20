@@ -1,60 +1,69 @@
+use std::time::Duration;
+
 use tui::style::{Color, Style};
 use tui::symbols;
 use tui::text::Span;
 use tui::widgets::{Axis, Block, Borders, Chart, Dataset, GraphType};
 
+use crate::core::iteration::Iteration;
 use crate::core::view::MetricView;
+use crate::ui::labels::TimeLabelMaker;
 use crate::ui::terminal::FrameRegion;
+use crate::ui::Error;
 
-pub struct MetricsChart {}
-
-impl Default for MetricsChart {
-    fn default() -> Self {
-        MetricsChart {}
-    }
+pub struct MetricsChart {
+    time_label_maker: TimeLabelMaker,
 }
 
 impl MetricsChart {
-    pub fn render(&self, frame: &mut FrameRegion, metrics_view: &MetricView) {
-        let raw_data = build_raw_vecs(metrics_view);
-
-        let chart = Chart::new(build_datasets(&raw_data, metrics_view))
-            .block(Block::default().borders(Borders::ALL))
-            .x_axis(self.define_x_axis(metrics_view))
-            .y_axis(self.define_y_axis(metrics_view, metrics_view.max_concise_repr(), metrics_view.unit()));
-
-        frame.render_widget(chart);
+    pub fn new(resolution: Duration) -> Self {
+        MetricsChart {
+            time_label_maker: TimeLabelMaker::new(resolution),
+        }
     }
 
-    fn define_x_axis(&self, metrics_view: &MetricView) -> Axis {
-        let labels = ["-1m", "now"] // TODO make this actually reflect metrics_view
-            .iter()
-            .cloned()
-            .map(Span::from)
-            .collect();
+    pub fn render(&self, frame: &mut FrameRegion, view: &MetricView, current_iter: Iteration) -> Result<(), Error> {
+        let raw_data = build_raw_vecs(view);
 
-        Axis::default()
+        let chart = Chart::new(build_datasets(&raw_data, view))
+            .block(Block::default().borders(Borders::ALL))
+            .x_axis(self.define_x_axis(view, current_iter)?)
+            .y_axis(self.define_y_axis(view));
+
+        frame.render_widget(chart);
+        Ok(())
+    }
+
+    fn define_x_axis(&self, metrics_view: &MetricView, current_iter: Iteration) -> Result<Axis, Error> {
+        let (begin, end) = (metrics_view.span().begin(), metrics_view.span().end());
+        let labels = vec![
+            Span::from(self.time_label_maker.relative_label(current_iter, begin)?),
+            Span::from(self.time_label_maker.relative_label(current_iter, end)?),
+        ];
+
+        Ok(Axis::default()
             .style(Style::default().fg(Color::White))
             .bounds([
                 metrics_view.span().signed_begin() as f64,
                 metrics_view.span().end() as f64,
             ])
-            .labels(labels)
+            .labels(labels))
     }
 
-    fn define_y_axis(&self, metrics_view: &MetricView, upper_bound_repr: String, unit: &'static str) -> Axis {
+    fn define_y_axis(&self, metrics_view: &MetricView) -> Axis {
         const MINIMUM_UPPER_BOUND: f64 = 10.;
         let upper_bound = (1.1 * metrics_view.max_f64()).max(MINIMUM_UPPER_BOUND);
 
+        let labels = vec![
+            Span::from("0"),
+            Span::from(metrics_view.concise_repr_of_value(upper_bound)),
+        ];
+
         Axis::default()
-            .title(unit)
+            .title(metrics_view.unit())
             .style(Style::default().fg(Color::White))
             .bounds([0., upper_bound]) // 0 to 1.1 * max(dataset.y)
-            .labels(MetricsChart::build_y_axis_labels(upper_bound_repr))
-    }
-
-    fn build_y_axis_labels<'a>(upper_bound_repr: String) -> Vec<Span<'a>> {
-        vec![Span::from("0"), Span::from(upper_bound_repr)]
+            .labels(labels)
     }
 }
 
@@ -106,22 +115,23 @@ fn build_raw_vecs(metrics_view: &MetricView) -> Vec<Vec<(f64, f64)>> {
 
 #[cfg(test)]
 mod test_raw_data_from_metrics_view {
+    use crate::core::collection::ProcessData;
     use crate::core::iteration::Span;
-    use crate::core::metrics::{IOMetric, Metric};
-    use crate::core::view::MetricView;
+    use crate::core::metrics::IOMetric;
     use crate::ui::chart::build_raw_vecs;
 
     #[test]
     fn test_should_assign_correct_iteration_to_each_metric() {
-        let metrics_data = vec![IOMetric::new(10, 20), IOMetric::new(30, 40)];
-        let default = IOMetric::default();
+        let mut process_data = ProcessData::<IOMetric>::new(7);
+        process_data.push(IOMetric::new(10, 20));
+        process_data.push(IOMetric::new(30, 40));
 
-        let dyn_metrics_vec = metrics_data.iter().map(|m| m as &dyn Metric).collect();
-        let metrics_view = MetricView::new(dyn_metrics_vec, &default, Span::new(0, 10), 7);
+        let metrics_view = process_data.view(Span::new(0, 10));
         let raw_vecs = build_raw_vecs(&metrics_view);
 
-        let expected_raw_vecs = vec![vec![(7.0, 10.0), (8.0, 30.0)], vec![(7.0, 20.0), (8.0, 40.0)]];
-
-        assert_eq!(raw_vecs, expected_raw_vecs);
+        assert_eq!(
+            raw_vecs,
+            vec![vec![(7.0, 10.0), (8.0, 30.0)], vec![(7.0, 20.0), (8.0, 40.0)]]
+        );
     }
 }

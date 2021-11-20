@@ -31,7 +31,7 @@ fn main() -> anyhow::Result<()> {
 
     let collectors = build_collectors()?;
 
-    let app = SpvApplication::new(rx, collectors, process_view)?;
+    let app = SpvApplication::new(rx, collectors, process_view, refresh_period)?;
     app.run()?;
 
     Ok(())
