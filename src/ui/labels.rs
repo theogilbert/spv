@@ -128,10 +128,7 @@ mod test_relative_time_label {
     }
 
     #[test]
-    fn test_should_display_only_hour_when_greater_than_99_hours() {}
-
-    #[test]
-    fn test_should_not_display_unit_greater_than_hour() {
+    fn test_should_display_only_hour_when_greater_than_99_hours() {
         let label = format_time_delta(100 * 60 * 60 + 300);
         assert_eq!(label, "100h ago");
     }
