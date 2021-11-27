@@ -58,6 +58,9 @@ fn first_iteration_timestamp() -> Timestamp {
     GLOBAL_TIMESTAMP.with(|stamp_rc| stamp_rc.initial())
 }
 
+/// Updates the value returned by `Timestamp::now()`.
+///
+/// All timestamp creations between two calls of this function return the same value.
 pub(crate) fn refresh_current_timestamp() {
     GLOBAL_TIMESTAMP.with(|stamp_rc| stamp_rc.refresh());
 }
@@ -281,7 +284,7 @@ impl Span {
     }
 
     /// Returns the amount of time covered by the span.<br/>
-    fn duration(&self) -> Duration {
+    pub fn duration(&self) -> Duration {
         self.end.duration_since(&self.begin)
     }
 
@@ -313,6 +316,7 @@ mod test_span {
 
         assert_eq!(span.begin(), Timestamp::now());
         assert_eq!(span.end(), Timestamp::now());
+        assert_eq!(span.duration(), Duration::from_secs(0));
     }
 
     #[test]
@@ -322,48 +326,31 @@ mod test_span {
 
         assert_eq!(span.end(), Timestamp::now());
         assert_eq!(span.begin(), span.end() - Duration::from_secs(10));
+        assert_eq!(span.duration(), Duration::from_secs(10));
     }
 
     #[test]
-    fn test_should_update_end_when_setting_end_and_updating_begin() {
+    fn test_should_update_span_when_setting_end_and_updating_begin() {
         setup_fake_clock_to_prevent_substract_overflow();
         let mut span = Span::from_duration(Duration::from_secs(60));
-        let original_end = span.end();
+        let original_span = span;
 
         span.set_end_and_shift(span.end() + Duration::from_secs(120));
 
-        assert_eq!(span.end(), original_end + Duration::from_secs(120));
+        assert_eq!(span.begin(), original_span.begin() + Duration::from_secs(120));
+        assert_eq!(span.end(), original_span.end() + Duration::from_secs(120));
+        assert_eq!(span.duration(), Duration::from_secs(60));
     }
 
     #[test]
-    fn test_should_update_begin_when_setting_end_and_updating_begin() {
-        setup_fake_clock_to_prevent_substract_overflow();
-        let mut span = Span::from_duration(Duration::from_secs(60));
-        let original_begin = span.begin();
-
-        span.set_end_and_shift(span.end() + Duration::from_secs(120));
-
-        assert_eq!(span.begin(), original_begin + Duration::from_secs(120));
-    }
-
-    #[test]
-    fn test_should_update_end_when_setting_end_and_updating_size() {
+    fn test_should_update_span_when_setting_end_and_updating_size() {
         let mut span = Span::from_begin(Timestamp::now());
-        let original_end = span.end();
+        let original_span = span;
 
         span.set_end_and_resize(span.end() + Duration::from_secs(10));
 
-        assert_eq!(span.end(), original_end + Duration::from_secs(10));
-    }
-
-    #[test]
-    fn test_should_not_update_begin_when_setting_end_and_updating_size() {
-        let mut span = Span::from_begin(Timestamp::now());
-        let original_begin = span.begin();
-
-        span.set_end_and_resize(span.end() + Duration::from_secs(10));
-
-        assert_eq!(span.begin(), original_begin);
+        assert_eq!(span.begin(), original_span.begin());
+        assert_eq!(span.end(), original_span.end() + Duration::from_secs(10));
     }
 
     #[rstest]
