@@ -3,6 +3,7 @@
 use std::cmp::Ordering;
 use std::fmt::Debug;
 
+use crate::core::time::Timestamp;
 use crate::core::Error;
 
 /// Types which are probed by [`Probe`](crate::core::probe::Probe) implementations,
@@ -66,6 +67,18 @@ impl PartialEq for &dyn Metric {
         }
 
         true
+    }
+}
+
+/// A metric that has a timestamp associated to it
+pub struct DatedMetric<'a> {
+    pub timestamp: Timestamp,
+    pub metric: &'a dyn Metric,
+}
+
+impl<'a> DatedMetric<'a> {
+    pub fn new(metric: &'a dyn Metric, timestamp: Timestamp) -> Self {
+        Self { metric, timestamp }
     }
 }
 

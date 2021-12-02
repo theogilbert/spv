@@ -4,10 +4,10 @@ use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
-use crate::core::iteration::{Iteration, Span};
-use crate::core::metrics::Metric;
+use crate::core::metrics::{DatedMetric, Metric};
 use crate::core::probe::Probe;
 use crate::core::process::{Pid, ProcessMetadata};
+use crate::core::time::{Span, Timestamp};
 use crate::core::view::{MetricView, MetricsOverview};
 use crate::core::Error;
 
@@ -22,8 +22,7 @@ pub trait MetricCollector {
     ///
     /// # Arguments
     ///  * `pids`: A slice containing the [`Pids`](crate::core::process::Pid) to probe.
-    /// * `current_iteration`: The current program iteration at which this method is called
-    fn collect(&mut self, pids: &[Pid], current_iteration: Iteration) -> Result<(), Error>;
+    fn collect(&mut self, pids: &[Pid]) -> Result<(), Error>;
 
     /// Probes metrics for the given processes, without storing them.
     ///
@@ -55,7 +54,7 @@ pub trait MetricCollector {
     ///
     /// # Arguments
     ///  * `pm`: The process for which to view metrics
-    ///  * `span`: The span of iterations covered by the metric view
+    ///  * `span`: The time period covered by the metric view
     fn view(&self, pm: &ProcessMetadata, span: Span) -> MetricView;
 
     /// Builds a [`MetricsOverview`](crate::core::view::MetricsOverview), containing the last metrics
@@ -90,11 +89,11 @@ impl<M: 'static> MetricCollector for ProbeCollector<M>
 where
     M: Metric + Copy + PartialOrd + Default,
 {
-    fn collect(&mut self, pids: &[Pid], current_iteration: Iteration) -> Result<(), Error> {
+    fn collect(&mut self, pids: &[Pid]) -> Result<(), Error> {
         let metrics = self.probe.probe_processes(pids)?;
 
         for (pid, m) in metrics.into_iter() {
-            self.collection.push(pid, m, current_iteration);
+            self.collection.push(pid, m);
         }
 
         Ok(())
@@ -128,14 +127,15 @@ where
 mod test_probe_collector {
     use std::cmp::Ordering;
     use std::collections::HashMap;
+    use std::time::Duration;
 
     use rstest::*;
 
     use crate::core::collection::{MetricCollector, ProbeCollector};
-    use crate::core::iteration::Span;
-    use crate::core::metrics::{Metric, PercentMetric};
+    use crate::core::metrics::PercentMetric;
     use crate::core::probe::Probe;
     use crate::core::process::{Pid, ProcessMetadata};
+    use crate::core::time::{Span, Timestamp};
     use crate::core::Error;
 
     struct ProbeFake {
@@ -168,7 +168,7 @@ mod test_probe_collector {
     ) {
         let return_map = hashmap!(1 => metric_pid1, 2 => metric_pid2);
         let mut collector = create_collector_with_map(return_map);
-        collector.collect(&[1, 2], 0).unwrap();
+        collector.collect(&[1, 2]).unwrap();
 
         assert_eq!(collector.compare_pids_by_last_metrics(1, 2), expected_ord);
     }
@@ -184,7 +184,7 @@ mod test_probe_collector {
     fn test_collector_should_compare_collected_process_metric_to_default_when_other_process_has_not_been_collected() {
         let return_map = hashmap!(1 => 50.);
         let mut collector = create_collector_with_map(return_map);
-        collector.collect(&[1], 0).unwrap();
+        collector.collect(&[1]).unwrap();
 
         // Pid 1 should be Ordering::Greater than Pid 2 with 50% > default=0%
         assert_eq!(collector.compare_pids_by_last_metrics(1, 2), Ordering::Greater);
@@ -192,34 +192,37 @@ mod test_probe_collector {
 
     #[rstest]
     fn test_process_metrics_should_be_empty_when_not_collected() {
-        let process_data = ProcessMetadata::new(1, 0, "cmd");
+        let process_data = ProcessMetadata::new(1, "cmd");
         let collector = create_collector_with_map(hashmap!());
 
-        let view = collector.view(&process_data, Span::new(0, 59));
+        let span = Span::new(Timestamp::now(), Timestamp::now() + Duration::from_secs(60));
+        let view = collector.view(&process_data, span);
 
         assert_eq!(view.as_slice().len(), 0);
     }
 
     #[rstest]
     fn test_collector_should_be_empty_when_only_calibrated() {
-        let process_data = ProcessMetadata::new(1, 0, "cmd");
+        let process_data = ProcessMetadata::new(1, "cmd");
         let mut collector = create_collector_with_map(hashmap!(1 => 10.));
         collector.calibrate(&[1]).unwrap();
 
-        let view = collector.view(&process_data, Span::new(0, 59));
+        let span = Span::new(Timestamp::now(), Timestamp::now() + Duration::from_secs(60));
+        let view = collector.view(&process_data, span);
 
         assert_eq!(view.as_slice().len(), 0);
     }
 
     #[rstest]
     fn test_collector_should_not_be_empty_when_collected() {
-        let process_data = ProcessMetadata::new(1, 0, "cmd");
+        let process_data = ProcessMetadata::new(1, "cmd");
         let mut collector = create_collector_with_map(hashmap!(1 => 10.));
-        collector.collect(&[1], 0).unwrap();
+        collector.collect(&[1]).unwrap();
 
-        let view = collector.view(&process_data, Span::new(0, 59));
+        let span = Span::new(Timestamp::now(), Timestamp::now() + Duration::from_secs(60));
+        let view = collector.view(&process_data, span);
 
-        assert_eq!(view.as_slice(), &[&PercentMetric::new(10.) as &dyn Metric]);
+        assert_eq!(view.as_slice().len(), 1);
     }
 }
 
@@ -243,10 +246,10 @@ where
         }
     }
 
-    pub fn push(&mut self, pid: Pid, metric: M, current_iteration: Iteration) {
+    pub fn push(&mut self, pid: Pid, metric: M) {
         let process_data = match self.processes_data.entry(pid) {
             Entry::Occupied(o) => o.into_mut(),
-            Entry::Vacant(v) => v.insert(ProcessData::new(current_iteration)),
+            Entry::Vacant(v) => v.insert(ProcessData::new()),
         };
 
         process_data.push(metric);
@@ -264,16 +267,11 @@ where
         self.processes_data
             .get(&pm.pid())
             .map(|pd| pd.view(span))
-            .unwrap_or_else(|| Self::build_default_view(pm, span))
+            .unwrap_or_else(|| Self::build_default_view(span))
     }
 
-    fn build_default_view<'a, 'b>(pm: &'a ProcessMetadata, span: Span) -> MetricView<'b> {
-        MetricView::new(
-            vec![],
-            Box::new(M::default()) as Box<dyn Metric>,
-            span,
-            pm.running_span().begin(),
-        )
+    fn build_default_view<'a>(span: Span) -> MetricView<'a> {
+        MetricView::new(vec![], Box::new(M::default()) as Box<dyn Metric>, span)
     }
 
     pub fn overview(&self) -> MetricsOverview {
@@ -302,11 +300,20 @@ mod test_metric_collection {
     #[test]
     fn test_should_return_last_metric_when_has_metric() {
         let mut collection = MetricCollection::<PercentMetric>::new();
-        collection.push(1, PercentMetric::new(1.), 0);
-        collection.push(1, PercentMetric::new(2.), 1);
+        collection.push(1, PercentMetric::new(1.));
+        collection.push(1, PercentMetric::new(2.));
 
         assert_eq!(collection.last_or_default(1), &PercentMetric::new(2.));
     }
+}
+
+/// Just like `DatedMetric`, except here the metric type is a concrete type
+struct ConcreteDatedMetric<M>
+where
+    M: Metric,
+{
+    timestamp: Timestamp,
+    metric: M,
 }
 
 /// ProcessData is the private structure which actually stores the concrete metrics of a process
@@ -314,43 +321,39 @@ pub(crate) struct ProcessData<M>
 where
     M: Metric + Default,
 {
-    metrics: Vec<M>,
-    first_iteration: Iteration,
+    metrics: Vec<ConcreteDatedMetric<M>>,
 }
 
 impl<M: 'static> ProcessData<M>
 where
     M: Metric + Default,
 {
-    pub fn new(first_metric_iteration: Iteration) -> Self {
-        Self {
-            metrics: vec![],
-            first_iteration: first_metric_iteration,
-        }
+    pub fn new() -> Self {
+        Self { metrics: vec![] }
     }
 
     pub fn push(&mut self, metric: M) {
-        self.metrics.push(metric);
+        self.metrics.push(ConcreteDatedMetric {
+            timestamp: Timestamp::now(),
+            metric,
+        });
     }
 
     pub fn last(&self) -> Option<&M> {
-        self.metrics.last()
+        self.metrics.last().map(|m| &m.metric)
     }
 
     pub fn view(&self, span: Span) -> MetricView {
         let metrics = self.extract_metrics_according_to_span(&span);
         let default = Box::new(M::default()) as Box<dyn Metric>;
-        MetricView::new(metrics, default, span, self.first_iteration)
+        MetricView::new(metrics, default, span)
     }
 
-    fn extract_metrics_according_to_span(&self, span: &Span) -> Vec<&dyn Metric> {
-        let expired_metrics_count = span.begin().checked_sub(self.first_iteration).unwrap_or(usize::MIN);
-
+    fn extract_metrics_according_to_span(&self, span: &Span) -> Vec<DatedMetric> {
         self.metrics
             .iter()
-            .skip(expired_metrics_count)
-            .take(span.size())
-            .map(|m| m as &dyn Metric)
+            .filter(|cdm| span.contains(cdm.timestamp))
+            .map(|cdm| DatedMetric::new(&cdm.metric as &dyn Metric, cdm.timestamp))
             .collect()
     }
 }
@@ -358,89 +361,132 @@ where
 #[cfg(test)]
 mod test_process_data {
     use rstest::*;
+    use std::time::Duration;
 
     use crate::core::collection::ProcessData;
-    use crate::core::iteration::Span;
     use crate::core::metrics::{Metric, PercentMetric};
-    use crate::core::process::ProcessMetadata;
+    use crate::core::time::test_utils::{
+        advance_time_and_refresh_timestamp, setup_fake_clock_to_prevent_substract_overflow,
+    };
+    use crate::core::time::{Span, Timestamp};
+    use crate::core::view::MetricView;
 
+    // Builds PercentMetric values from `metrics`, and push them to the ProcessData instance with a 1s interval between
+    // each metrics. The last metric is pushed at Timestamp::now().
     fn build_process_data_and_push(metrics: &[f64]) -> ProcessData<PercentMetric> {
-        let mut process_data = ProcessData::new(0);
-        metrics
-            .into_iter()
-            .for_each(|v| process_data.push(PercentMetric::new(*v)));
+        let mut process_data = ProcessData::new();
+
+        metrics.into_iter().for_each(|v| {
+            advance_time_and_refresh_timestamp(Duration::from_secs(1));
+            process_data.push(PercentMetric::new(*v));
+        });
 
         process_data
     }
 
-    fn assert_view_slice_equals_percent_metrics_slice(view_slice: &[&dyn Metric], percent_values: &[f64]) {
-        let percent_metrics: Vec<PercentMetric> =
-            percent_values.iter().copied().map(|v| PercentMetric::new(v)).collect();
+    // Builds PercentMetric instances from `percent_values` and compares them to the metrics in the view
+    fn assert_view_metrics_equals_percent_metrics(view: &MetricView, percent_values: &[f64]) {
+        let pct_metrics: Vec<PercentMetric> = percent_values.iter().copied().map(|v| PercentMetric::new(v)).collect();
 
-        let dyn_metrics_slice: Vec<&dyn Metric> = percent_metrics.iter().map(|p| p as &dyn Metric).collect();
+        let pct_dyn_metrics: Vec<&dyn Metric> = pct_metrics.iter().map(|p| p as &dyn Metric).collect();
 
-        assert_eq!(view_slice, &dyn_metrics_slice);
-    }
+        let view_metrics: Vec<&dyn Metric> = view.as_slice().iter().map(|dm| dm.metric).collect();
 
-    #[fixture]
-    fn process_metadata() -> ProcessMetadata {
-        ProcessMetadata::new(2, 0, "command")
+        assert_eq!(view_metrics, pct_dyn_metrics);
     }
 
     #[rstest]
     fn test_view_should_be_empty_by_default() {
-        let process_data = ProcessData::<PercentMetric>::new(0);
-        let view = process_data.view(Span::new(0, 59));
+        let process_data = ProcessData::<PercentMetric>::new();
 
-        assert_view_slice_equals_percent_metrics_slice(view.as_slice(), &[]);
+        let span = Span::new(Timestamp::now(), Timestamp::now() + Duration::from_secs(60));
+        let view = process_data.view(span);
+
+        assert_view_metrics_equals_percent_metrics(&view, &[]);
     }
 
     #[rstest]
     fn test_view_should_include_metrics_in_span() {
         let process_data = build_process_data_and_push(&[0., 1., 2., 3.]);
-        let view = process_data.view(Span::new(0, 3));
 
-        assert_view_slice_equals_percent_metrics_slice(view.as_slice(), &[0., 1., 2., 3.]);
+        let span = Span::new(Timestamp::now() - Duration::from_secs(3), Timestamp::now());
+        let view = process_data.view(span);
+
+        assert_view_metrics_equals_percent_metrics(&view, &[0., 1., 2., 3.]);
+    }
+
+    #[rstest]
+    fn test_should_correctly_date_metrics() {
+        let process_data = build_process_data_and_push(&[0., 1., 2., 3.]);
+
+        let span = Span::new(Timestamp::now() - Duration::from_secs(3), Timestamp::now());
+        let view = process_data.view(span);
+
+        let metrics_dates: Vec<_> = view.as_slice().iter().map(|dm| dm.timestamp).collect();
+
+        assert_eq!(
+            metrics_dates,
+            vec![
+                Timestamp::now() - Duration::from_secs(3),
+                Timestamp::now() - Duration::from_secs(2),
+                Timestamp::now() - Duration::from_secs(1),
+                Timestamp::now(),
+            ]
+        )
     }
 
     #[rstest]
     fn test_too_old_metrics_should_not_be_in_view_when_process_has_few_metrics() {
         let process_data = build_process_data_and_push(&[0., 1., 2., 3.]);
-        let view = process_data.view(Span::new(2, 3));
 
-        // with the specified span (begin=2), only the metrics 2 and 3 should be exported in the view
-        // as process_metadata has a spawn_iteration value of 0 (first metric created at iteration 0)
-        assert_view_slice_equals_percent_metrics_slice(view.as_slice(), &[2., 3.]);
+        let span = Span::new(Timestamp::now() - Duration::from_secs(1), Timestamp::now());
+        let view = process_data.view(span);
+
+        assert_view_metrics_equals_percent_metrics(&view, &[2., 3.]);
     }
 
     #[rstest]
     fn test_extract_should_only_return_1_metric_if_span_covers_1_iteration() {
         let process_data = build_process_data_and_push(&[0., 1., 2., 3.]);
-        let view = process_data.view(Span::new(1, 1));
 
-        assert_view_slice_equals_percent_metrics_slice(view.as_slice(), &[1.]);
+        let second_value_timestamp = Timestamp::now() - Duration::from_secs(2);
+        let span = Span::new(second_value_timestamp, second_value_timestamp);
+
+        let view = process_data.view(span);
+
+        assert_view_metrics_equals_percent_metrics(&view, &[1.]);
     }
 
     #[rstest]
     fn test_extract_should_only_return_2_metrics_if_span_covers_2_iterations() {
         let process_data = build_process_data_and_push(&[0., 1., 2., 3.]);
-        let view = process_data.view(Span::new(2, 3));
 
-        assert_view_slice_equals_percent_metrics_slice(view.as_slice(), &[2., 3.]);
+        let span = Span::new(Timestamp::now() - Duration::from_secs(1), Timestamp::now());
+        let view = process_data.view(span);
+
+        assert_view_metrics_equals_percent_metrics(&view, &[2., 3.]);
     }
 
     #[rstest]
     fn test_should_only_return_existing_items_when_span_greater_than_metric_count() {
+        setup_fake_clock_to_prevent_substract_overflow();
         let process_data = build_process_data_and_push(&[0., 1., 2., 3.]);
-        let view = process_data.view(Span::new(0, 59));
 
-        assert_view_slice_equals_percent_metrics_slice(view.as_slice(), &[0., 1., 2., 3.]);
+        let span = Span::new(
+            Timestamp::now() - Duration::from_secs(60),
+            Timestamp::now() + Duration::from_secs(60),
+        );
+        let view = process_data.view(span);
+
+        assert_view_metrics_equals_percent_metrics(&view, &[0., 1., 2., 3.]);
     }
 
     #[rstest]
     fn test_max_f64_should_not_return_values_out_of_span() {
         let process_data = build_process_data_and_push(&[10., 0., 2.]);
-        let view = process_data.view(Span::new(1, 2));
+
+        let span = Span::new(Timestamp::now() - Duration::from_secs(1), Timestamp::now());
+        let view = process_data.view(span);
 
         assert_eq!(view.max_f64(), 2.);
     }
