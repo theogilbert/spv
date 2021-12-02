@@ -66,21 +66,25 @@ pub(crate) fn refresh_current_timestamp() {
 }
 
 /// Contains various utilities used to manipulate the current time
-/// Note that updating the current time will not affect `Timestamp::now()` is `update_iteration_timestamp()` is not called.
 #[cfg(test)]
 pub mod test_utils {
     use crate::core::time::refresh_current_timestamp;
     use sn_fake_clock::FakeClock;
     use std::time::Duration;
 
-    pub fn set_timestamp(time: u64) {
-        FakeClock::set_time(time);
-        refresh_current_timestamp();
-    }
-
+    /// Advance the time so that `Timestamp::now()` returns an updated value
     pub fn advance_time_and_refresh_timestamp(duration: Duration) {
         FakeClock::advance_time(duration.as_millis() as u64);
         refresh_current_timestamp();
+    }
+
+    /// FakeClock returns a default Instant of 0 if the time is not set.
+    /// This means that substracting from Instant::now() in a test will produce a subtraction overflow, as we will try
+    /// to calculate an unsigned value under 0.
+    /// To avoid this error, we configure the current time of FakeClock to a high value, so that we can safely subtract
+    /// from it.
+    pub fn setup_fake_clock_to_prevent_substract_overflow() {
+        FakeClock::set_time(365 * 24 * 3600 * 1000);
     }
 }
 
@@ -233,6 +237,36 @@ impl Span {
         self.begin = end - duration;
     }
 
+    /// Returns the first timestamp covered by the span.
+    /// This value can never be greater than `self.end()`
+    pub fn begin(&self) -> Timestamp {
+        self.begin
+    }
+
+    /// Returns the last timestamp covered by the span
+    /// This value can never be less than `self.begin()`
+    pub fn end(&self) -> Timestamp {
+        self.end
+    }
+
+    /// Returns the amount of time covered by the span.<br/>
+    pub fn duration(&self) -> Duration {
+        self.end.duration_since(&self.begin)
+    }
+
+    /// Returns true if `self` intersects with `other`
+    ///
+    /// # Arguments
+    /// * `other`: A `Span` reference for which to test an intersection with `self`
+    pub fn intersects(&self, other: &Span) -> bool {
+        !(self.end < other.begin || self.begin > other.end)
+    }
+
+    /// Returns true if `self` contains the timestamp
+    pub fn contains(&self, timestamp: Timestamp) -> bool {
+        self.begin <= timestamp && timestamp <= self.end
+    }
+
     /// Updates the span by offseting the `begin` and `end` attributes of the span toward the future
     ///
     /// The span cannot be scrolled after the current timestamp.
@@ -270,45 +304,17 @@ impl Span {
     pub fn is_fully_scrolled_right(&self) -> bool {
         self.end == Timestamp::now()
     }
-
-    /// Returns the first timestamp covered by the span.
-    /// This value can never be greater than `self.end()`
-    pub fn begin(&self) -> Timestamp {
-        self.begin
-    }
-
-    /// Returns the last timestamp covered by the span
-    /// This value can never be less than `self.begin()`
-    pub fn end(&self) -> Timestamp {
-        self.end
-    }
-
-    /// Returns the amount of time covered by the span.<br/>
-    pub fn duration(&self) -> Duration {
-        self.end.duration_since(&self.begin)
-    }
-
-    /// Returns true if `self` intersects with `other`
-    ///
-    /// # Arguments
-    /// * `other`: A `Span` reference for which to test an intersection with `self`
-    pub fn intersects(&self, other: &Span) -> bool {
-        !(self.end < other.begin || self.begin > other.end)
-    }
 }
 
 #[cfg(test)]
 mod test_span {
     use rstest::*;
-    use sn_fake_clock::FakeClock;
     use std::time::Duration;
 
-    use crate::core::time::test_utils::advance_time_and_refresh_timestamp;
+    use crate::core::time::test_utils::{
+        advance_time_and_refresh_timestamp, setup_fake_clock_to_prevent_substract_overflow,
+    };
     use crate::core::time::{Span, Timestamp};
-
-    fn setup_fake_clock_to_prevent_substract_overflow() {
-        FakeClock::set_time(100000);
-    }
 
     #[test]
     fn test_should_correctly_define_span_when_creating_from_begin() {
@@ -383,6 +389,31 @@ mod test_span {
         );
 
         assert!(!span.intersects(&other_span));
+    }
+
+    #[rstest]
+    #[case(-10, 10)]
+    #[case(0, 10)]
+    #[case(-10, 0)]
+    fn test_should_return_true_if_timestamp_contained_in_span(#[case] relative_begin: i64, #[case] relative_end: u64) {
+        setup_fake_clock_to_prevent_substract_overflow();
+        let timestamp = Timestamp::now();
+
+        let span = Span::new(
+            timestamp - Duration::from_secs(relative_begin.unsigned_abs()),
+            timestamp + Duration::from_secs(relative_end),
+        );
+
+        assert!(span.contains(timestamp));
+    }
+
+    #[rstest]
+    fn test_should_return_false_if_timestamp_not_contained_in_span() {
+        let timestamp = Timestamp::now();
+
+        let span = Span::new(timestamp + Duration::from_secs(1), timestamp + Duration::from_secs(20));
+
+        assert!(!span.contains(timestamp));
     }
 
     #[test]
