@@ -185,12 +185,15 @@ mod test_timestamp {
 pub struct Span {
     begin: Timestamp,
     end: Timestamp,
+    tolerance: Duration,
 }
 
 impl Span {
     #[cfg(test)]
     pub fn new(begin: Timestamp, end: Timestamp) -> Self {
-        Span { begin, end }
+        let tolerance = Duration::default();
+
+        Span { begin, end, tolerance }
     }
 
     /// Creates a `Span` starting and ending at the given `Timestamp`
@@ -198,7 +201,10 @@ impl Span {
     /// # Arguments
     /// * `begin`: The left-bound iteration of the span
     pub fn from_begin(begin: Timestamp) -> Self {
-        Span { begin, end: begin }
+        let end = begin;
+        let tolerance = Duration::default();
+
+        Span { begin, end, tolerance }
     }
 
     /// Creates a `Span` that ends at `Timestamp::now()` and covers the given duration
@@ -209,8 +215,18 @@ impl Span {
     pub fn from_duration(duration: Duration) -> Self {
         let end = Timestamp::now();
         let begin = end - duration;
+        let tolerance = Duration::default();
 
-        Span { begin, end }
+        Span { begin, end, tolerance }
+    }
+
+    /// Tracking time precisely to the nanosecond is difficult.<br/>
+    /// Setting a tolerance, will loosen the constraints of the span, used by `contains()` and `intersects()`.
+    /// This is done by executing these checks as if the span started `tolerance` earlier.<br/>
+    ///
+    /// By default, a span has a tolerance of 0 seconds.
+    pub fn set_tolerance(&mut self, tolerance: Duration) {
+        self.tolerance = tolerance;
     }
 
     /// Updates the end of the span without updating the begining of the span
@@ -259,12 +275,16 @@ impl Span {
     /// # Arguments
     /// * `other`: A `Span` reference for which to test an intersection with `self`
     pub fn intersects(&self, other: &Span) -> bool {
-        !(self.end < other.begin || self.begin > other.end)
+        !(self.end < other.tolerant_begin() || self.tolerant_begin() > other.end)
     }
 
     /// Returns true if `self` contains the timestamp
     pub fn contains(&self, timestamp: Timestamp) -> bool {
-        self.begin <= timestamp && timestamp <= self.end
+        self.tolerant_begin() <= timestamp && timestamp <= self.end
+    }
+
+    fn tolerant_begin(&self) -> Timestamp {
+        self.begin - self.tolerance
     }
 
     /// Updates the span by offseting the `begin` and `end` attributes of the span toward the future
@@ -374,6 +394,7 @@ mod test_span {
         );
 
         assert!(span.intersects(&other_span));
+        assert!(other_span.intersects(&span));
     }
 
     #[rstest]
@@ -389,6 +410,46 @@ mod test_span {
         );
 
         assert!(!span.intersects(&other_span));
+        assert!(!other_span.intersects(&span));
+    }
+
+    #[test]
+    fn test_should_be_tolerant_with_span_in_past_within_tolerance_constraints() {
+        let now = Timestamp::now();
+
+        let mut span = Span::new(now + Duration::from_secs(100), now + Duration::from_secs(199));
+        let other_span = Span::new(now + Duration::from_secs(10), now + Duration::from_secs(98));
+
+        span.set_tolerance(Duration::from_secs(2));
+
+        assert!(span.intersects(&other_span));
+        assert!(other_span.intersects(&span));
+    }
+
+    #[test]
+    fn test_should_not_be_tolerant_with_span_in_past_out_of_tolerance_bounds() {
+        let now = Timestamp::now();
+
+        let mut span = Span::new(now + Duration::from_secs(100), now + Duration::from_secs(199));
+        let other_span = Span::new(now + Duration::from_secs(10), now + Duration::from_secs(98));
+
+        span.set_tolerance(Duration::from_secs(1));
+
+        assert!(!span.intersects(&other_span));
+        assert!(!other_span.intersects(&span));
+    }
+
+    #[test]
+    fn test_should_not_be_tolerant_with_span_in_future() {
+        let now = Timestamp::now();
+
+        let mut span = Span::new(now + Duration::from_secs(100), now + Duration::from_secs(199));
+        let other_span = Span::new(now + Duration::from_secs(200), now + Duration::from_secs(299));
+
+        span.set_tolerance(Duration::from_secs(10));
+
+        assert!(!span.intersects(&other_span));
+        assert!(!other_span.intersects(&span));
     }
 
     #[rstest]
@@ -414,6 +475,36 @@ mod test_span {
         let span = Span::new(timestamp + Duration::from_secs(1), timestamp + Duration::from_secs(20));
 
         assert!(!span.contains(timestamp));
+    }
+
+    #[test]
+    fn test_should_be_tolerant_with_timestamp_in_past_within_tolerance_constraints() {
+        let timestamp = Timestamp::now();
+
+        let mut span = Span::new(timestamp + Duration::from_secs(2), timestamp + Duration::from_secs(20));
+        span.set_tolerance(Duration::from_secs(2));
+
+        assert!(span.contains(timestamp));
+    }
+
+    #[test]
+    fn test_should_not_be_tolerant_with_timestamp_in_past_out_of_tolerance_bounds() {
+        let timestamp = Timestamp::now();
+
+        let mut span = Span::new(timestamp + Duration::from_secs(2), timestamp + Duration::from_secs(20));
+        span.set_tolerance(Duration::from_secs(1));
+
+        assert!(!span.contains(timestamp));
+    }
+
+    #[test]
+    fn test_should_not_be_tolerant_with_timestamp_in_future() {
+        let origin = Timestamp::now();
+
+        let mut span = Span::new(origin + Duration::from_secs(90), origin + Duration::from_secs(100));
+        span.set_tolerance(Duration::from_secs(10));
+
+        assert!(!span.contains(origin + Duration::from_secs(101)));
     }
 
     #[test]
