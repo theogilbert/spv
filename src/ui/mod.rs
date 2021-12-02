@@ -1,10 +1,8 @@
 use std::io;
-use std::time::Duration;
 
 use log::error;
 use thiserror::Error;
 
-use crate::core::iteration::Iteration;
 use crate::core::process::ProcessMetadata;
 use crate::core::view::{MetricView, MetricsOverview};
 use crate::ui::chart::MetricsChart;
@@ -26,8 +24,6 @@ mod terminal;
 pub enum Error {
     #[error(transparent)]
     IOError(#[from] io::Error),
-    #[error("Invalid iteration value {1:?} (current iteration: {0:?})")]
-    InvalidIterationValue(Iteration, Iteration),
 }
 
 pub struct SpvUI {
@@ -39,24 +35,19 @@ pub struct SpvUI {
 }
 
 impl SpvUI {
-    pub fn new(labels: impl Iterator<Item = String>, resolution: Duration) -> Result<Self, Error> {
+    pub fn new(labels: impl Iterator<Item = String>) -> Result<Self, Error> {
         let tabs = MetricTabs::new(labels.collect());
 
         Ok(Self {
             terminal: Terminal::new()?,
             tabs,
             process_list: ProcessList::default(),
-            chart: MetricsChart::new(resolution),
+            chart: MetricsChart::default(),
             metadata_bar: MetadataBar::default(),
         })
     }
 
-    pub fn render(
-        &mut self,
-        overview: &MetricsOverview,
-        view: &Option<MetricView>,
-        current_iter: Iteration,
-    ) -> Result<(), Error> {
+    pub fn render(&mut self, overview: &MetricsOverview, view: &Option<MetricView>) -> Result<(), Error> {
         self.terminal.draw(|frame| {
             let layout = UiLayout::new(frame.region());
 
@@ -66,9 +57,7 @@ impl SpvUI {
                 .render(frame.with_region(layout.processes_chunk()), overview);
 
             if let Some(view) = view {
-                self.chart
-                    .render(frame.with_region(layout.chart_chunk()), view, current_iter)
-                    .unwrap_or_else(|e| error!("Error rendering chart: {:?}", e));
+                self.chart.render(frame.with_region(layout.chart_chunk()), view);
             }
 
             self.metadata_bar.render(frame.with_region(layout.metadata_chunk()));
