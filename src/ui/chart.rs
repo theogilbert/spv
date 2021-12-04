@@ -108,11 +108,13 @@ mod test_x_value_calculation {
 
     #[test]
     fn test_similar_timestamp_according_to_resolution_should_have_same_x_value() {
+        setup_fake_clock_to_prevent_substract_overflow();
+
         let anchor_timestamp = Timestamp::now();
-        let similar_timestamp = Timestamp::now() + Duration::from_millis(49);
+        let similar_timestamp = Timestamp::now() - Duration::from_millis(49);
 
         let x_value_1 = calculate_x_value_of_timestamp(anchor_timestamp, 50);
-        let x_value_2 = calculate_x_value_of_timestamp(anchor_timestamp, 50);
+        let x_value_2 = calculate_x_value_of_timestamp(similar_timestamp, 50);
 
         assert_eq!(x_value_1, x_value_2);
     }
