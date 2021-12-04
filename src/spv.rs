@@ -113,8 +113,7 @@ impl SpvApplication {
     }
 
     fn scan_processes(&mut self) -> Result<(), Error> {
-        self.process_view.collect_processes().map_err(Error::CoreError)?;
-        Ok(())
+        self.process_view.collect_processes().map_err(Error::CoreError)
     }
 
     fn represented_processes(&self) -> Vec<ProcessMetadata> {

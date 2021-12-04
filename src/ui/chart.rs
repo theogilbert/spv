@@ -107,7 +107,7 @@ mod test_x_value_calculation {
     }
 
     #[test]
-    fn test_similar_timestamp_according_to_resolution_should_have_same_x_value() {
+    fn test_timestamps_within_same_resolution_should_have_same_x_value() {
         setup_fake_clock_to_prevent_substract_overflow();
 
         let anchor_timestamp = Timestamp::now();
