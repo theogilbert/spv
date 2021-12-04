@@ -3,39 +3,32 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
-use crate::core::iteration::{Iteration, Span};
-use crate::core::metrics::Metric;
+use crate::core::metrics::{DatedMetric, Metric};
 use crate::core::process::Pid;
+use crate::core::time::Span;
 
 /// Snapshot of all collected metrics of a single process, from a single probe
 ///
 /// Refer to the [`MetricCollector`](crate::core::collection::MetricCollector) trait to instanciate a `MetricView`
 pub struct MetricView<'a> {
-    metrics: Vec<&'a dyn Metric>,
+    dated_metrics: Vec<DatedMetric<'a>>,
     default: Box<dyn Metric>,
     span: Span,
-    first_metric_iteration: Iteration,
 }
 
 impl<'a> MetricView<'a> {
-    pub(crate) fn new(
-        metrics: Vec<&'a dyn Metric>,
-        default: Box<dyn Metric>,
-        span: Span,
-        first_metric_iteration: Iteration,
-    ) -> Self {
+    pub(crate) fn new(dated_metrics: Vec<DatedMetric<'a>>, default: Box<dyn Metric>, span: Span) -> Self {
         Self {
-            metrics,
+            dated_metrics,
             default,
             span,
-            first_metric_iteration,
         }
     }
 
     /// Returns a slice of the metrics contained in this view.
     /// The slice only covers the last metrics covered by the `span` parameter.
-    pub fn as_slice(&'a self) -> &[&'a dyn Metric] {
-        &self.metrics
+    pub fn as_slice(&'a self) -> &[DatedMetric<'a>] {
+        &self.dated_metrics
     }
 
     /// Returns the unit representation of the metrics contained in this view
@@ -46,7 +39,7 @@ impl<'a> MetricView<'a> {
     /// Returns the latest collected metric, or its default value if no metric has
     /// been collected for this process.
     pub fn last_or_default(&self) -> &dyn Metric {
-        *(self.metrics.last().unwrap_or(&&*self.default))
+        self.dated_metrics.last().map(|dm| dm.metric).unwrap_or(&*self.default)
     }
 
     /// Returns the greatest f64 value of the metric in the given span. See [`MetricView::new()`](#method.extract) for
@@ -74,25 +67,108 @@ impl<'a> MetricView<'a> {
     }
 
     fn max_metric(&self) -> &dyn Metric {
-        *(self
-            .metrics
+        self.dated_metrics
             .iter()
+            .map(|dm| dm.metric)
             .max_by(|m1, m2| {
                 let v1 = m1.max_value();
                 let v2 = m2.max_value();
 
                 v1.partial_cmp(&v2).unwrap_or(Ordering::Equal)
             })
-            .unwrap_or(&&*self.default))
+            .unwrap_or(&*self.default)
     }
 
     pub fn span(&self) -> &Span {
         &self.span
     }
+}
 
-    /// Indicates at which iteration the first metric of this view was produced
-    pub fn first_iteration(&self) -> Iteration {
-        self.first_metric_iteration.max(self.span.begin())
+#[cfg(test)]
+mod test_metric_view {
+    use rstest::*;
+    use std::time::Duration;
+
+    use crate::core::metrics::{DatedMetric, IOMetric, Metric, PercentMetric};
+    use crate::core::time::{Span, Timestamp};
+    use crate::core::view::MetricView;
+
+    #[fixture]
+    fn metrics() -> Vec<PercentMetric> {
+        vec![
+            PercentMetric::new(10.),
+            PercentMetric::new(20.),
+            PercentMetric::new(15.),
+        ]
+    }
+
+    fn percents_to_dated_metrics(metrics: &Vec<PercentMetric>) -> Vec<DatedMetric> {
+        let now = Timestamp::now();
+        metrics
+            .iter()
+            .enumerate()
+            .map(|(idx, m)| DatedMetric::new(m as &dyn Metric, now + Duration::from_secs(idx as u64)))
+            .collect()
+    }
+
+    #[fixture]
+    fn default() -> Box<dyn Metric> {
+        Box::new(PercentMetric::default()) as Box<dyn Metric>
+    }
+
+    #[fixture]
+    fn span() -> Span {
+        Span::new(Timestamp::now(), Timestamp::now() + Duration::from_secs(10))
+    }
+
+    #[rstest]
+    fn test_last_or_default_should_be_latest_metric(metrics: Vec<PercentMetric>, default: Box<dyn Metric>, span: Span) {
+        let view = MetricView::new(percents_to_dated_metrics(&metrics), default, span);
+
+        assert_eq!(view.last_or_default(), metrics.last().unwrap());
+    }
+
+    #[rstest]
+    fn test_last_or_default_should_be_default_when_view_is_empty(default: Box<dyn Metric>, span: Span) {
+        let view = MetricView::new(vec![], default, span);
+
+        assert_eq!(view.last_or_default(), &PercentMetric::default());
+    }
+
+    #[rstest]
+    fn test_unit_should_be_metric_unit(default: Box<dyn Metric>, span: Span) {
+        let view = MetricView::new(vec![], default, span);
+
+        assert_eq!(view.unit(), PercentMetric::default().unit());
+    }
+
+    #[rstest]
+    fn test_max_f64_should_return_max_value(metrics: Vec<PercentMetric>, default: Box<dyn Metric>, span: Span) {
+        let view = MetricView::new(percents_to_dated_metrics(&metrics), default, span);
+
+        assert_eq!(view.max_f64(), 20.);
+    }
+
+    #[rstest]
+    fn test_max_f64_should_return_default_f64_when_empty(default: Box<dyn Metric>, span: Span) {
+        let view = MetricView::new(vec![], default, span);
+
+        assert_eq!(view.max_f64(), PercentMetric::default().as_f64(0).unwrap());
+    }
+
+    #[rstest]
+    fn test_concise_repr_should_return_repr_of_default_metric(span: Span) {
+        let default = Box::new(IOMetric::default()) as Box<dyn Metric>;
+        let view = MetricView::new(vec![], default, span);
+
+        assert_eq!(view.concise_repr_of_value(2048.), "2.0k".to_string());
+    }
+
+    #[rstest]
+    fn test_should_return_correct_span(default: Box<dyn Metric>, span: Span) {
+        let view = MetricView::new(vec![], default, span);
+
+        assert_eq!(view.span(), &span);
     }
 }
 
@@ -121,97 +197,6 @@ impl<'a> MetricsOverview<'a> {
     /// Returns the unit representation of the metrics contained in this view
     pub fn unit(&self) -> &'static str {
         self.default.unit()
-    }
-}
-
-#[cfg(test)]
-mod test_metric_view {
-    use rstest::*;
-
-    use crate::core::iteration::Span;
-    use crate::core::metrics::{IOMetric, Metric, PercentMetric};
-    use crate::core::view::MetricView;
-
-    #[fixture]
-    fn metrics() -> Vec<PercentMetric> {
-        vec![
-            PercentMetric::new(10.),
-            PercentMetric::new(20.),
-            PercentMetric::new(15.),
-        ]
-    }
-
-    #[fixture]
-    fn default() -> Box<dyn Metric> {
-        Box::new(PercentMetric::default()) as Box<dyn Metric>
-    }
-
-    fn metrics_to_dyn(metrics: &Vec<PercentMetric>) -> Vec<&dyn Metric> {
-        metrics.iter().map(|m| m as &dyn Metric).collect()
-    }
-
-    #[rstest]
-    fn test_last_or_default_should_be_latest_metric(metrics: Vec<PercentMetric>, default: Box<dyn Metric>) {
-        let view = MetricView::new(metrics_to_dyn(&metrics), default, Span::new(10, 10), 1);
-
-        assert_eq!(view.last_or_default(), metrics.last().unwrap());
-    }
-
-    #[rstest]
-    fn test_last_or_default_should_be_default_when_view_is_empty(default: Box<dyn Metric>) {
-        let view = MetricView::new(vec![], default, Span::new(1, 10), 1);
-
-        assert_eq!(view.last_or_default(), &PercentMetric::default());
-    }
-
-    #[rstest]
-    fn test_unit_should_be_metric_unit(default: Box<dyn Metric>) {
-        let view = MetricView::new(vec![], default, Span::new(1, 10), 1);
-
-        assert_eq!(view.unit(), PercentMetric::default().unit());
-    }
-
-    #[rstest]
-    fn test_max_f64_should_return_max_value(metrics: Vec<PercentMetric>, default: Box<dyn Metric>) {
-        let view = MetricView::new(metrics_to_dyn(&metrics), default, Span::new(1, 10), 1);
-
-        assert_eq!(view.max_f64(), 20.);
-    }
-
-    #[rstest]
-    fn test_max_f64_should_return_default_f64_when_empty(default: Box<dyn Metric>) {
-        let view = MetricView::new(vec![], default, Span::new(1, 10), 1);
-
-        assert_eq!(view.max_f64(), PercentMetric::default().as_f64(0).unwrap());
-    }
-
-    #[rstest]
-    fn test_concise_repr_should_return_repr_of_default_metric() {
-        let default = Box::new(IOMetric::default()) as Box<dyn Metric>;
-        let view = MetricView::new(vec![], default, Span::new(1, 10), 1);
-
-        assert_eq!(view.concise_repr_of_value(2048.), "2.0k".to_string());
-    }
-
-    #[rstest]
-    fn test_should_return_first_iteration(default: Box<dyn Metric>) {
-        let view = MetricView::new(vec![], default, Span::new(1, 10), 1);
-
-        assert_eq!(view.first_iteration(), 1);
-    }
-
-    #[rstest]
-    fn test_should_return_span_begin_as_first_iteration_if_begin_greater_than_first_iter(default: Box<dyn Metric>) {
-        let view = MetricView::new(vec![], default, Span::new(91, 100), 1);
-
-        assert_eq!(view.first_iteration(), 91);
-    }
-
-    #[rstest]
-    fn test_should_return_correct_span(default: Box<dyn Metric>) {
-        let view = MetricView::new(vec![], default, Span::new(1, 10), 1);
-
-        assert_eq!(view.span(), &Span::new(1, 10));
     }
 }
 
@@ -263,9 +248,9 @@ mod test_helpers {
     pub(crate) fn produce_metrics_collection(proc_count: usize, values: Vec<f64>) -> MetricCollection<PercentMetric> {
         let mut collection = MetricCollection::new();
 
-        for (iteration, value) in values.into_iter().enumerate() {
+        for value in values.into_iter() {
             for proc_idx in 0..proc_count {
-                collection.push(proc_idx as Pid, PercentMetric::new(value), iteration);
+                collection.push(proc_idx as Pid, PercentMetric::new(value));
             }
         }
 

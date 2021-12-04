@@ -7,10 +7,10 @@ use thiserror::Error;
 use crate::core::process::Pid;
 
 pub mod collection;
-pub mod iteration;
 pub mod metrics;
 pub mod probe;
 pub mod process;
+pub mod time;
 pub mod view;
 
 #[derive(Error, Debug)]

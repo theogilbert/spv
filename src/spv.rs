@@ -6,8 +6,8 @@ use std::time::Duration;
 use log::warn;
 
 use crate::core::collection::MetricCollector;
-use crate::core::iteration::{Iteration, IterationTracker, Span};
 use crate::core::process::{ProcessCollector, ProcessMetadata, Status};
+use crate::core::time::{refresh_current_timestamp, Span, Timestamp};
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
 use crate::Error;
@@ -17,7 +17,6 @@ pub struct SpvApplication {
     process_view: ProcessCollector,
     ui: SpvUI,
     collectors: HashMap<String, Box<dyn MetricCollector>>,
-    iteration_tracker: IterationTracker,
     represented_span: Span,
 }
 
@@ -26,28 +25,28 @@ impl SpvApplication {
         receiver: Receiver<Trigger>,
         collectors: Vec<Box<dyn MetricCollector>>,
         process_view: ProcessCollector,
-        resolution: Duration,
+        impulse_tolerance: Duration,
     ) -> Result<Self, Error> {
-        let ui = SpvUI::new(collectors.iter().map(|p| p.name().to_string()), resolution)?;
+        let time_tolerance = 2 * impulse_tolerance;
+        let ui = SpvUI::new(collectors.iter().map(|p| p.name().to_string()), time_tolerance)?;
 
         let collectors_map = collectors.into_iter().map(|mc| (mc.name().to_string(), mc)).collect();
 
-        /// TODO calculate this value according to probing frequency (resolution)
-        const DEFAULT_REPRESENTED_SPAN_SIZE: Iteration = 60;
+        const DEFAULT_REPRESENTED_SPAN_DURATION: Duration = Duration::from_secs(60);
+        let mut rendered_span = Span::from_duration(DEFAULT_REPRESENTED_SPAN_DURATION);
+        rendered_span.set_tolerance(time_tolerance);
 
         Ok(Self {
             receiver,
             process_view,
             ui,
             collectors: collectors_map,
-            iteration_tracker: IterationTracker::default(),
-            represented_span: Span::from_size(DEFAULT_REPRESENTED_SPAN_SIZE),
+            represented_span: rendered_span,
         })
     }
 
     pub fn run(mut self) -> Result<(), Error> {
         self.calibrate_probes()?;
-        self.collect_metrics()?;
 
         loop {
             let trigger = self.receiver.recv()?;
@@ -63,9 +62,9 @@ impl SpvApplication {
                 Trigger::Resize => (), // No need to do anything, just receiving a signal will refresh UI at the end of the loop
                 Trigger::NextTab => self.ui.next_tab(),
                 Trigger::PreviousTab => self.ui.previous_tab(),
-                Trigger::ScrollLeft => self.scroll(-1),
-                Trigger::ScrollRight => self.scroll(1),
-                Trigger::ScrollReset => self.scroll(self.iteration_tracker.current() as i64),
+                Trigger::ScrollLeft => self.represented_span.scroll_left(Duration::from_secs(1)),
+                Trigger::ScrollRight => self.represented_span.scroll_right(Duration::from_secs(1)),
+                Trigger::ScrollReset => self.represented_span.set_end_and_shift(Timestamp::now()),
             }
 
             self.draw_ui()?;
@@ -74,9 +73,14 @@ impl SpvApplication {
         Ok(())
     }
 
-    fn scroll(&mut self, delta: i64) {
-        let current_iteration = self.iteration_tracker.current();
-        self.represented_span.scroll(current_iteration, delta)
+    fn increment_iteration(&mut self) {
+        let span_should_follow_current_iteration = self.represented_span.is_fully_scrolled_right();
+
+        refresh_current_timestamp();
+
+        if span_should_follow_current_iteration {
+            self.represented_span.set_end_and_shift(Timestamp::now());
+        }
     }
 
     fn calibrate_probes(&mut self) -> Result<(), Error> {
@@ -90,29 +94,14 @@ impl SpvApplication {
         Ok(())
     }
 
-    fn increment_iteration(&mut self) {
-        let span_should_follow_current_iteration = self
-            .represented_span
-            .is_fully_scrolled_right(self.iteration_tracker.current());
-
-        self.iteration_tracker.tick();
-
-        if span_should_follow_current_iteration {
-            self.represented_span
-                .set_end_and_shift(self.iteration_tracker.current());
-        }
-    }
-
     fn collect_metrics(&mut self) -> Result<(), Error> {
         self.scan_processes()?;
         let running_pids = self.process_view.running_pids();
 
         for collector in self.collectors.values_mut() {
-            collector
-                .collect(&running_pids, self.iteration_tracker.current())
-                .unwrap_or_else(|e| {
-                    warn!("Error reading from collector {}: {}", collector.name(), e.to_string());
-                });
+            collector.collect(&running_pids).unwrap_or_else(|e| {
+                warn!("Error reading from collector {}: {}", collector.name(), e.to_string());
+            });
         }
 
         let mut exposed_processes = self.represented_processes();
@@ -124,10 +113,7 @@ impl SpvApplication {
     }
 
     fn scan_processes(&mut self) -> Result<(), Error> {
-        self.process_view
-            .collect_processes(self.iteration_tracker.current())
-            .map_err(Error::CoreError)?;
-        Ok(())
+        self.process_view.collect_processes().map_err(Error::CoreError)
     }
 
     fn represented_processes(&self) -> Vec<ProcessMetadata> {
@@ -160,9 +146,7 @@ impl SpvApplication {
             .current_process()
             .map(|pm| current_collector.view(pm, self.represented_span));
 
-        self.ui
-            .render(&overview, &metrics_view, self.iteration_tracker.current())
-            .map_err(Error::UiError)
+        self.ui.render(&overview, &metrics_view).map_err(Error::UiError)
     }
 
     fn current_collector<'a>(

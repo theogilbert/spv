@@ -7,7 +7,6 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
-use crate::core::iteration::Iteration;
 use crate::core::process::{Pid, ProcessMetadata, ProcessScanner};
 use crate::core::Error as CoreError;
 
@@ -85,7 +84,7 @@ impl ProcessScanner for ProcfsScanner {
     ///
     /// # Arguments
     ///  * `pid`: The identifier of the process for which to retrieve metadata
-    fn fetch_metadata(&self, pid: Pid, spawn_iteration: Iteration) -> std::result::Result<ProcessMetadata, CoreError> {
+    fn fetch_metadata(&self, pid: Pid) -> std::result::Result<ProcessMetadata, CoreError> {
         let mut command = String::new();
         let comm_file_path = self.proc_dir.join(pid.to_string()).join("comm");
 
@@ -99,7 +98,7 @@ impl ProcessScanner for ProcfsScanner {
             command.pop();
         }
 
-        Ok(ProcessMetadata::new(pid, spawn_iteration, command))
+        Ok(ProcessMetadata::new(pid, command))
     }
 }
 
@@ -238,10 +237,10 @@ mod test_pid_scanner {
         };
 
         let process_metadata = proc_scanner
-            .fetch_metadata(123, 1)
+            .fetch_metadata(123)
             .expect("Could not get processes metadata");
 
-        assert_eq!(process_metadata, ProcessMetadata::new(123, 1, "test_cmd".to_string()));
+        assert_eq!(process_metadata, ProcessMetadata::new(123, "test_cmd".to_string()));
     }
 
     #[test]
@@ -260,10 +259,10 @@ mod test_pid_scanner {
         };
 
         let process_metadata = proc_scanner
-            .fetch_metadata(123, 0)
+            .fetch_metadata(123)
             .expect("Could not get processes metadata");
 
-        assert_eq!(process_metadata, ProcessMetadata::new(123, 0, "test_cmd".to_string()));
+        assert_eq!(process_metadata, ProcessMetadata::new(123, "test_cmd".to_string()));
     }
 
     #[test]
@@ -274,7 +273,7 @@ mod test_pid_scanner {
             proc_dir: test_proc_dir.path().to_path_buf(),
         };
 
-        let process_metadata_ret = proc_scanner.fetch_metadata(123, 0);
+        let process_metadata_ret = proc_scanner.fetch_metadata(123);
 
         assert!(matches!(process_metadata_ret, Err(CoreError::ScanProcessesError(_))));
     }

@@ -11,20 +11,11 @@ const CMD_COL_WIDTH: usize = 16;
 /// Width of the metrics values column
 const METRICS_COL_WIDTH: usize = 10;
 
+#[derive(Default)]
 pub struct ProcessList {
     processes: Vec<ProcessMetadata>,
     selected_pid: Option<Pid>,
     state: ListState,
-}
-
-impl Default for ProcessList {
-    fn default() -> Self {
-        Self {
-            processes: vec![],
-            selected_pid: None,
-            state: ListState::default(),
-        }
-    }
 }
 
 impl ProcessList {
@@ -52,17 +43,14 @@ impl ProcessList {
     /// Define the processes to render in the process list
     /// The processes will be displayed in the list in the same order as they appear in `processes`
     pub fn set_processes(&mut self, processes: Vec<ProcessMetadata>) {
-        let index_opt = if self.processes.is_empty() {
+        let future_index = if processes.is_empty() {
             None
         } else {
-            Some(Self::retrieve_index_of_previously_selected_pid(
-                &processes,
-                self.selected_pid,
-            ))
+            Some(Self::retrieve_index_of_pid(&processes, self.selected_pid))
         };
 
         self.processes = processes;
-        self.select(index_opt);
+        self.select(future_index);
     }
 
     /// Focus the previous process
@@ -110,7 +98,7 @@ impl ProcessList {
     /// Processes are displayed in a list, sorted by their metric values
     /// From one frame to the other, the same process may have a different position in the list
     /// This function returns the new position of the selected process in the given `processes` list
-    fn retrieve_index_of_previously_selected_pid(processes: &[ProcessMetadata], selected_pid: Option<Pid>) -> usize {
+    fn retrieve_index_of_pid(processes: &[ProcessMetadata], selected_pid: Option<Pid>) -> usize {
         match selected_pid {
             Some(selected_pid) => {
                 processes.iter().position(|pm| pm.pid() == selected_pid).unwrap_or(0)
@@ -155,11 +143,7 @@ impl ProcessList {
     }
 
     fn render_name_column(&mut self, frame: &mut FrameRegion) {
-        let processes_names: Vec<_> = self
-            .processes
-            .iter()
-            .map(|pm| Self::shortened_command_name(pm))
-            .collect();
+        let processes_names: Vec<_> = self.processes.iter().map(Self::shortened_command_name).collect();
 
         let items: Vec<ListItem> = processes_names.iter().map(|cmd| ListItem::new(cmd.as_str())).collect();
 
