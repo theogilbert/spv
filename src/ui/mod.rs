@@ -1,4 +1,5 @@
 use std::io;
+use std::time::Duration;
 
 use log::error;
 use thiserror::Error;
@@ -35,14 +36,14 @@ pub struct SpvUI {
 }
 
 impl SpvUI {
-    pub fn new(labels: impl Iterator<Item = String>) -> Result<Self, Error> {
+    pub fn new(labels: impl Iterator<Item = String>, chart_resolution: Duration) -> Result<Self, Error> {
         let tabs = MetricTabs::new(labels.collect());
 
         Ok(Self {
             terminal: Terminal::new()?,
             tabs,
             process_list: ProcessList::default(),
-            chart: MetricsChart::default(),
+            chart: MetricsChart::new(chart_resolution),
             metadata_bar: MetadataBar::default(),
         })
     }

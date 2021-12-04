@@ -25,19 +25,23 @@ impl SpvApplication {
         receiver: Receiver<Trigger>,
         collectors: Vec<Box<dyn MetricCollector>>,
         process_view: ProcessCollector,
+        impulse_tolerance: Duration,
     ) -> Result<Self, Error> {
-        let ui = SpvUI::new(collectors.iter().map(|p| p.name().to_string()))?;
+        let time_tolerance = 2 * impulse_tolerance;
+        let ui = SpvUI::new(collectors.iter().map(|p| p.name().to_string()), time_tolerance)?;
 
         let collectors_map = collectors.into_iter().map(|mc| (mc.name().to_string(), mc)).collect();
 
         const DEFAULT_REPRESENTED_SPAN_DURATION: Duration = Duration::from_secs(60);
+        let mut rendered_span = Span::from_duration(DEFAULT_REPRESENTED_SPAN_DURATION);
+        rendered_span.set_tolerance(time_tolerance);
 
         Ok(Self {
             receiver,
             process_view,
             ui,
             collectors: collectors_map,
-            represented_span: Span::from_duration(DEFAULT_REPRESENTED_SPAN_DURATION),
+            represented_span: rendered_span,
         })
     }
 
@@ -70,6 +74,16 @@ impl SpvApplication {
         Ok(())
     }
 
+    fn increment_iteration(&mut self) {
+        let span_should_follow_current_iteration = self.represented_span.is_fully_scrolled_right();
+
+        refresh_current_timestamp();
+
+        if span_should_follow_current_iteration {
+            self.represented_span.set_end_and_shift(Timestamp::now());
+        }
+    }
+
     fn calibrate_probes(&mut self) -> Result<(), Error> {
         self.scan_processes()?;
         let pids = self.process_view.running_pids();
@@ -79,16 +93,6 @@ impl SpvApplication {
         }
 
         Ok(())
-    }
-
-    fn increment_iteration(&mut self) {
-        let span_should_follow_current_iteration = self.represented_span.is_fully_scrolled_right();
-
-        refresh_current_timestamp();
-
-        if span_should_follow_current_iteration {
-            self.represented_span.set_end_and_shift(Timestamp::now());
-        }
     }
 
     fn collect_metrics(&mut self) -> Result<(), Error> {

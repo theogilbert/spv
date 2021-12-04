@@ -50,10 +50,10 @@ impl TriggersEmitter {
         Self::start_signal_thread(signal_sender);
     }
 
+    /// Launches a thread which will emit a `Trigger::Impulse` event every `refresh_period`
     fn start_impulse_thread(sender: Sender<Trigger>, refresh_period: Duration) {
         thread::spawn(move || {
             let mut pulse = Pulse::new(refresh_period);
-
             loop {
                 if sender.send(Trigger::Impulse).is_err() {
                     break;
@@ -61,6 +61,10 @@ impl TriggersEmitter {
                 pulse.pulse();
             }
         });
+    }
+
+    pub fn impulse_time_tolerance(refresh_period: Duration) -> Duration {
+        Pulse::tolerance(refresh_period)
     }
 
     fn start_input_thread(sender: Sender<Trigger>) {
