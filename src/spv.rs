@@ -47,7 +47,6 @@ impl SpvApplication {
 
     pub fn run(mut self) -> Result<(), Error> {
         self.calibrate_probes()?;
-        self.collect_metrics()?;
 
         loop {
             let trigger = self.receiver.recv()?;
