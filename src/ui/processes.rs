@@ -11,20 +11,11 @@ const CMD_COL_WIDTH: usize = 16;
 /// Width of the metrics values column
 const METRICS_COL_WIDTH: usize = 10;
 
+#[derive(Default)]
 pub struct ProcessList {
     processes: Vec<ProcessMetadata>,
     selected_pid: Option<Pid>,
     state: ListState,
-}
-
-impl Default for ProcessList {
-    fn default() -> Self {
-        Self {
-            processes: vec![],
-            selected_pid: None,
-            state: ListState::default(),
-        }
-    }
 }
 
 impl ProcessList {
@@ -152,11 +143,7 @@ impl ProcessList {
     }
 
     fn render_name_column(&mut self, frame: &mut FrameRegion) {
-        let processes_names: Vec<_> = self
-            .processes
-            .iter()
-            .map(|pm| Self::shortened_command_name(pm))
-            .collect();
+        let processes_names: Vec<_> = self.processes.iter().map(Self::shortened_command_name).collect();
 
         let items: Vec<ListItem> = processes_names.iter().map(|cmd| ListItem::new(cmd.as_str())).collect();
 
