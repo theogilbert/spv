@@ -1,14 +1,14 @@
 //! Process discovery
 
-use std::fs::{read_dir, DirEntry, File};
+use std::fs::{DirEntry, File, read_dir};
 use std::io;
 use std::io::Read;
 use std::path::PathBuf;
 
 use thiserror::Error;
 
-use crate::core::process::{Pid, ProcessMetadata, ProcessScanner};
 use crate::core::Error as CoreError;
+use crate::core::process::{Pid, ProcessMetadata, ProcessScanner};
 
 /// Errors internal to the process module
 #[derive(Error, Debug)]
@@ -108,25 +108,25 @@ mod test_pid_from_proc_dir {
 
     #[test]
     fn test_pid_from_valid_proc_dir_name() {
-        let valid_pid = ProcfsScanner::extract_pid_from_proc_dir(Some("123"));
+        let valid_pid = ProcfsScanner::extract_pid_from_proc_dir(Some("123")).unwrap();
 
-        assert!(matches!(valid_pid, Ok(123)));
+        assert_eq!(valid_pid, 123);
     }
 
     #[test]
     fn test_pid_from_invalid_proc_dir_name() {
-        let invalid_pid = ProcfsScanner::extract_pid_from_proc_dir(Some("abc"));
-
-        let dir = String::from("abc");
-        assert!(matches!(invalid_pid, Err(Error::NotProcessDir(dir))));
+        match ProcfsScanner::extract_pid_from_proc_dir(Some("abc")) {
+            Err(Error::NotProcessDir(dir)) => assert_eq!(dir, String::from("abc")),
+            _ => assert!(false),
+        }
     }
 
     #[test]
     fn test_pid_from_no_proc_dir_name() {
-        let invalid_pid = ProcfsScanner::extract_pid_from_proc_dir(None);
-
-        let dir = String::new();
-        assert!(matches!(invalid_pid, Err(Error::NotProcessDir(dir))));
+        match ProcfsScanner::extract_pid_from_proc_dir(None) {
+            Err(Error::NotProcessDir(dir)) => assert_eq!(dir, String::new()),
+            _ => assert!(false),
+        }
     }
 }
 
@@ -137,7 +137,7 @@ mod test_pid_scanner {
     use std::os::unix::fs::PermissionsExt;
     use std::path::Path;
 
-    use tempfile::{tempdir, NamedTempFile};
+    use tempfile::{NamedTempFile, tempdir};
 
     use crate::core::Error as CoreError;
 
