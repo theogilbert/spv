@@ -164,6 +164,90 @@ where
     }
 }
 
+#[cfg(test)]
+pub mod test_utils {
+    use std::collections::{HashMap, VecDeque};
+    use std::io;
+
+    use crate::core::process::Pid;
+    use crate::procfs::parsers::{ProcessData, ReadProcessData, ReadSystemData, SystemData};
+    use crate::procfs::ProcfsError;
+
+    /// A fake structure implementing `ReadSystemData` for any implementation of `SystemData`.
+    /// The `SystemData` returned by this reader can be customized through the [`Self::from_sequence()`] function.
+    pub struct FakeSystemDataReader<D>
+    where
+        D: SystemData + Sized,
+    {
+        data_sequence: VecDeque<D>,
+    }
+
+    impl<D> FakeSystemDataReader<D>
+    where
+        D: SystemData + Sized,
+    {
+        pub fn from_sequence(sequence: Vec<D>) -> Self {
+            Self {
+                data_sequence: sequence.into(),
+            }
+        }
+    }
+
+    impl<D> ReadSystemData<D> for FakeSystemDataReader<D>
+    where
+        D: SystemData + Sized,
+    {
+        fn read(&mut self) -> Result<D, ProcfsError> {
+            Ok(self
+                .data_sequence
+                .pop_front()
+                .expect("The system data reader has nothing to return"))
+        }
+    }
+
+    /// A fake structure implementing `ReadProcessData` for any implementation of `ProcessData`.
+    pub struct FakeProcessDataReader<D>
+    where
+        D: ProcessData + Sized,
+    {
+        process_data_sequences: HashMap<Pid, VecDeque<Result<D, ProcfsError>>>,
+    }
+
+    impl<D> FakeProcessDataReader<D>
+    where
+        D: ProcessData + Sized,
+    {
+        pub fn new() -> Self {
+            Self {
+                process_data_sequences: hashmap!(),
+            }
+        }
+
+        pub fn set_pid_sequence(&mut self, pid: Pid, sequence: Vec<D>) {
+            let result_sequence = sequence.into_iter().map(|d| Ok(d)).collect();
+            self.process_data_sequences.insert(pid, result_sequence);
+        }
+
+        pub fn make_pid_fail(&mut self, pid: Pid) {
+            let err = Err(ProcfsError::IOError(io::Error::new(io::ErrorKind::Other, "oh no!")));
+            self.process_data_sequences.insert(pid, vecdeque!(err));
+        }
+    }
+
+    impl<D> ReadProcessData<D> for FakeProcessDataReader<D>
+    where
+        D: ProcessData + Sized,
+    {
+        fn read(&mut self, pid: Pid) -> Result<D, ProcfsError> {
+            self.process_data_sequences
+                .get_mut(&pid)
+                .expect("No data is configured for this process")
+                .pop_front()
+                .expect("This process has no data left to return")
+        }
+    }
+}
+
 /// Parses space-separated token from a given multi-line string slice
 pub struct TokenParser<'a> {
     lines: Vec<Vec<&'a str>>,
