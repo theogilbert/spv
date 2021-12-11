@@ -68,33 +68,9 @@ mod test_disk_io_probe {
 
     use crate::core::metrics::IOMetric;
     use crate::core::probe::Probe;
-    use crate::core::process::Pid;
     use crate::procfs::diskio_probe::DiskIOProbe;
-    use crate::procfs::parsers::{PidIO, ReadProcessData};
-    use crate::procfs::ProcfsError;
-
-    struct PidIOReaderStub {
-        reverted_sequence: Vec<PidIO>,
-    }
-
-    impl PidIOReaderStub {
-        fn new(mut sequence: Vec<PidIO>) -> Self {
-            sequence.reverse();
-
-            PidIOReaderStub {
-                reverted_sequence: sequence,
-            }
-        }
-    }
-
-    impl ReadProcessData<PidIO> for PidIOReaderStub {
-        fn read(&mut self, _pid: Pid) -> Result<PidIO, ProcfsError> {
-            Ok(self
-                .reverted_sequence
-                .pop()
-                .expect("Index error while reading with PidIOReaderStub"))
-        }
-    }
+    use crate::procfs::parsers::test_utils::FakeProcessDataReader;
+    use crate::procfs::parsers::PidIO;
 
     #[rstest]
     #[case(0, 0, 0, 0, 0)]
@@ -112,12 +88,14 @@ mod test_disk_io_probe {
             PidIO::new(read_bytes, write_bytes, cancelled_write_bytes),
         ];
 
-        let reader = PidIOReaderStub::new(sequence);
+        let mut reader = FakeProcessDataReader::new();
+        reader.set_pid_sequence(1, sequence);
+
         let mut io_probe = DiskIOProbe::from_reader(Box::new(reader));
 
-        let _ = io_probe.probe(0).unwrap();
+        let _ = io_probe.probe(1).unwrap();
         FakeClock::advance_time(1000);
-        let io_2 = io_probe.probe(0).unwrap();
+        let io_2 = io_probe.probe(1).unwrap();
 
         assert_eq!(io_2, IOMetric::new(expected_input, expected_output));
     }
