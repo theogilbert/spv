@@ -57,9 +57,7 @@ impl SpvUI {
             self.process_list
                 .render(frame.with_region(layout.processes_chunk()), overview);
 
-            if let Some(view) = view {
-                self.chart.render(frame.with_region(layout.chart_chunk()), view);
-            }
+            self.chart.render(frame.with_region(layout.chart_chunk()), view);
 
             self.metadata_bar.render(frame.with_region(layout.metadata_chunk()));
         })

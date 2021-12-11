@@ -1,10 +1,11 @@
 use std::ops::Neg;
 use std::time::Duration;
 
+use tui::layout::Alignment;
 use tui::style::{Color, Style};
 use tui::symbols;
 use tui::text::Span;
-use tui::widgets::{Axis, Block, Borders, Chart, Dataset, GraphType};
+use tui::widgets::{Axis, Block, Borders, Chart, Dataset, GraphType, Paragraph};
 
 use crate::core::time::Timestamp;
 use crate::core::view::MetricView;
@@ -22,15 +23,40 @@ impl MetricsChart {
         }
     }
 
-    pub fn render(&self, frame: &mut FrameRegion, view: &MetricView) {
+    pub fn render(&self, frame: &mut FrameRegion, view_opt: &Option<MetricView>) {
+        match view_opt {
+            Some(view) => self.render_metrics_view(frame, view),
+            None => self.render_no_process_selected_message(frame),
+        }
+    }
+
+    fn render_no_process_selected_message(&self, frame: &mut FrameRegion) {
+        let block = Self::widget_block();
+
+        let y_offset = block.inner(frame.region()).height as usize / 2;
+        let y_offset = y_offset.saturating_sub(1);
+
+        let mut text = "\n".repeat(y_offset);
+        text.push_str("No process is selected");
+
+        let paragraph = Paragraph::new(text).block(block).alignment(Alignment::Center);
+
+        frame.render_widget(paragraph)
+    }
+
+    fn render_metrics_view(&self, frame: &mut FrameRegion, view: &MetricView) {
         let raw_data = build_raw_vecs(view, self.resolution);
 
         let chart = Chart::new(build_datasets(&raw_data, view))
-            .block(Block::default().borders(Borders::ALL))
+            .block(Self::widget_block())
             .x_axis(self.define_x_axis(view))
             .y_axis(self.define_y_axis(view));
 
         frame.render_widget(chart);
+    }
+
+    fn widget_block<'a>() -> Block<'a> {
+        Block::default().borders(Borders::ALL)
     }
 
     fn define_x_axis(&self, metrics_view: &MetricView) -> Axis {
