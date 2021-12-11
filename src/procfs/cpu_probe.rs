@@ -99,16 +99,15 @@ impl UsageCalculator {
         self.prev_global_stat = stat_data;
     }
 
-    ///
-    /// Given new content of /proc/[pid]/stat and its last known content, calculates the elapsed
+    /// Given new content of /proc/\[pid\]/stat and its last known content, calculates the elapsed
     /// ticks corresponding to CPU runtime related to this process
     ///
-    /// Then given a recently calculated global CPU runtime lapse (see [compute_new_runtime_diff()]),
+    /// Then given a recently calculated global CPU runtime lapse (see [`Self::compute_new_runtime_diff()`]),
     /// calculates the portion of this runtime that was dedicated to the given process in percent
     ///
     /// # Arguments
     ///  * `pid` The ID of a process
-    ///  * `pid_stat_data`: The new content of the stat file of the process with ID [pid]
+    ///  * `pid_stat_data`: The new content of the stat file of the process with ID `pid`
     ///
     pub fn calculate_pid_usage(&mut self, pid: Pid, pid_stat_data: PidStat) -> f64 {
         let last_iter_runtime = match self.processes_prev_stats.get(&pid) {
@@ -218,7 +217,7 @@ mod test_cpu_probe {
     }
 
     #[test]
-    fn test_should_return_ignore_pid_when_probe_returns_err() {
+    fn test_should_ignore_pid_when_probe_returns_err() {
         let stat_reader = InMemoryStatReader {
             stat_seq: vec![create_stat(0), create_stat(200)],
         };
