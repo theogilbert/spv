@@ -1,14 +1,14 @@
 //! Process discovery
 
-use std::fs::{DirEntry, File, read_dir};
+use std::fs::{read_dir, DirEntry, File};
 use std::io;
 use std::io::Read;
 use std::path::PathBuf;
 
 use thiserror::Error;
 
-use crate::core::Error as CoreError;
 use crate::core::process::{Pid, ProcessMetadata, ProcessScanner};
+use crate::core::Error as CoreError;
 
 /// Errors internal to the process module
 #[derive(Error, Debug)]
@@ -137,7 +137,7 @@ mod test_pid_scanner {
     use std::os::unix::fs::PermissionsExt;
     use std::path::Path;
 
-    use tempfile::{NamedTempFile, tempdir};
+    use tempfile::{tempdir, NamedTempFile};
 
     use crate::core::Error as CoreError;
 
