@@ -124,67 +124,36 @@ impl UsageCalculator {
 
 #[cfg(test)]
 mod test_cpu_probe {
-    use std::collections::{HashMap, VecDeque};
-    use std::io;
-
     use crate::core::metrics::PercentMetric;
     use crate::core::probe::Probe;
-    use crate::core::process::Pid;
     use crate::procfs::cpu_probe::common_test_utils::{create_pid_stat, create_stat};
     use crate::procfs::cpu_probe::CpuProbe;
-    use crate::procfs::parsers::{PidStat, ReadProcessData, ReadSystemData, Stat};
-    use crate::procfs::ProcfsError;
+    use crate::procfs::parsers::test_utils::{FakeProcessDataReader, FakeSystemDataReader};
+    use crate::procfs::parsers::{PidStat, Stat};
 
-    struct MemoryPidStatReader {
-        pid_stats_seq: HashMap<Pid, VecDeque<Result<PidStat, ProcfsError>>>,
-    }
-
-    impl ReadProcessData<PidStat> for MemoryPidStatReader {
-        fn read(&mut self, pid: u32) -> Result<PidStat, ProcfsError> {
-            self.pid_stats_seq.get_mut(&pid).unwrap().pop_front().unwrap()
-        }
-    }
-
-    struct InMemoryStatReader {
-        stat_seq: Vec<Stat>,
-    }
-
-    impl ReadSystemData<Stat> for InMemoryStatReader {
-        fn read(&mut self) -> Result<Stat, ProcfsError> {
-            Ok(self.stat_seq.remove(0))
-        }
+    fn build_probe(stat_reader: FakeSystemDataReader<Stat>, pid_reader: FakeProcessDataReader<PidStat>) -> CpuProbe {
+        CpuProbe::from_readers(Box::new(stat_reader), Box::new(pid_reader)).expect("Could not create procfs")
     }
 
     #[test]
     fn test_should_return_zero_metrics_when_no_pid() {
-        let stat_reader = InMemoryStatReader {
-            stat_seq: vec![create_stat(0), create_stat(200)],
-        };
-        let pid_stat_reader = MemoryPidStatReader {
-            pid_stats_seq: HashMap::new(),
-        };
+        let stat_reader = FakeSystemDataReader::from_sequence(vec![create_stat(0)]);
+        let pid_stat_reader = FakeProcessDataReader::new();
 
-        let mut probe =
-            CpuProbe::from_readers(Box::new(stat_reader), Box::new(pid_stat_reader)).expect("Could not create procfs");
+        let mut probe = build_probe(stat_reader, pid_stat_reader);
+        let probed_metrics = probe.probe_processes(&vec![]).unwrap();
 
-        let empty_map: HashMap<Pid, PercentMetric> = HashMap::new();
-        assert!(matches!(probe.probe_processes(&vec![]), Ok(empty_map)));
+        assert_eq!(probed_metrics, hashmap!());
     }
 
     #[test]
     fn test_should_return_one_metric_when_one_pid() {
-        let stat_reader = InMemoryStatReader {
-            stat_seq: vec![create_stat(0), create_stat(200)],
-        };
+        let stat_reader = FakeSystemDataReader::from_sequence(vec![create_stat(0), create_stat(200)]);
 
-        let pid_stat_seq = vecdeque!(Ok(create_pid_stat(0)), Ok(create_pid_stat(100)));
-        let pid_stat_reader = MemoryPidStatReader {
-            pid_stats_seq: hashmap!(1 => pid_stat_seq),
-        };
+        let mut pid_stat_reader = FakeProcessDataReader::new();
+        pid_stat_reader.set_pid_sequence(1, vec![create_pid_stat(0), create_pid_stat(100)]);
 
-        let mut probe =
-            CpuProbe::from_readers(Box::new(stat_reader), Box::new(pid_stat_reader)).expect("Could not create procfs");
-
+        let mut probe = build_probe(stat_reader, pid_stat_reader);
         probe.probe_processes(&vec![1]).unwrap(); // First calibration probing
 
         assert_eq!(
@@ -195,46 +164,33 @@ mod test_cpu_probe {
 
     #[test]
     fn test_should_return_two_metrics_when_two_pids() {
-        let stat_reader = InMemoryStatReader {
-            stat_seq: vec![create_stat(0), create_stat(200)],
-        };
+        let stat_reader = FakeSystemDataReader::from_sequence(vec![create_stat(0), create_stat(200)]);
 
-        let first_pid_stat_seq = vecdeque!(Ok(create_pid_stat(0)), Ok(create_pid_stat(50)));
-        let second_pid_stat_seq = vecdeque!(Ok(create_pid_stat(0)), Ok(create_pid_stat(50)));
-        let pid_stat_reader = MemoryPidStatReader {
-            pid_stats_seq: hashmap!(1 => first_pid_stat_seq, 2 => second_pid_stat_seq),
-        };
+        let mut pid_stat_reader = FakeProcessDataReader::new();
+        pid_stat_reader.set_pid_sequence(1, vec![create_pid_stat(0), create_pid_stat(50)]);
+        pid_stat_reader.set_pid_sequence(2, vec![create_pid_stat(0), create_pid_stat(100)]);
 
-        let mut probe =
-            CpuProbe::from_readers(Box::new(stat_reader), Box::new(pid_stat_reader)).expect("Could not create procfs");
+        let mut probe = build_probe(stat_reader, pid_stat_reader);
         probe.probe_processes(&vec![1, 2]).unwrap(); // calibrating probe
 
         let metrics = probe.probe_processes(&vec![1, 2]).unwrap();
-        assert_eq!(
-            metrics,
-            hashmap!(1 => PercentMetric::new(25.), 2 => PercentMetric::new(25.))
-        );
+
+        let expected_metrics = hashmap!(1 => PercentMetric::new(25.), 2 => PercentMetric::new(50.));
+        assert_eq!(metrics, expected_metrics);
     }
 
     #[test]
-    fn test_should_ignore_pid_when_probe_returns_err() {
-        let stat_reader = InMemoryStatReader {
-            stat_seq: vec![create_stat(0), create_stat(200)],
-        };
-        let first_pid_stat_seq = vecdeque!(Ok(create_pid_stat(0)), Ok(create_pid_stat(50)));
-        let second_pid_stat_seq = vecdeque!(
-            Ok(create_pid_stat(0)),
-            Err(ProcfsError::IOError(io::Error::new(io::ErrorKind::Other, "oh no!")))
-        );
-        let pid_stat_reader = MemoryPidStatReader {
-            pid_stats_seq: hashmap!(1 => first_pid_stat_seq, 2 => second_pid_stat_seq),
-        };
+    fn test_should_return_default_metric_when_probing_process_returns_err() {
+        let stat_reader = FakeSystemDataReader::from_sequence(vec![create_stat(0), create_stat(200)]);
 
-        let mut probe =
-            CpuProbe::from_readers(Box::new(stat_reader), Box::new(pid_stat_reader)).expect("Could not create procfs");
+        let mut pid_stat_reader = FakeProcessDataReader::new();
+        pid_stat_reader.make_pid_fail(1);
 
-        let map = hashmap!(1 => PercentMetric::new(25.));
-        assert!(matches!(probe.probe_processes(&vec![1, 2]), Ok(map)));
+        let mut probe = build_probe(stat_reader, pid_stat_reader);
+
+        let collected_metrics = probe.probe_processes(&vec![1]).unwrap();
+
+        assert_eq!(collected_metrics, hashmap!(1 => PercentMetric::default()));
     }
 }
 
