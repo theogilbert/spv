@@ -55,6 +55,9 @@ impl MetricsChart {
 
         let labels = vec![
             Span::from("0"),
+            // To keep the first X-axis label from resizing the chart when its length changes:
+            // TODO remove this once issue #567 from tui-rs is solved (or PR #568 is merged)
+            Span::from("           "),
             Span::from(metrics_view.concise_repr_of_value(upper_bound)),
         ];
 
