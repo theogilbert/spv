@@ -7,7 +7,8 @@ use log::warn;
 
 use crate::core::collection::MetricCollector;
 use crate::core::process::{ProcessCollector, ProcessMetadata, Status};
-use crate::core::time::{refresh_current_timestamp, Span, Timestamp};
+use crate::core::time::{refresh_current_timestamp};
+use crate::ctrl::span::RenderingSpan;
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
 use crate::Error;
@@ -17,7 +18,7 @@ pub struct SpvApplication {
     process_view: ProcessCollector,
     ui: SpvUI,
     collectors: HashMap<String, Box<dyn MetricCollector>>,
-    represented_span: Span,
+    rendering_span: RenderingSpan,
 }
 
 impl SpvApplication {
@@ -28,20 +29,17 @@ impl SpvApplication {
         impulse_tolerance: Duration,
     ) -> Result<Self, Error> {
         let time_tolerance = 2 * impulse_tolerance;
-        let ui = SpvUI::new(collectors.iter().map(|p| p.name().to_string()), time_tolerance)?;
-
-        let collectors_map = collectors.into_iter().map(|mc| (mc.name().to_string(), mc)).collect();
-
         const DEFAULT_REPRESENTED_SPAN_DURATION: Duration = Duration::from_secs(60);
-        let mut rendered_span = Span::from_duration(DEFAULT_REPRESENTED_SPAN_DURATION);
-        rendered_span.set_tolerance(time_tolerance);
+
+        let ui = SpvUI::new(collectors.iter().map(|p| p.name().to_string()), time_tolerance)?;
+        let collectors_map = collectors.into_iter().map(|mc| (mc.name().to_string(), mc)).collect();
 
         Ok(Self {
             receiver,
             process_view,
             ui,
             collectors: collectors_map,
-            represented_span: rendered_span,
+            rendering_span: RenderingSpan::new(DEFAULT_REPRESENTED_SPAN_DURATION, time_tolerance),
         })
     }
 
@@ -62,9 +60,9 @@ impl SpvApplication {
                 Trigger::Resize => (), // No need to do anything, just receiving a signal will refresh UI at the end of the loop
                 Trigger::NextTab => self.ui.next_tab(),
                 Trigger::PreviousTab => self.ui.previous_tab(),
-                Trigger::ScrollLeft => self.represented_span.scroll_left(Duration::from_secs(1)),
-                Trigger::ScrollRight => self.represented_span.scroll_right(Duration::from_secs(1)),
-                Trigger::ScrollReset => self.represented_span.set_end_and_shift(Timestamp::now()),
+                Trigger::ScrollLeft => self.rendering_span.scroll_left(),
+                Trigger::ScrollRight => self.rendering_span.scroll_right(),
+                Trigger::ScrollReset => self.rendering_span.reset_scroll(),
             }
 
             self.draw_ui()?;
@@ -74,13 +72,8 @@ impl SpvApplication {
     }
 
     fn increment_iteration(&mut self) {
-        let span_should_follow_current_iteration = self.represented_span.is_fully_scrolled_right();
-
         refresh_current_timestamp();
-
-        if span_should_follow_current_iteration {
-            self.represented_span.set_end_and_shift(Timestamp::now());
-        }
+        self.rendering_span.refresh();
     }
 
     fn calibrate_probes(&mut self) -> Result<(), Error> {
@@ -121,7 +114,7 @@ impl SpvApplication {
         self.process_view
             .processes()
             .into_iter()
-            .filter(|pm| pm.running_span().intersects(&self.represented_span))
+            .filter(|pm| pm.running_span().intersects(self.rendering_span.span()))
             .collect()
     }
 
@@ -144,7 +137,7 @@ impl SpvApplication {
         let metrics_view = self
             .ui
             .current_process()
-            .map(|pm| current_collector.view(pm, self.represented_span));
+            .map(|pm| current_collector.view(pm, *self.rendering_span.span()));
 
         self.ui.render(&overview, &metrics_view).map_err(Error::UiError)
     }

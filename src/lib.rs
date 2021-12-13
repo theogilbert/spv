@@ -11,6 +11,7 @@ pub mod procfs;
 pub mod spv;
 pub mod triggers;
 mod ui;
+mod ctrl;
 
 #[derive(Error, Debug)]
 pub enum Error {
