@@ -165,7 +165,7 @@ where
 }
 
 #[cfg(test)]
-pub mod test_utils {
+pub mod fakes {
     use std::collections::{HashMap, VecDeque};
     use std::io;
 

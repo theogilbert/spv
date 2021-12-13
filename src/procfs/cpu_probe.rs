@@ -128,7 +128,7 @@ mod test_cpu_probe {
     use crate::core::probe::Probe;
     use crate::procfs::cpu_probe::common_test_utils::{create_pid_stat, create_stat};
     use crate::procfs::cpu_probe::CpuProbe;
-    use crate::procfs::parsers::test_utils::{FakeProcessDataReader, FakeSystemDataReader};
+    use crate::procfs::parsers::fakes::{FakeProcessDataReader, FakeSystemDataReader};
     use crate::procfs::parsers::{PidStat, Stat};
 
     fn build_probe(stat_reader: FakeSystemDataReader<Stat>, pid_reader: FakeProcessDataReader<PidStat>) -> CpuProbe {
