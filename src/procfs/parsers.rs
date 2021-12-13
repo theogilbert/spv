@@ -9,17 +9,17 @@ use crate::core::process::Pid;
 use crate::procfs::ProcfsError;
 
 /// Type which can be parsed from a `TokenParser`
-pub trait Data: Sized {
+pub trait Parse: Sized {
     fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError>;
 }
 
 /// Specialization of a `Data` type which is not associated to a process
-pub trait SystemData: Data {
+pub trait SystemData: Parse {
     fn filepath() -> PathBuf;
 }
 
 /// Specialization of a `Data` type which is associated to a process
-pub trait ProcessData: Data {
+pub trait ProcessData: Parse {
     fn filepath(pid: Pid) -> PathBuf;
 }
 
@@ -110,14 +110,14 @@ where
 
 struct ProcfsReader<D>
 where
-    D: Data + Sized,
+    D: Parse + Sized,
 {
     reader: DataReader<File, D>,
 }
 
 impl<D> ProcfsReader<D>
 where
-    D: Data + Sized,
+    D: Parse + Sized,
 {
     pub fn new(filepath: &Path) -> Result<Self, ProcfsError> {
         File::open(filepath).map_err(ProcfsError::from).map(|file| Self {
@@ -133,7 +133,7 @@ where
 struct DataReader<R, D>
 where
     R: Read + Seek,
-    D: Data + Sized,
+    D: Parse + Sized,
 {
     src: R,
     phantom: PhantomData<D>,
@@ -142,7 +142,7 @@ where
 impl<R, D> DataReader<R, D>
 where
     R: Read + Seek,
-    D: Data + Sized,
+    D: Parse + Sized,
 {
     pub fn new(src: R) -> Self {
         DataReader {
@@ -303,7 +303,7 @@ impl<'a> TokenParser<'a> {
 mod test_data_reader {
     use std::io::Cursor;
 
-    use crate::procfs::parsers::{Data, DataReader, ProcfsError, TokenParser};
+    use crate::procfs::parsers::{DataReader, Parse, ProcfsError, TokenParser};
 
     #[derive(PartialEq, Debug)]
     struct TestSystemData {
@@ -311,7 +311,7 @@ mod test_data_reader {
         field_2: i16,
     }
 
-    impl Data for TestSystemData {
+    impl Parse for TestSystemData {
         fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
             Ok(TestSystemData {
                 field_1: token_parser.token(0, 0)?,
@@ -409,7 +409,7 @@ impl Stat {
     }
 }
 
-impl Data for Stat {
+impl Parse for Stat {
     fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
         Ok(Stat {
             user: token_parser.token(0, 1)?,
@@ -451,7 +451,7 @@ impl PidStat {
     }
 }
 
-impl Data for PidStat {
+impl Parse for PidStat {
     fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
         Ok(PidStat {
             utime: token_parser.token(0, 12)?,
@@ -607,7 +607,7 @@ impl PidIO {
     }
 }
 
-impl Data for PidIO {
+impl Parse for PidIO {
     fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
         Ok(PidIO {
             read_bytes: token_parser.token(4, 1)?,
@@ -633,7 +633,7 @@ impl ProcessData for PidIO {
 mod test_pid_io {
     use std::path::PathBuf;
 
-    use crate::procfs::parsers::{Data, PidIO, ProcessData, TokenParser};
+    use crate::procfs::parsers::{Parse, PidIO, ProcessData, TokenParser};
 
     #[test]
     fn test_should_produce_correct_file_path() {
