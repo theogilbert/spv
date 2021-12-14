@@ -7,7 +7,7 @@ use log::warn;
 
 use crate::core::collection::MetricCollector;
 use crate::core::process::{ProcessCollector, ProcessMetadata, Status};
-use crate::core::time::{refresh_current_timestamp};
+use crate::core::time::refresh_current_timestamp;
 use crate::ctrl::span::RenderingSpan;
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
@@ -98,7 +98,6 @@ impl SpvApplication {
         }
 
         let mut exposed_processes = self.represented_processes();
-
         self.sort_processes_by_status_and_metric(&mut exposed_processes);
         self.ui.set_processes(exposed_processes);
 
@@ -111,10 +110,12 @@ impl SpvApplication {
 
     fn represented_processes(&self) -> Vec<ProcessMetadata> {
         // TODO selected process should be represented even if it expired
+        let rendered_span = self.rendering_span.to_span();
+
         self.process_view
             .processes()
             .into_iter()
-            .filter(|pm| pm.running_span().intersects(self.rendering_span.span()))
+            .filter(|pm| pm.running_span().intersects(&rendered_span))
             .collect()
     }
 
@@ -137,7 +138,7 @@ impl SpvApplication {
         let metrics_view = self
             .ui
             .current_process()
-            .map(|pm| current_collector.view(pm, *self.rendering_span.span()));
+            .map(|pm| current_collector.view(pm, self.rendering_span.to_span()));
 
         self.ui.render(&overview, &metrics_view).map_err(Error::UiError)
     }
