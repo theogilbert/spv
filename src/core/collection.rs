@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use crate::core::metrics::{DatedMetric, Metric};
 use crate::core::probe::Probe;
-use crate::core::process::{Pid, ProcessMetadata};
+use crate::core::process::Pid;
 use crate::core::time::{Span, Timestamp};
 use crate::core::view::{MetricView, MetricsOverview};
 use crate::core::Error;
@@ -53,9 +53,9 @@ pub trait MetricCollector {
     /// metrics of a given process.
     ///
     /// # Arguments
-    ///  * `pm`: The process for which to view metrics
+    ///  * `pid`: The ID of the process for which to view metrics
     ///  * `span`: The time period covered by the metric view
-    fn view(&self, pm: &ProcessMetadata, span: Span) -> MetricView;
+    fn view(&self, pid: Pid, span: Span) -> MetricView;
 
     /// Builds a [`MetricsOverview`](crate::core::view::MetricsOverview), containing the last metrics
     /// of all running processes.
@@ -114,8 +114,8 @@ where
         self.probe.name()
     }
 
-    fn view(&self, pm: &ProcessMetadata, span: Span) -> MetricView {
-        self.collection.view(pm, span)
+    fn view(&self, pid: Pid, span: Span) -> MetricView {
+        self.collection.view(pid, span)
     }
 
     fn overview(&self) -> MetricsOverview {
@@ -134,7 +134,7 @@ mod test_probe_collector {
     use crate::core::collection::{MetricCollector, ProbeCollector};
     use crate::core::metrics::PercentMetric;
     use crate::core::probe::Probe;
-    use crate::core::process::{Pid, ProcessMetadata};
+    use crate::core::process::Pid;
     use crate::core::time::{Span, Timestamp};
     use crate::core::Error;
 
@@ -192,35 +192,32 @@ mod test_probe_collector {
 
     #[rstest]
     fn test_process_metrics_should_be_empty_when_not_collected() {
-        let process_data = ProcessMetadata::new(1, "cmd");
         let collector = create_collector_with_map(hashmap!());
 
         let span = Span::new(Timestamp::now(), Timestamp::now() + Duration::from_secs(60));
-        let view = collector.view(&process_data, span);
+        let view = collector.view(1, span);
 
         assert_eq!(view.as_slice().len(), 0);
     }
 
     #[rstest]
     fn test_collector_should_be_empty_when_only_calibrated() {
-        let process_data = ProcessMetadata::new(1, "cmd");
         let mut collector = create_collector_with_map(hashmap!(1 => 10.));
         collector.calibrate(&[1]).unwrap();
 
         let span = Span::new(Timestamp::now(), Timestamp::now() + Duration::from_secs(60));
-        let view = collector.view(&process_data, span);
+        let view = collector.view(1, span);
 
         assert_eq!(view.as_slice().len(), 0);
     }
 
     #[rstest]
     fn test_collector_should_not_be_empty_when_collected() {
-        let process_data = ProcessMetadata::new(1, "cmd");
         let mut collector = create_collector_with_map(hashmap!(1 => 10.));
         collector.collect(&[1]).unwrap();
 
         let span = Span::new(Timestamp::now(), Timestamp::now() + Duration::from_secs(60));
-        let view = collector.view(&process_data, span);
+        let view = collector.view(1, span);
 
         assert_eq!(view.as_slice().len(), 1);
     }
@@ -263,9 +260,9 @@ where
             .unwrap_or(&self.default)
     }
 
-    pub fn view(&self, pm: &ProcessMetadata, span: Span) -> MetricView {
+    pub fn view(&self, pid: Pid, span: Span) -> MetricView {
         self.processes_data
-            .get(&pm.pid())
+            .get(&pid)
             .map(|pd| pd.view(span))
             .unwrap_or_else(|| Self::build_default_view(span))
     }
@@ -360,8 +357,9 @@ where
 
 #[cfg(test)]
 mod test_process_data {
-    use rstest::*;
     use std::time::Duration;
+
+    use rstest::*;
 
     use crate::core::collection::ProcessData;
     use crate::core::metrics::{Metric, PercentMetric};

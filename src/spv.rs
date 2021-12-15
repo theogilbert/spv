@@ -138,7 +138,7 @@ impl SpvApplication {
         let metrics_view = self
             .ui
             .current_process()
-            .map(|pm| current_collector.view(pm, self.rendering_span.to_span()));
+            .map(|pm| current_collector.view(pm.pid(), self.rendering_span.to_span()));
 
         self.ui.render(&overview, &metrics_view).map_err(Error::UiError)
     }

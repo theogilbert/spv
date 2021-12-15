@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use crate::core::metrics::{DatedMetric, Metric};
-use crate::core::process::Pid;
+use crate::core::process::{Pid, ProcessMetadata};
 use crate::core::time::Span;
 
 /// Snapshot of all collected metrics of a single process, from a single probe
@@ -86,8 +86,9 @@ impl<'a> MetricView<'a> {
 
 #[cfg(test)]
 mod test_metric_view {
-    use rstest::*;
     use std::time::Duration;
+
+    use rstest::*;
 
     use crate::core::metrics::{DatedMetric, IOMetric, Metric, PercentMetric};
     use crate::core::time::{Span, Timestamp};
@@ -204,11 +205,27 @@ impl<'a> MetricsOverview<'a> {
 mod test_metric_overview {
     use crate::core::collection::MetricCollection;
     use crate::core::metrics::{Metric, PercentMetric};
+    use crate::core::process::{Pid, ProcessMetadata};
     use crate::core::view::test_helpers::produce_metrics_collection;
     use crate::core::view::MetricsOverview;
 
     fn build_overview(collection: &MetricCollection<PercentMetric>) -> MetricsOverview {
         collection.overview()
+    }
+
+    /// Return collection of PercentMetric containing metrics for `proc_count` processes.<br/>
+    /// The Pid values range from `0` to `proc_count - 1`<br/>
+    /// To each processes are associated the same PercentMetric values, ranging from `0` to `metrics_count`
+    fn produce_metrics_collection(proc_count: usize, values: Vec<f64>) -> MetricCollection<PercentMetric> {
+        let mut collection = MetricCollection::new();
+
+        for value in values.into_iter() {
+            for proc_idx in 0..proc_count {
+                collection.push(proc_idx as Pid, PercentMetric::new(value));
+            }
+        }
+
+        collection
     }
 
     #[test]
@@ -233,27 +250,5 @@ mod test_metric_overview {
         let overview = build_overview(&collection);
 
         assert_eq!(overview.last_or_default(2), &PercentMetric::default());
-    }
-}
-
-#[cfg(test)]
-mod test_helpers {
-    use crate::core::collection::MetricCollection;
-    use crate::core::metrics::PercentMetric;
-    use crate::core::process::Pid;
-
-    /// Return collection of PercentMetric containing metrics for `proc_count` processes.<br/>
-    /// The Pid values range from `0` to `proc_count - 1`<br/>
-    /// To each processes are associated the same PercentMetric values, ranging from `0` to `metrics_count`
-    pub(crate) fn produce_metrics_collection(proc_count: usize, values: Vec<f64>) -> MetricCollection<PercentMetric> {
-        let mut collection = MetricCollection::new();
-
-        for value in values.into_iter() {
-            for proc_idx in 0..proc_count {
-                collection.push(proc_idx as Pid, PercentMetric::new(value));
-            }
-        }
-
-        collection
     }
 }
