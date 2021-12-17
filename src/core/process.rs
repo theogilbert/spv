@@ -413,7 +413,7 @@ mod test_process_collector {
     }
 }
 
-/// Trait with methods to retrieve basic information about running processes
+/// Trait with methods to retrieve information about running processes
 pub trait ProcessScanner {
     /// Returns a list containing the PIDs of all currently running processes
     fn scan(&mut self) -> Result<Vec<Pid>, Error>;

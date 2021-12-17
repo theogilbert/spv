@@ -1,3 +1,4 @@
+//! Manages the selection of the current process
 use crate::core::process::{Pid, ProcessMetadata};
 use crate::core::view::ProcessView;
 
@@ -56,7 +57,7 @@ impl ProcessSelector {
 
 #[cfg(test)]
 mod test_processes {
-    use rstest::*;
+    use rstest::{fixture, rstest};
 
     use crate::core::process::ProcessMetadata;
     use crate::ctrl::processes::ProcessSelector;

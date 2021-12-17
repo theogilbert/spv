@@ -1,3 +1,4 @@
+//! Manages the configuration of the span of metrics to render
 use std::time::Duration;
 
 use crate::core::time::{Span, Timestamp};
