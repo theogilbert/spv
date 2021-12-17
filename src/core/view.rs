@@ -1,4 +1,4 @@
-//! View of collected metrics
+//! Immutable views of application data
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -252,6 +252,7 @@ mod test_metric_overview {
     }
 }
 
+/// Contains the processes to display to the user, as well as the process that is currently selected
 pub struct ProcessView<'a> {
     sorted_processes: &'a [ProcessMetadata],
     selected_index: Option<usize>,
@@ -307,7 +308,7 @@ mod test_process_view {
     }
 
     #[rstest]
-    fn test_should_have_no_selected_process(processes: Vec<ProcessMetadata>) {
+    fn test_should_have_no_selected_process_when_given_index_is_none(processes: Vec<ProcessMetadata>) {
         let view = ProcessView::new(&processes, None);
 
         assert_eq!(view.selected_index(), None);
@@ -326,5 +327,53 @@ mod test_process_view {
     #[should_panic]
     fn test_should_panic_when_index_out_of_bound(processes: Vec<ProcessMetadata>) {
         ProcessView::new(&processes, Some(2));
+    }
+}
+
+/// Contains information about the available metrics collectors, and the collector currently selected by the user
+pub struct CollectorsView {
+    collectors_names: Vec<&'static str>,
+    selected_index: usize,
+}
+
+impl CollectorsView {
+    pub fn new(collectors_names: Vec<&'static str>, selected_index: usize) -> Self {
+        if selected_index >= collectors_names.len() {
+            panic!("The collectors selected index {} is out of bound", selected_index)
+        }
+
+        Self {
+            collectors_names,
+            selected_index,
+        }
+    }
+
+    pub fn selected_index(&self) -> usize {
+        self.selected_index
+    }
+
+    pub fn collectors_names(&self) -> &[&'static str] {
+        &self.collectors_names
+    }
+}
+
+#[cfg(test)]
+mod test_collectors_view {
+    use crate::core::view::CollectorsView;
+
+    #[test]
+    fn test_should_correctly_return_passed_parameters() {
+        let names = vec!["Collector1", "Collector2"];
+        let view = CollectorsView::new(names.clone(), 1);
+
+        assert_eq!(view.collectors_names(), &names);
+        assert_eq!(view.selected_index(), 1);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_should_panic_when_selected_index_out_of_bounds() {
+        let names = vec!["Collector1"];
+        CollectorsView::new(names.clone(), 1);
     }
 }
