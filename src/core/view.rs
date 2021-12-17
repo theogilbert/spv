@@ -253,16 +253,16 @@ mod test_metric_overview {
 }
 
 /// Contains the processes to display to the user, as well as the process that is currently selected
-pub struct ProcessView<'a> {
+pub struct ProcessesView<'a> {
     sorted_processes: &'a [ProcessMetadata],
     selected_index: Option<usize>,
 }
 
-impl<'a> ProcessView<'a> {
+impl<'a> ProcessesView<'a> {
     /// Creates a view containing the processes to list on the UI, and the selected process if any
     ///
     /// Panics if `selected_index` is out of bound of `sorted_processes`
-    pub fn new(sorted_processes: &'a [ProcessMetadata], selected_index: Option<usize>) -> ProcessView<'a> {
+    pub fn new(sorted_processes: &'a [ProcessMetadata], selected_index: Option<usize>) -> ProcessesView<'a> {
         if let Some(selected_index) = selected_index {
             if selected_index >= sorted_processes.len() {
                 panic!("Selected process index if out of bound {:?}", selected_index);
@@ -293,7 +293,7 @@ mod test_process_view {
     use rstest::*;
 
     use crate::core::process::ProcessMetadata;
-    use crate::core::view::ProcessView;
+    use crate::core::view::ProcessesView;
 
     #[fixture]
     fn processes() -> Vec<ProcessMetadata> {
@@ -302,14 +302,14 @@ mod test_process_view {
 
     #[rstest]
     fn test_should_contain_all_processes_in_slice(processes: Vec<ProcessMetadata>) {
-        let view = ProcessView::new(&processes, None);
+        let view = ProcessesView::new(&processes, None);
 
         assert_eq!(view.as_slice(), &processes);
     }
 
     #[rstest]
     fn test_should_have_no_selected_process_when_given_index_is_none(processes: Vec<ProcessMetadata>) {
-        let view = ProcessView::new(&processes, None);
+        let view = ProcessesView::new(&processes, None);
 
         assert_eq!(view.selected_index(), None);
         assert_eq!(view.selected_process(), None);
@@ -317,7 +317,7 @@ mod test_process_view {
 
     #[rstest]
     fn test_should_return_correct_selected_process(processes: Vec<ProcessMetadata>) {
-        let view = ProcessView::new(&processes, Some(1));
+        let view = ProcessesView::new(&processes, Some(1));
 
         assert_eq!(view.selected_index(), Some(1));
         assert_eq!(view.selected_process(), Some(&processes[1]));
@@ -326,7 +326,7 @@ mod test_process_view {
     #[rstest]
     #[should_panic]
     fn test_should_panic_when_index_out_of_bound(processes: Vec<ProcessMetadata>) {
-        ProcessView::new(&processes, Some(2));
+        ProcessesView::new(&processes, Some(2));
     }
 }
 

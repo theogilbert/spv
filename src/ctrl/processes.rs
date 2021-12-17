@@ -1,6 +1,6 @@
 //! Manages the selection of the current process
 use crate::core::process::{Pid, ProcessMetadata};
-use crate::core::view::ProcessView;
+use crate::core::view::ProcessesView;
 
 #[derive(Default)]
 pub struct ProcessSelector {
@@ -50,8 +50,8 @@ impl ProcessSelector {
         }
     }
 
-    pub fn to_view(&self) -> ProcessView {
-        ProcessView::new(&self.sorted_processes, self.selected_index())
+    pub fn to_view(&self) -> ProcessesView {
+        ProcessesView::new(&self.sorted_processes, self.selected_index())
     }
 }
 

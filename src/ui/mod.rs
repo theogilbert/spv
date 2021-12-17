@@ -4,7 +4,7 @@ use std::time::Duration;
 use log::error;
 use thiserror::Error;
 
-use crate::core::view::{CollectorsView, MetricView, MetricsOverview, ProcessView};
+use crate::core::view::{CollectorsView, MetricView, MetricsOverview, ProcessesView};
 use crate::ui::chart::MetricsChart;
 use crate::ui::layout::UiLayout;
 use crate::ui::metadata::MetadataBar;
@@ -46,7 +46,7 @@ impl SpvUI {
     pub fn render(
         &mut self,
         collectors: &CollectorsView,
-        processes: &ProcessView,
+        processes: &ProcessesView,
         overview: &MetricsOverview,
         view: Option<&MetricView>,
     ) -> Result<(), Error> {

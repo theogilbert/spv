@@ -3,7 +3,7 @@ use tui::style::{Color, Modifier, Style};
 use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 
 use crate::core::process::{Pid, ProcessMetadata, Status};
-use crate::core::view::{MetricsOverview, ProcessView};
+use crate::core::view::{MetricsOverview, ProcessesView};
 use crate::ui::terminal::FrameRegion;
 
 /// Width of the process name column
@@ -25,7 +25,7 @@ impl ProcessList {
     ///   * `chunk`: The region within the `frame` reserved for this widget
     ///   * `archive`: The metrics archive, to display the current metric of each process
     ///   * `label`: The name of the metric to display
-    pub fn render(&mut self, frame: &mut FrameRegion, metrics_overview: &MetricsOverview, processes: &ProcessView) {
+    pub fn render(&mut self, frame: &mut FrameRegion, metrics_overview: &MetricsOverview, processes: &ProcessesView) {
         self.state.select(processes.selected_index());
 
         let rows_chunks = Layout::default()
