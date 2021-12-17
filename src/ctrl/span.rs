@@ -232,7 +232,7 @@ mod test_rendering_span {
     #[rstest]
     fn test_should_not_be_tolerant_with_span_in_future(rendering_span: RenderingSpan) {
         let span = rendering_span.to_span();
-        
+
         let other_span = Span::new(
             rendering_span.span.end() + rendering_span.tolerance(),
             rendering_span.span.end() + Duration::from_secs(10),
