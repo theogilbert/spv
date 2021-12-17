@@ -224,7 +224,7 @@ mod test_probe_collector {
 }
 
 /// MetricCollection manages ProcessData instances to store processes' metrics.<br/>
-pub(crate) struct MetricCollection<M>
+pub(super) struct MetricCollection<M>
 where
     M: Metric + Copy + PartialOrd + Default,
 {
