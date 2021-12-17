@@ -8,6 +8,7 @@ use log::warn;
 use crate::core::collection::MetricCollector;
 use crate::core::process::{ProcessCollector, ProcessMetadata, Status};
 use crate::core::time::refresh_current_timestamp;
+use crate::ctrl::processes::ProcessSelector;
 use crate::ctrl::span::RenderingSpan;
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
@@ -15,17 +16,18 @@ use crate::Error;
 
 pub struct SpvApplication {
     receiver: Receiver<Trigger>,
-    process_view: ProcessCollector,
+    process_collector: ProcessCollector,
     ui: SpvUI,
     collectors: HashMap<String, Box<dyn MetricCollector>>,
     rendering_span: RenderingSpan,
+    process_selector: ProcessSelector,
 }
 
 impl SpvApplication {
     pub fn new(
         receiver: Receiver<Trigger>,
         collectors: Vec<Box<dyn MetricCollector>>,
-        process_view: ProcessCollector,
+        process_collector: ProcessCollector,
         impulse_tolerance: Duration,
     ) -> Result<Self, Error> {
         let time_tolerance = 2 * impulse_tolerance;
@@ -36,10 +38,11 @@ impl SpvApplication {
 
         Ok(Self {
             receiver,
-            process_view,
+            process_collector,
             ui,
             collectors: collectors_map,
             rendering_span: RenderingSpan::new(DEFAULT_REPRESENTED_SPAN_DURATION, time_tolerance),
+            process_selector: ProcessSelector::default(),
         })
     }
 
@@ -55,8 +58,8 @@ impl SpvApplication {
                     self.increment_iteration();
                     self.collect_metrics()?;
                 }
-                Trigger::NextProcess => self.ui.next_process(),
-                Trigger::PreviousProcess => self.ui.previous_process(),
+                Trigger::NextProcess => self.process_selector.next_process(),
+                Trigger::PreviousProcess => self.process_selector.previous_process(),
                 Trigger::Resize => (), // No need to do anything, just receiving a signal will refresh UI at the end of the loop
                 Trigger::NextTab => self.ui.next_tab(),
                 Trigger::PreviousTab => self.ui.previous_tab(),
@@ -78,7 +81,7 @@ impl SpvApplication {
 
     fn calibrate_probes(&mut self) -> Result<(), Error> {
         self.scan_processes()?;
-        let pids = self.process_view.running_pids();
+        let pids = self.process_collector.running_pids();
 
         for c in self.collectors.values_mut() {
             c.calibrate(&pids)?;
@@ -89,7 +92,7 @@ impl SpvApplication {
 
     fn collect_metrics(&mut self) -> Result<(), Error> {
         self.scan_processes()?;
-        let running_pids = self.process_view.running_pids();
+        let running_pids = self.process_collector.running_pids();
 
         for collector in self.collectors.values_mut() {
             collector.collect(&running_pids).unwrap_or_else(|e| {
@@ -99,20 +102,20 @@ impl SpvApplication {
 
         let mut exposed_processes = self.represented_processes();
         self.sort_processes_by_status_and_metric(&mut exposed_processes);
-        self.ui.set_processes(exposed_processes);
+        self.process_selector.set_processes(exposed_processes);
 
         Ok(())
     }
 
     fn scan_processes(&mut self) -> Result<(), Error> {
-        self.process_view.collect_processes().map_err(Error::CoreError)
+        self.process_collector.collect_processes().map_err(Error::CoreError)
     }
 
     fn represented_processes(&self) -> Vec<ProcessMetadata> {
         // TODO selected process should be represented even if it expired
         let rendered_span = self.rendering_span.to_span();
 
-        self.process_view
+        self.process_collector
             .processes()
             .into_iter()
             .filter(|pm| pm.running_span().intersects(&rendered_span))
@@ -131,16 +134,19 @@ impl SpvApplication {
     }
 
     fn draw_ui(&mut self) -> Result<(), Error> {
-        let current_collector = self.current_collector(&self.collectors);
+        let metrics_collector = self.current_collector(&self.collectors);
 
-        let overview = current_collector.overview();
+        let processes = self.process_selector.to_view();
+        let overview = metrics_collector.overview();
 
         let metrics_view = self
-            .ui
-            .current_process()
-            .map(|pm| current_collector.view(pm.pid(), self.rendering_span.to_span()));
+            .process_selector
+            .selected_process()
+            .map(|pm| metrics_collector.view(pm.pid(), self.rendering_span.to_span()));
 
-        self.ui.render(&overview, &metrics_view).map_err(Error::UiError)
+        self.ui
+            .render(&overview, &metrics_view, &processes)
+            .map_err(Error::UiError)
     }
 
     fn current_collector<'a>(

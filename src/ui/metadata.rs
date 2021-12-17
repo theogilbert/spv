@@ -5,38 +5,19 @@ use tui::widgets::Paragraph;
 use crate::core::process::ProcessMetadata;
 use crate::ui::terminal::FrameRegion;
 
-pub struct MetadataBar {
-    current_text: String,
-}
-
-impl Default for MetadataBar {
-    fn default() -> Self {
-        Self {
-            current_text: Self::build_text(None),
-        }
-    }
-}
+#[derive(Default)]
+pub struct MetadataBar;
 
 impl MetadataBar {
-    fn build_text(process: Option<&ProcessMetadata>) -> String {
-        match process.as_ref() {
+    pub fn render(&self, frame: &mut FrameRegion, process: Option<&ProcessMetadata>) {
+        let text = match process.as_ref() {
             None => "No process is currently selected".to_string(),
             Some(pm) => {
                 format!("{} ({}) - {}", pm.pid(), pm.status(), pm.command())
             }
-        }
-    }
+        };
 
-    fn build_paragraph(&self) -> Paragraph {
-        Paragraph::new(Span::raw(self.current_text.as_str())).style(Style::default().fg(Color::White))
-    }
-
-    pub fn set_selected_process(&mut self, process_data: Option<&ProcessMetadata>) {
-        self.current_text = Self::build_text(process_data);
-    }
-
-    pub fn render(&self, frame: &mut FrameRegion) {
-        let paragraph = self.build_paragraph();
+        let paragraph = Paragraph::new(Span::from(text)).style(Style::default().fg(Color::White));
         frame.render_widget(paragraph);
     }
 }

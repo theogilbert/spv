@@ -4,8 +4,7 @@ use std::time::Duration;
 use log::error;
 use thiserror::Error;
 
-use crate::core::process::ProcessMetadata;
-use crate::core::view::{MetricView, MetricsOverview};
+use crate::core::view::{MetricView, MetricsOverview, ProcessView};
 use crate::ui::chart::MetricsChart;
 use crate::ui::layout::UiLayout;
 use crate::ui::metadata::MetadataBar;
@@ -48,38 +47,25 @@ impl SpvUI {
         })
     }
 
-    pub fn render(&mut self, overview: &MetricsOverview, view: &Option<MetricView>) -> Result<(), Error> {
+    pub fn render(
+        &mut self,
+        overview: &MetricsOverview,
+        view: &Option<MetricView>,
+        processes: &ProcessView,
+    ) -> Result<(), Error> {
         self.terminal.draw(|frame| {
             let layout = UiLayout::new(frame.region());
 
             self.tabs.render(frame.with_region(layout.tabs_chunk()));
 
             self.process_list
-                .render(frame.with_region(layout.processes_chunk()), overview);
+                .render(frame.with_region(layout.processes_chunk()), overview, processes);
 
             self.chart.render(frame.with_region(layout.chart_chunk()), view);
 
-            self.metadata_bar.render(frame.with_region(layout.metadata_chunk()));
+            self.metadata_bar
+                .render(frame.with_region(layout.metadata_chunk()), processes.selected_process());
         })
-    }
-
-    pub fn set_processes(&mut self, processes: Vec<ProcessMetadata>) {
-        self.process_list.set_processes(processes);
-        self.metadata_bar.set_selected_process(self.process_list.selected());
-    }
-
-    pub fn next_process(&mut self) {
-        self.process_list.next();
-        self.metadata_bar.set_selected_process(self.process_list.selected());
-    }
-
-    pub fn previous_process(&mut self) {
-        self.process_list.previous();
-        self.metadata_bar.set_selected_process(self.process_list.selected());
-    }
-
-    pub fn current_process(&self) -> Option<&ProcessMetadata> {
-        self.process_list.selected()
     }
 
     pub fn current_tab(&self) -> &str {
