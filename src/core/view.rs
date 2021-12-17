@@ -205,8 +205,7 @@ impl<'a> MetricsOverview<'a> {
 mod test_metric_overview {
     use crate::core::collection::MetricCollection;
     use crate::core::metrics::{Metric, PercentMetric};
-    use crate::core::process::{Pid, ProcessMetadata};
-    use crate::core::view::test_helpers::produce_metrics_collection;
+    use crate::core::process::Pid;
     use crate::core::view::MetricsOverview;
 
     fn build_overview(collection: &MetricCollection<PercentMetric>) -> MetricsOverview {
@@ -250,5 +249,82 @@ mod test_metric_overview {
         let overview = build_overview(&collection);
 
         assert_eq!(overview.last_or_default(2), &PercentMetric::default());
+    }
+}
+
+pub struct ProcessView<'a> {
+    sorted_processes: &'a [ProcessMetadata],
+    selected_index: Option<usize>,
+}
+
+impl<'a> ProcessView<'a> {
+    /// Creates a view containing the processes to list on the UI, and the selected process if any
+    ///
+    /// Panics if `selected_index` is out of bound of `sorted_processes`
+    pub fn new(sorted_processes: &'a [ProcessMetadata], selected_index: Option<usize>) -> ProcessView<'a> {
+        if let Some(selected_index) = selected_index {
+            if selected_index >= sorted_processes.len() {
+                panic!("Selected process index if out of bound {:?}", selected_index);
+            }
+        }
+
+        Self {
+            sorted_processes,
+            selected_index,
+        }
+    }
+
+    pub fn as_slice(&self) -> &[ProcessMetadata] {
+        self.sorted_processes
+    }
+
+    pub fn selected_index(&self) -> Option<usize> {
+        self.selected_index
+    }
+
+    pub fn selected_process(&self) -> Option<&ProcessMetadata> {
+        self.selected_index.map(|idx| &self.sorted_processes[idx])
+    }
+}
+
+#[cfg(test)]
+mod test_process_view {
+    use rstest::*;
+
+    use crate::core::process::ProcessMetadata;
+    use crate::core::view::ProcessView;
+
+    #[fixture]
+    fn processes() -> Vec<ProcessMetadata> {
+        vec![ProcessMetadata::new(1, "cmd_1"), ProcessMetadata::new(2, "cmd_2")]
+    }
+
+    #[rstest]
+    fn test_should_contain_all_processes_in_slice(processes: Vec<ProcessMetadata>) {
+        let view = ProcessView::new(&processes, None);
+
+        assert_eq!(view.as_slice(), &processes);
+    }
+
+    #[rstest]
+    fn test_should_have_no_selected_process(processes: Vec<ProcessMetadata>) {
+        let view = ProcessView::new(&processes, None);
+
+        assert_eq!(view.selected_index(), None);
+        assert_eq!(view.selected_process(), None);
+    }
+
+    #[rstest]
+    fn test_should_return_correct_selected_process(processes: Vec<ProcessMetadata>) {
+        let view = ProcessView::new(&processes, Some(1));
+
+        assert_eq!(view.selected_index(), Some(1));
+        assert_eq!(view.selected_process(), Some(&processes[1]));
+    }
+
+    #[rstest]
+    #[should_panic]
+    fn test_should_panic_when_index_out_of_bound(processes: Vec<ProcessMetadata>) {
+        ProcessView::new(&processes, Some(2));
     }
 }
