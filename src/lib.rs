@@ -7,6 +7,7 @@ use thiserror::Error;
 mod macros;
 
 pub mod core;
+mod ctrl;
 pub mod procfs;
 pub mod spv;
 pub mod triggers;

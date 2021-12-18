@@ -89,10 +89,11 @@ impl ProcessMetadata {
 
 #[cfg(test)]
 mod test_process_metadata {
+    use std::time::Duration;
+
     use crate::core::process::{ProcessMetadata, Status};
     use crate::core::time::test_utils::advance_time_and_refresh_timestamp;
     use crate::core::time::{Span, Timestamp};
-    use std::time::Duration;
 
     #[test]
     fn test_pid_should_be_pm_pid() {
@@ -219,12 +220,13 @@ impl ProcessCollector {
 
 #[cfg(test)]
 mod test_process_collector {
+    use std::time::Duration;
+
     use crate::core::process::{Pid, ProcessCollector, ProcessMetadata, ProcessScanner, Status};
     use crate::core::time::test_utils::advance_time_and_refresh_timestamp;
     use crate::core::time::{Span, Timestamp};
     use crate::core::Error;
     use crate::core::Error::InvalidPID;
-    use std::time::Duration;
 
     struct ScannerStub {
         scan_count: usize,
@@ -411,7 +413,7 @@ mod test_process_collector {
     }
 }
 
-/// Trait with methods to retrieve basic information about running processes
+/// Trait with methods to retrieve information about running processes
 pub trait ProcessScanner {
     /// Returns a list containing the PIDs of all currently running processes
     fn scan(&mut self) -> Result<Vec<Pid>, Error>;

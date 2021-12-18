@@ -1,10 +1,10 @@
-//! View of collected metrics
+//! Immutable views of application data
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use crate::core::metrics::{DatedMetric, Metric};
-use crate::core::process::Pid;
+use crate::core::process::{Pid, ProcessMetadata};
 use crate::core::time::Span;
 
 /// Snapshot of all collected metrics of a single process, from a single probe
@@ -86,8 +86,9 @@ impl<'a> MetricView<'a> {
 
 #[cfg(test)]
 mod test_metric_view {
-    use rstest::*;
     use std::time::Duration;
+
+    use rstest::*;
 
     use crate::core::metrics::{DatedMetric, IOMetric, Metric, PercentMetric};
     use crate::core::time::{Span, Timestamp};
@@ -204,11 +205,26 @@ impl<'a> MetricsOverview<'a> {
 mod test_metric_overview {
     use crate::core::collection::MetricCollection;
     use crate::core::metrics::{Metric, PercentMetric};
-    use crate::core::view::test_helpers::produce_metrics_collection;
+    use crate::core::process::Pid;
     use crate::core::view::MetricsOverview;
 
     fn build_overview(collection: &MetricCollection<PercentMetric>) -> MetricsOverview {
         collection.overview()
+    }
+
+    /// Return collection of PercentMetric containing metrics for `proc_count` processes.<br/>
+    /// The Pid values range from `0` to `proc_count - 1`<br/>
+    /// To each processes are associated the same PercentMetric values, ranging from `0` to `metrics_count`
+    fn produce_metrics_collection(proc_count: usize, values: Vec<f64>) -> MetricCollection<PercentMetric> {
+        let mut collection = MetricCollection::new();
+
+        for value in values.into_iter() {
+            for proc_idx in 0..proc_count {
+                collection.push(proc_idx as Pid, PercentMetric::new(value));
+            }
+        }
+
+        collection
     }
 
     #[test]
@@ -236,24 +252,128 @@ mod test_metric_overview {
     }
 }
 
-#[cfg(test)]
-mod test_helpers {
-    use crate::core::collection::MetricCollection;
-    use crate::core::metrics::PercentMetric;
-    use crate::core::process::Pid;
+/// Contains the processes to display to the user, as well as the process that is currently selected
+pub struct ProcessesView<'a> {
+    sorted_processes: &'a [ProcessMetadata],
+    selected_index: Option<usize>,
+}
 
-    /// Return collection of PercentMetric containing metrics for `proc_count` processes.<br/>
-    /// The Pid values range from `0` to `proc_count - 1`<br/>
-    /// To each processes are associated the same PercentMetric values, ranging from `0` to `metrics_count`
-    pub(crate) fn produce_metrics_collection(proc_count: usize, values: Vec<f64>) -> MetricCollection<PercentMetric> {
-        let mut collection = MetricCollection::new();
-
-        for value in values.into_iter() {
-            for proc_idx in 0..proc_count {
-                collection.push(proc_idx as Pid, PercentMetric::new(value));
+impl<'a> ProcessesView<'a> {
+    /// Creates a view containing the processes to list on the UI, and the selected process if any
+    ///
+    /// Panics if `selected_index` is out of bound of `sorted_processes`
+    pub fn new(sorted_processes: &'a [ProcessMetadata], selected_index: Option<usize>) -> ProcessesView<'a> {
+        if let Some(selected_index) = selected_index {
+            if selected_index >= sorted_processes.len() {
+                panic!("Selected process index if out of bound {:?}", selected_index);
             }
         }
 
-        collection
+        Self {
+            sorted_processes,
+            selected_index,
+        }
+    }
+
+    pub fn as_slice(&self) -> &[ProcessMetadata] {
+        self.sorted_processes
+    }
+
+    pub fn selected_index(&self) -> Option<usize> {
+        self.selected_index
+    }
+
+    pub fn selected_process(&self) -> Option<&ProcessMetadata> {
+        self.selected_index.map(|idx| &self.sorted_processes[idx])
+    }
+}
+
+#[cfg(test)]
+mod test_process_view {
+    use rstest::*;
+
+    use crate::core::process::ProcessMetadata;
+    use crate::core::view::ProcessesView;
+
+    #[fixture]
+    fn processes() -> Vec<ProcessMetadata> {
+        vec![ProcessMetadata::new(1, "cmd_1"), ProcessMetadata::new(2, "cmd_2")]
+    }
+
+    #[rstest]
+    fn test_should_contain_all_processes_in_slice(processes: Vec<ProcessMetadata>) {
+        let view = ProcessesView::new(&processes, None);
+
+        assert_eq!(view.as_slice(), &processes);
+    }
+
+    #[rstest]
+    fn test_should_have_no_selected_process_when_given_index_is_none(processes: Vec<ProcessMetadata>) {
+        let view = ProcessesView::new(&processes, None);
+
+        assert_eq!(view.selected_index(), None);
+        assert_eq!(view.selected_process(), None);
+    }
+
+    #[rstest]
+    fn test_should_return_correct_selected_process(processes: Vec<ProcessMetadata>) {
+        let view = ProcessesView::new(&processes, Some(1));
+
+        assert_eq!(view.selected_index(), Some(1));
+        assert_eq!(view.selected_process(), Some(&processes[1]));
+    }
+
+    #[rstest]
+    #[should_panic]
+    fn test_should_panic_when_index_out_of_bound(processes: Vec<ProcessMetadata>) {
+        ProcessesView::new(&processes, Some(2));
+    }
+}
+
+/// Contains information about the available metrics collectors, and the collector currently selected by the user
+pub struct CollectorsView {
+    collectors_names: Vec<&'static str>,
+    selected_index: usize,
+}
+
+impl CollectorsView {
+    pub fn new(collectors_names: Vec<&'static str>, selected_index: usize) -> Self {
+        if selected_index >= collectors_names.len() {
+            panic!("The collectors selected index {} is out of bound", selected_index)
+        }
+
+        Self {
+            collectors_names,
+            selected_index,
+        }
+    }
+
+    pub fn selected_index(&self) -> usize {
+        self.selected_index
+    }
+
+    pub fn collectors_names(&self) -> &[&'static str] {
+        &self.collectors_names
+    }
+}
+
+#[cfg(test)]
+mod test_collectors_view {
+    use crate::core::view::CollectorsView;
+
+    #[test]
+    fn test_should_correctly_return_passed_parameters() {
+        let names = vec!["Collector1", "Collector2"];
+        let view = CollectorsView::new(names.clone(), 1);
+
+        assert_eq!(view.collectors_names(), &names);
+        assert_eq!(view.selected_index(), 1);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_should_panic_when_selected_index_out_of_bounds() {
+        let names = vec!["Collector1"];
+        CollectorsView::new(names.clone(), 1);
     }
 }

@@ -3,7 +3,7 @@ use tui::style::{Color, Modifier, Style};
 use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 
 use crate::core::process::{Pid, ProcessMetadata, Status};
-use crate::core::view::MetricsOverview;
+use crate::core::view::{MetricsOverview, ProcessesView};
 use crate::ui::terminal::FrameRegion;
 
 /// Width of the process name column
@@ -13,8 +13,6 @@ const METRICS_COL_WIDTH: usize = 10;
 
 #[derive(Default)]
 pub struct ProcessList {
-    processes: Vec<ProcessMetadata>,
-    selected_pid: Option<Pid>,
     state: ListState,
 }
 
@@ -27,7 +25,9 @@ impl ProcessList {
     ///   * `chunk`: The region within the `frame` reserved for this widget
     ///   * `archive`: The metrics archive, to display the current metric of each process
     ///   * `label`: The name of the metric to display
-    pub fn render(&mut self, frame: &mut FrameRegion, metrics_overview: &MetricsOverview) {
+    pub fn render(&mut self, frame: &mut FrameRegion, metrics_overview: &MetricsOverview, processes: &ProcessesView) {
+        self.state.select(processes.selected_index());
+
         let rows_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(2), Constraint::Min(1)])
@@ -36,76 +36,8 @@ impl ProcessList {
         let (proc_chunk, metric_chunk) = Self::split_column_chunks(rows_chunks[1]);
 
         Self::render_title_row(frame.with_region(rows_chunks[0]), metrics_overview.unit());
-        self.render_name_column(frame.with_region(proc_chunk));
-        self.render_metric_column(frame.with_region(metric_chunk), metrics_overview);
-    }
-
-    /// Define the processes to render in the process list
-    /// The processes will be displayed in the list in the same order as they appear in `processes`
-    pub fn set_processes(&mut self, processes: Vec<ProcessMetadata>) {
-        let future_index = if processes.is_empty() {
-            None
-        } else {
-            Some(Self::retrieve_index_of_pid(&processes, self.selected_pid))
-        };
-
-        self.processes = processes;
-        self.select(future_index);
-    }
-
-    /// Focus the previous process
-    pub fn previous(&mut self) {
-        let prev_idx = self
-            .state
-            .selected()
-            .map(|s| if s > 0 { s - 1 } else { 0 })
-            .unwrap_or(0);
-
-        self.select(Some(prev_idx));
-    }
-
-    /// Focus the next process
-    pub fn next(&mut self) {
-        let next_idx = self.state.selected().map(|s| s + 1).unwrap_or(0);
-
-        self.select(Some(next_idx));
-    }
-
-    /// Returns the selected `&ProcessMetadata`
-    pub fn selected(&self) -> Option<&ProcessMetadata> {
-        match self.selected_pid {
-            None => None,
-            Some(pid) => self.processes.iter().find(|pm| pm.pid() == pid),
-        }
-    }
-
-    /// Select the process at the given index
-    fn select(&mut self, index: Option<usize>) {
-        match index {
-            None => {
-                self.state.select(None);
-                self.selected_pid = None
-            }
-            Some(i) => {
-                if let Some(pm) = self.processes.get(i) {
-                    self.state.select(index);
-                    self.selected_pid = Some(pm.pid());
-                }
-            }
-        }
-    }
-
-    /// Processes are displayed in a list, sorted by their metric values
-    /// From one frame to the other, the same process may have a different position in the list
-    /// This function returns the new position of the selected process in the given `processes` list
-    fn retrieve_index_of_pid(processes: &[ProcessMetadata], selected_pid: Option<Pid>) -> usize {
-        match selected_pid {
-            Some(selected_pid) => {
-                processes.iter().position(|pm| pm.pid() == selected_pid).unwrap_or(0)
-                // If PID does not exist anymore, select first process
-            }
-            None => 0,
-        }
+        self.render_name_column(frame.with_region(proc_chunk), processes.as_slice());
+        self.render_metric_column(frame.with_region(metric_chunk), metrics_overview, processes.as_slice());
     }
 
     /// Splits a `Rect` into two:
@@ -142,8 +74,8 @@ impl ProcessList {
         frame.with_region(metric_chunk).render_widget(metric_title);
     }
 
-    fn render_name_column(&mut self, frame: &mut FrameRegion) {
-        let processes_names: Vec<_> = self.processes.iter().map(Self::shortened_command_name).collect();
+    fn render_name_column(&mut self, frame: &mut FrameRegion, processes: &[ProcessMetadata]) {
+        let processes_names: Vec<_> = processes.iter().map(Self::shortened_command_name).collect();
 
         let items: Vec<ListItem> = processes_names.iter().map(|cmd| ListItem::new(cmd.as_str())).collect();
 
@@ -164,25 +96,29 @@ impl ProcessList {
         }
     }
 
-    fn render_metric_column(&mut self, frame: &mut FrameRegion, metrics_overview: &MetricsOverview) {
-        let str_metrics: Vec<String> = self
-            .processes
+    fn render_metric_column(
+        &mut self,
+        frame: &mut FrameRegion,
+        metrics_overview: &MetricsOverview,
+        processes: &[ProcessMetadata],
+    ) {
+        let str_metrics: Vec<String> = processes
             .iter()
             .map(|pm| match pm.status() {
-                Status::RUNNING => self.formatted_process_metric(pm, metrics_overview),
+                Status::RUNNING => self.formatted_process_metric(pm.pid(), metrics_overview),
                 Status::DEAD => self.justify_metric_repr("DEAD".to_string()),
             })
             .collect();
 
-        let items: Vec<ListItem> = str_metrics.iter().map(|pm| ListItem::new(pm.as_str())).collect();
+        let items: Vec<ListItem> = str_metrics.iter().map(|m| ListItem::new(m.as_str())).collect();
 
         let list = Self::build_default_list_widget(items).block(Block::default().borders(Borders::BOTTOM));
 
         frame.render_stateful_widget(list, &mut self.state);
     }
 
-    fn formatted_process_metric(&self, process: &ProcessMetadata, metrics_overview: &MetricsOverview) -> String {
-        let m = metrics_overview.last_or_default(process.pid());
+    fn formatted_process_metric(&self, pid: Pid, metrics_overview: &MetricsOverview) -> String {
+        let m = metrics_overview.last_or_default(pid);
         self.justify_metric_repr(m.concise_repr())
     }
 

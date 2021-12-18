@@ -68,23 +68,28 @@ pub(crate) fn refresh_current_timestamp() {
 /// Contains various utilities used to manipulate the current time
 #[cfg(test)]
 pub mod test_utils {
-    use crate::core::time::refresh_current_timestamp;
-    use sn_fake_clock::FakeClock;
     use std::time::Duration;
+
+    use sn_fake_clock::FakeClock;
+
+    use crate::core::time::refresh_current_timestamp;
 
     /// Advance the time so that `Timestamp::now()` returns an updated value
     pub fn advance_time_and_refresh_timestamp(duration: Duration) {
+        refresh_current_timestamp(); // We do a first refresh to set Timestamp::app_init()
         FakeClock::advance_time(duration.as_millis() as u64);
         refresh_current_timestamp();
     }
 
-    /// FakeClock returns a default Instant of 0 if the time is not set.
+    /// FakeClock returns a default Instant with a timestamp 0 (represented as u64) if the time is not set.
     /// This means that substracting from Instant::now() in a test will produce a subtraction overflow, as we will try
-    /// to calculate an unsigned value under 0.
+    /// to produce an unsigned value under 0.
     /// To avoid this error, we configure the current time of FakeClock to a high value, so that we can safely subtract
     /// from it.
     pub fn setup_fake_clock_to_prevent_substract_overflow() {
+        refresh_current_timestamp(); // We do a first refresh to set Timestamp::app_init()
         FakeClock::set_time(365 * 24 * 3600 * 1000);
+        refresh_current_timestamp(); // And now to actually make Timestamp::now() reflect the updated time
     }
 }
 
@@ -99,6 +104,11 @@ impl Timestamp {
     /// Multiple timestamps generated during a single iteration will always be equal.
     pub fn now() -> Self {
         last_iteration_stamp()
+    }
+
+    /// Returns the `Timestamp` at which the application started
+    pub fn app_init() -> Self {
+        first_iteration_timestamp()
     }
 
     /// Builds a timestamp from an `Instant` value
@@ -136,10 +146,12 @@ impl Add<Duration> for Timestamp {
 
 #[cfg(test)]
 mod test_timestamp {
+    use std::time::Duration;
+
+    use sn_fake_clock::FakeClock;
+
     use crate::core::time::test_utils::advance_time_and_refresh_timestamp;
     use crate::core::time::Timestamp;
-    use sn_fake_clock::FakeClock;
-    use std::time::Duration;
 
     #[test]
     fn test_should_always_produce_same_stamp_on_same_iteration() {
@@ -185,15 +197,11 @@ mod test_timestamp {
 pub struct Span {
     begin: Timestamp,
     end: Timestamp,
-    tolerance: Duration,
 }
 
 impl Span {
-    #[cfg(test)]
     pub fn new(begin: Timestamp, end: Timestamp) -> Self {
-        let tolerance = Duration::default();
-
-        Span { begin, end, tolerance }
+        Span { begin, end }
     }
 
     /// Creates a `Span` starting and ending at the given `Timestamp`
@@ -202,9 +210,7 @@ impl Span {
     /// * `begin`: The left-bound iteration of the span
     pub fn from_begin(begin: Timestamp) -> Self {
         let end = begin;
-        let tolerance = Duration::default();
-
-        Span { begin, end, tolerance }
+        Span { begin, end }
     }
 
     /// Creates a `Span` that ends at `Timestamp::now()` and covers the given duration
@@ -215,18 +221,8 @@ impl Span {
     pub fn from_duration(duration: Duration) -> Self {
         let end = Timestamp::now();
         let begin = end - duration;
-        let tolerance = Duration::default();
 
-        Span { begin, end, tolerance }
-    }
-
-    /// Tracking time precisely to the nanosecond is difficult.<br/>
-    /// Setting a tolerance, will loosen the constraints of the span, used by `contains()` and `intersects()`.
-    /// This is done by executing these checks as if the span started `tolerance` earlier.<br/>
-    ///
-    /// By default, a span has a tolerance of 0 seconds.
-    pub fn set_tolerance(&mut self, tolerance: Duration) {
-        self.tolerance = tolerance;
+        Span { begin, end }
     }
 
     /// Updates the end of the span without updating the begining of the span
@@ -275,65 +271,22 @@ impl Span {
     /// # Arguments
     /// * `other`: A `Span` reference for which to test an intersection with `self`
     pub fn intersects(&self, other: &Span) -> bool {
-        !(self.end < other.tolerant_begin() || self.tolerant_begin() > other.end)
+        !(self.end < other.begin || self.begin > other.end)
     }
 
     /// Returns true if `self` contains the timestamp
     pub fn contains(&self, timestamp: Timestamp) -> bool {
-        self.tolerant_begin() <= timestamp && timestamp <= self.end
-    }
-
-    fn tolerant_begin(&self) -> Timestamp {
-        self.begin - self.tolerance
-    }
-
-    /// Updates the span by offseting the `begin` and `end` attributes of the span toward the future
-    ///
-    /// The span cannot be scrolled after the current timestamp.
-    ///
-    /// # Arguments
-    /// * `delta`: Indicates by how much time to shift the span to the right.<br/>
-    pub fn scroll_right(&mut self, delta: Duration) {
-        self.set_bounded_end_and_shift(self.end + delta);
-    }
-
-    /// Updates the span by offseting the `begin` and `end` attributes of the span toward the past
-    ///
-    /// The span cannot be scrolled before the first iteration of the program
-    ///
-    /// # Arguments
-    /// * `delta`: Indicates by how much time to shift the span to the left.<br/>
-    pub fn scroll_left(&mut self, delta: Duration) {
-        self.set_bounded_end_and_shift(self.end - delta);
-    }
-
-    /// Behaves the same way as `set_end_and_shift()`, except the span is bounded between the first timestamp of the
-    /// application and the current one.
-    fn set_bounded_end_and_shift(&mut self, unbounded_end: Timestamp) {
-        let min_end = first_iteration_timestamp() + self.duration();
-        let max_end = Timestamp::now();
-        let bounded_end = unbounded_end.max(min_end).min(max_end);
-        self.set_end_and_shift(bounded_end);
-    }
-
-    /// Indicates if the span is fully scrolled to the right (toward the current timestamp) or if it can be further
-    /// scrolled to the right.
-    ///
-    /// # Arguments
-    /// * `current_iteration` The current iteration of the program
-    pub fn is_fully_scrolled_right(&self) -> bool {
-        self.end == Timestamp::now()
+        self.begin <= timestamp && timestamp <= self.end
     }
 }
 
 #[cfg(test)]
 mod test_span {
-    use rstest::*;
     use std::time::Duration;
 
-    use crate::core::time::test_utils::{
-        advance_time_and_refresh_timestamp, setup_fake_clock_to_prevent_substract_overflow,
-    };
+    use rstest::*;
+
+    use crate::core::time::test_utils::setup_fake_clock_to_prevent_substract_overflow;
     use crate::core::time::{Span, Timestamp};
 
     #[test]
@@ -413,45 +366,6 @@ mod test_span {
         assert!(!other_span.intersects(&span));
     }
 
-    #[test]
-    fn test_should_be_tolerant_with_span_in_past_within_tolerance_constraints() {
-        let now = Timestamp::now();
-
-        let mut span = Span::new(now + Duration::from_secs(100), now + Duration::from_secs(199));
-        let other_span = Span::new(now + Duration::from_secs(10), now + Duration::from_secs(98));
-
-        span.set_tolerance(Duration::from_secs(2));
-
-        assert!(span.intersects(&other_span));
-        assert!(other_span.intersects(&span));
-    }
-
-    #[test]
-    fn test_should_not_be_tolerant_with_span_in_past_out_of_tolerance_bounds() {
-        let now = Timestamp::now();
-
-        let mut span = Span::new(now + Duration::from_secs(100), now + Duration::from_secs(199));
-        let other_span = Span::new(now + Duration::from_secs(10), now + Duration::from_secs(98));
-
-        span.set_tolerance(Duration::from_secs(1));
-
-        assert!(!span.intersects(&other_span));
-        assert!(!other_span.intersects(&span));
-    }
-
-    #[test]
-    fn test_should_not_be_tolerant_with_span_in_future() {
-        let now = Timestamp::now();
-
-        let mut span = Span::new(now + Duration::from_secs(100), now + Duration::from_secs(199));
-        let other_span = Span::new(now + Duration::from_secs(200), now + Duration::from_secs(299));
-
-        span.set_tolerance(Duration::from_secs(10));
-
-        assert!(!span.intersects(&other_span));
-        assert!(!other_span.intersects(&span));
-    }
-
     #[rstest]
     #[case(-10, 10)]
     #[case(0, 10)]
@@ -475,122 +389,5 @@ mod test_span {
         let span = Span::new(timestamp + Duration::from_secs(1), timestamp + Duration::from_secs(20));
 
         assert!(!span.contains(timestamp));
-    }
-
-    #[test]
-    fn test_should_be_tolerant_with_timestamp_in_past_within_tolerance_constraints() {
-        let timestamp = Timestamp::now();
-
-        let mut span = Span::new(timestamp + Duration::from_secs(2), timestamp + Duration::from_secs(20));
-        span.set_tolerance(Duration::from_secs(2));
-
-        assert!(span.contains(timestamp));
-    }
-
-    #[test]
-    fn test_should_not_be_tolerant_with_timestamp_in_past_out_of_tolerance_bounds() {
-        let timestamp = Timestamp::now();
-
-        let mut span = Span::new(timestamp + Duration::from_secs(2), timestamp + Duration::from_secs(20));
-        span.set_tolerance(Duration::from_secs(1));
-
-        assert!(!span.contains(timestamp));
-    }
-
-    #[test]
-    fn test_should_not_be_tolerant_with_timestamp_in_future() {
-        let origin = Timestamp::now();
-
-        let mut span = Span::new(origin + Duration::from_secs(90), origin + Duration::from_secs(100));
-        span.set_tolerance(Duration::from_secs(10));
-
-        assert!(!span.contains(origin + Duration::from_secs(101)));
-    }
-
-    #[test]
-    fn test_should_scroll_to_the_right() {
-        let first_timestamp = Timestamp::now();
-        advance_time_and_refresh_timestamp(Duration::from_secs(60));
-
-        let mut span = Span::new(
-            first_timestamp + Duration::from_secs(10),
-            first_timestamp + Duration::from_secs(20),
-        );
-        span.scroll_right(Duration::from_secs(60));
-
-        assert_eq!(span.begin(), first_timestamp + Duration::from_secs(50));
-        assert_eq!(span.end(), first_timestamp + Duration::from_secs(60));
-    }
-
-    #[test]
-    fn test_should_not_scroll_after_current_iteration() {
-        let first_timestamp = Timestamp::now();
-        advance_time_and_refresh_timestamp(Duration::from_secs(60));
-
-        let mut span = Span::new(
-            first_timestamp + Duration::from_secs(10),
-            first_timestamp + Duration::from_secs(20),
-        );
-        span.scroll_right(Duration::from_secs(10));
-
-        assert_eq!(span.begin(), first_timestamp + Duration::from_secs(20));
-        assert_eq!(span.end(), first_timestamp + Duration::from_secs(30));
-    }
-
-    #[test]
-    fn test_should_scroll_to_the_left() {
-        let first_timestamp = Timestamp::now();
-        advance_time_and_refresh_timestamp(Duration::from_secs(60));
-
-        let mut span = Span::new(
-            first_timestamp + Duration::from_secs(20),
-            first_timestamp + Duration::from_secs(30),
-        );
-        span.scroll_left(Duration::from_secs(10));
-
-        assert_eq!(span.begin(), first_timestamp + Duration::from_secs(10));
-        assert_eq!(span.end(), first_timestamp + Duration::from_secs(20));
-    }
-
-    #[test]
-    fn test_should_not_scroll_before_first_timestamp() {
-        let first_timestamp = Timestamp::now();
-        advance_time_and_refresh_timestamp(Duration::from_secs(60));
-
-        let mut span = Span::new(
-            first_timestamp + Duration::from_secs(20),
-            first_timestamp + Duration::from_secs(30),
-        );
-        span.scroll_left(Duration::from_secs(30));
-
-        assert_eq!(span.begin(), first_timestamp + Duration::from_secs(0));
-        assert_eq!(span.end(), first_timestamp + Duration::from_secs(10));
-    }
-
-    #[test]
-    fn test_should_be_fully_scrolled_to_the_right_by_default() {
-        setup_fake_clock_to_prevent_substract_overflow();
-        let span = Span::from_duration(Duration::from_secs(60));
-
-        assert!(span.is_fully_scrolled_right());
-    }
-
-    #[test]
-    fn test_should_be_fully_scrolled_to_the_right_when_shifted_to_current_iteration() {
-        setup_fake_clock_to_prevent_substract_overflow();
-        let mut span = Span::from_duration(Duration::from_secs(60));
-        advance_time_and_refresh_timestamp(Duration::from_secs(60));
-        span.set_end_and_shift(span.end() + Duration::from_secs(60));
-
-        assert!(span.is_fully_scrolled_right());
-    }
-
-    #[test]
-    fn test_should_not_be_fully_scrolled_to_the_right_when_not_ends_at_current_iteration() {
-        setup_fake_clock_to_prevent_substract_overflow();
-        let span = Span::from_duration(Duration::from_secs(60));
-        advance_time_and_refresh_timestamp(Duration::from_secs(60));
-
-        assert!(!span.is_fully_scrolled_right());
     }
 }

@@ -23,7 +23,7 @@ impl MetricsChart {
         }
     }
 
-    pub fn render(&self, frame: &mut FrameRegion, view_opt: &Option<MetricView>) {
+    pub fn render(&self, frame: &mut FrameRegion, view_opt: Option<&MetricView>) {
         match view_opt {
             Some(view) => self.render_metrics_view(frame, view),
             None => self.render_no_process_selected_message(frame),

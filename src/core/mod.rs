@@ -20,12 +20,8 @@ pub enum Error {
     ScanProcessesError(#[source] anyhow::Error),
     #[error("Error while probing metrics")]
     ProbingError(String, #[source] anyhow::Error),
-    #[error("Unexpected label: '{0:?}'")]
-    UnexpectedLabel(String),
     #[error("Invalid PID: '{0:?}'")]
     InvalidPID(Pid),
-    #[error("Metric label has already been defined: '{0:?}'")]
-    DuplicateLabel(String),
     #[error(transparent)]
     IOError(#[from] io::Error),
     #[error("Error accessing raw value {0:?} (cardinality: {1:?})")]
