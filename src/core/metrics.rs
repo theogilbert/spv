@@ -6,8 +6,7 @@ use std::fmt::Debug;
 use crate::core::time::Timestamp;
 use crate::core::Error;
 
-/// Types which are probed by [`Probe`](crate::core::probe::Probe) implementations,
-/// and which represent a measurement of some kind.
+/// Types which represent a measurement of some kind.
 ///
 /// This trait allows applications to handle any type of `Metric` generically.
 pub trait Metric: Debug {
@@ -70,9 +69,11 @@ impl PartialEq for &dyn Metric {
     }
 }
 
-/// A metric that has a timestamp associated to it
+/// Bundles a reference to a metric, and its timestamp
 pub struct DatedMetric<'a> {
+    /// The timestamp at which the metric was collected
     pub timestamp: Timestamp,
+    /// A reference to a metric trait object
     pub metric: &'a dyn Metric,
 }
 
@@ -223,8 +224,14 @@ impl Metric for IOMetric {
     }
 }
 
-/// Returns a more readable version of `bytes_val`
-/// `formatted_bytes(1294221)` -> 1.2M
+/// Returns a user-friendly representation of `bytes_val`
+///
+/// # Examples:
+///
+/// ```ignore
+/// assert_eq!(formatted_bytes(123), "123".to_string());
+/// assert_eq!(formatted_bytes(1294221), "1.2M".to_string());
+/// ```
 fn format_bytes(bytes_val: usize, precision: usize) -> String {
     if bytes_val == 0 {
         return "0".to_string();
