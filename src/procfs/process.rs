@@ -5,6 +5,7 @@ use std::io;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use log::warn;
 use thiserror::Error;
 
 use crate::core::process::{Pid, ProcessMetadata, ProcessScanner};
@@ -120,7 +121,15 @@ impl ProcessScanner for ProcfsScanner {
             .read(pid)
             .map_err(|e| Error::ProcessParsing(pid, "comm".into(), e.into()))?;
 
-        let spawntime = self.calculate_spawn_time(pid)?;
+        let mut spawntime = self.calculate_spawn_time(pid)?;
+        let now = Timestamp::now();
+        if spawntime > now {
+            warn!(
+                "Process ({:?}) spawntime ({:?}) was unexpectedly later than now {:?}. Replacing it with current time.",
+                pid, spawntime, now
+            );
+            spawntime = now;
+        }
 
         Ok(ProcessMetadata::new(pid, comm.into_command(), spawntime))
     }
@@ -160,9 +169,9 @@ mod test_pid_scanner {
     use std::os::unix::fs::PermissionsExt;
     use std::path::Path;
 
-    use sn_fake_clock::FakeClock;
     use tempfile::{tempdir, NamedTempFile};
 
+    use crate::core::time::test_utils::advance_time_and_refresh_timestamp;
     use crate::core::Error as CoreError;
     use crate::procfs::parsers::fakes::FakeProcessDataReader;
 
@@ -285,22 +294,44 @@ mod test_pid_scanner {
         let mut comm_reader = FakeProcessDataReader::<Comm>::new();
         let mut stat_reader = FakeProcessDataReader::<PidStat>::new();
 
-        let starttime = 1000;
+        let start_time = Duration::from_secs(1);
+        let raw_starttime = start_time.as_secs() * clock_ticks().unwrap();
+
         comm_reader.set_pid_sequence(123, vec![Comm::new("test_cmd")]);
-        stat_reader.set_pid_sequence(123, vec![PidStat::new(0, 0, 0, 0, starttime)]);
+        stat_reader.set_pid_sequence(123, vec![PidStat::new(0, 0, 0, 0, raw_starttime)]);
 
         let mut proc_scanner = build_metadata_fetcher(comm_reader, stat_reader);
 
-        FakeClock::advance_time(1000);
+        advance_time_and_refresh_timestamp(Duration::from_secs(2));
 
         let process_metadata = proc_scanner
             .fetch_metadata(123)
             .expect("Could not get processes metadata");
 
-        let clock_ticks = clock_ticks().unwrap();
-        let expected_spawn_time = proc_scanner.boot_time + Duration::from_secs(starttime / clock_ticks);
-
+        let expected_spawn_time = proc_scanner.boot_time + start_time;
         assert_eq!(process_metadata.running_span().begin(), expected_spawn_time);
+    }
+
+    #[test]
+    fn test_process_metadata_should_set_spawntime_to_now_when_calculated_spawntime_later_than_now() {
+        let mut comm_reader = FakeProcessDataReader::<Comm>::new();
+        let mut stat_reader = FakeProcessDataReader::<PidStat>::new();
+
+        let raw_starttime = 2 * clock_ticks().unwrap(); // started at current time + 2 seconds
+
+        comm_reader.set_pid_sequence(123, vec![Comm::new("test_cmd")]);
+        stat_reader.set_pid_sequence(123, vec![PidStat::new(0, 0, 0, 0, raw_starttime)]);
+
+        let mut proc_scanner = build_metadata_fetcher(comm_reader, stat_reader);
+
+        advance_time_and_refresh_timestamp(Duration::from_secs(1)); // Current time is now +1s
+
+        let process_metadata = proc_scanner
+            .fetch_metadata(123)
+            .expect("Could not get processes metadata");
+
+        // Process started at +2s but we are currently at +1s: process begin reset to current time (+1s)
+        assert_eq!(process_metadata.running_span().begin(), Timestamp::now());
     }
 
     #[test]
