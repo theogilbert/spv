@@ -60,14 +60,15 @@ mod test_processes {
     use rstest::{fixture, rstest};
 
     use crate::core::process::ProcessMetadata;
+    use crate::core::time::Timestamp;
     use crate::ctrl::processes::ProcessSelector;
 
     #[fixture]
     fn processes() -> Vec<ProcessMetadata> {
         vec![
-            ProcessMetadata::new(1, "cmd_1"),
-            ProcessMetadata::new(2, "cmd_2"),
-            ProcessMetadata::new(3, "cmd_3"),
+            ProcessMetadata::new(1, "cmd_1", Timestamp::now()),
+            ProcessMetadata::new(2, "cmd_2", Timestamp::now()),
+            ProcessMetadata::new(3, "cmd_3", Timestamp::now()),
         ]
     }
 
