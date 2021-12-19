@@ -15,7 +15,7 @@ pub fn render_metadata_bar(frame: &mut FrameRegion, process: Option<&ProcessMeta
 }
 
 fn render_process_info(frame: &mut FrameRegion, pm: &ProcessMetadata) {
-    let left_text = format!("{} ({}) - {}", pm.pid(), pm.status(), pm.command());
+    let left_text = format!("{} - {}", pm.pid(), pm.command());
 
     let begin_time = relative_timestamp_label(pm.running_span().begin());
     let mut right_text = format!("Started {}", begin_time);
