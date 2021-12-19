@@ -128,7 +128,7 @@ mod test_cpu_probe {
     use crate::core::probe::Probe;
     use crate::procfs::cpu_probe::common_test_utils::{create_pid_stat, create_stat};
     use crate::procfs::cpu_probe::CpuProbe;
-    use crate::procfs::parsers::test_utils::{FakeProcessDataReader, FakeSystemDataReader};
+    use crate::procfs::parsers::fakes::{FakeProcessDataReader, FakeSystemDataReader};
     use crate::procfs::parsers::{PidStat, Stat};
 
     fn build_probe(stat_reader: FakeSystemDataReader<Stat>, pid_reader: FakeProcessDataReader<PidStat>) -> CpuProbe {
@@ -213,7 +213,7 @@ mod test_cpu_calculator {
     fn test_zero_percent_usage() {
         let mut calc = create_initialized_calc(60);
 
-        let pid_stat = parsers::PidStat::new(0, 0, 0, 0);
+        let pid_stat = parsers::PidStat::new(0, 0, 0, 0, 0);
 
         assert_eq!(calc.calculate_pid_usage(1, pid_stat), 0.);
     }
@@ -222,7 +222,7 @@ mod test_cpu_calculator {
     fn test_hundred_percent_usage() {
         let mut calc = create_initialized_calc(123);
 
-        let pid_stat = parsers::PidStat::new(100, 20, 2, 1);
+        let pid_stat = parsers::PidStat::new(100, 20, 2, 1, 0);
 
         assert_eq!(calc.calculate_pid_usage(1, pid_stat), 100.);
     }
@@ -258,6 +258,7 @@ mod common_test_utils {
             individual_ticks,
             individual_ticks as i32,
             (individual_ticks + leftover) as i32,
+            0,
         )
     }
 }

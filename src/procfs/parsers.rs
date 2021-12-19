@@ -4,22 +4,30 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
+#[cfg(not(test))]
+use std::time::Instant;
+
+#[cfg(test)]
+use sn_fake_clock::FakeClock as Instant;
 
 use crate::core::process::Pid;
+use crate::core::time::Timestamp;
 use crate::procfs::ProcfsError;
+use crate::procfs::ProcfsError::InvalidFileContent;
 
 /// Type which can be parsed from a `TokenParser`
-pub trait Data: Sized {
+pub trait Parse: Sized {
     fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError>;
 }
 
 /// Specialization of a `Data` type which is not associated to a process
-pub trait SystemData: Data {
+pub trait SystemData: Parse {
     fn filepath() -> PathBuf;
 }
 
 /// Specialization of a `Data` type which is associated to a process
-pub trait ProcessData: Data {
+pub trait ProcessData: Parse {
     fn filepath(pid: Pid) -> PathBuf;
 }
 
@@ -84,7 +92,7 @@ where
         }
     }
 
-    fn get_process_reader(&mut self, pid: Pid) -> Result<&mut ProcfsReader<D>, ProcfsError> {
+    fn process_reader(&mut self, pid: Pid) -> Result<&mut ProcfsReader<D>, ProcfsError> {
         Ok(match self.readers.entry(pid) {
             Entry::Occupied(o) => o.into_mut(),
             Entry::Vacant(v) => v.insert(ProcfsReader::new(D::filepath(pid).as_path())?),
@@ -97,7 +105,7 @@ where
     D: ProcessData + Sized,
 {
     fn read(&mut self, pid: u32) -> Result<D, ProcfsError> {
-        let data_ret = self.get_process_reader(pid)?.read();
+        let data_ret = self.process_reader(pid)?.read();
 
         if data_ret.is_err() {
             // if reading files for this PID fails, we stop tracking the file
@@ -110,14 +118,14 @@ where
 
 struct ProcfsReader<D>
 where
-    D: Data + Sized,
+    D: Parse + Sized,
 {
     reader: DataReader<File, D>,
 }
 
 impl<D> ProcfsReader<D>
 where
-    D: Data + Sized,
+    D: Parse + Sized,
 {
     pub fn new(filepath: &Path) -> Result<Self, ProcfsError> {
         File::open(filepath).map_err(ProcfsError::from).map(|file| Self {
@@ -133,7 +141,7 @@ where
 struct DataReader<R, D>
 where
     R: Read + Seek,
-    D: Data + Sized,
+    D: Parse + Sized,
 {
     src: R,
     phantom: PhantomData<D>,
@@ -142,7 +150,7 @@ where
 impl<R, D> DataReader<R, D>
 where
     R: Read + Seek,
-    D: Data + Sized,
+    D: Parse + Sized,
 {
     pub fn new(src: R) -> Self {
         DataReader {
@@ -165,7 +173,7 @@ where
 }
 
 #[cfg(test)]
-pub mod test_utils {
+pub mod fakes {
     use std::collections::{HashMap, VecDeque};
     use std::io;
 
@@ -303,7 +311,7 @@ impl<'a> TokenParser<'a> {
 mod test_data_reader {
     use std::io::Cursor;
 
-    use crate::procfs::parsers::{Data, DataReader, ProcfsError, TokenParser};
+    use crate::procfs::parsers::{DataReader, Parse, ProcfsError, TokenParser};
 
     #[derive(PartialEq, Debug)]
     struct TestSystemData {
@@ -311,7 +319,7 @@ mod test_data_reader {
         field_2: i16,
     }
 
-    impl Data for TestSystemData {
+    impl Parse for TestSystemData {
         fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
             Ok(TestSystemData {
                 field_1: token_parser.token(0, 0)?,
@@ -409,7 +417,7 @@ impl Stat {
     }
 }
 
-impl Data for Stat {
+impl Parse for Stat {
     fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
         Ok(Stat {
             user: token_parser.token(0, 1)?,
@@ -425,52 +433,6 @@ impl Data for Stat {
 impl SystemData for Stat {
     fn filepath() -> PathBuf {
         ["/proc", "stat"].iter().collect()
-    }
-}
-
-/// Represents data from `/proc/[PID]/stat`
-#[derive(Eq, PartialEq, Debug, Copy, Clone)]
-pub struct PidStat {
-    /// Time spent by the process in user mode
-    // scanf format: %lu
-    utime: u32,
-    /// Time spent by the process in kernel mode
-    // scanf format: %lu
-    stime: u32,
-    /// Time spent by the process waiting for children processes in user mode
-    // scanf format: %ld
-    cutime: i32,
-    /// Time spent by the process waiting for children processes in kernel mode
-    // scanf format: %ld
-    cstime: i32,
-}
-
-impl PidStat {
-    pub fn running_time(&self) -> i64 {
-        self.utime as i64 + self.stime as i64 + self.cutime as i64 + self.cstime as i64
-    }
-}
-
-impl Data for PidStat {
-    fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
-        Ok(PidStat {
-            utime: token_parser.token(0, 12)?,
-            stime: token_parser.token(0, 13)?,
-            cutime: token_parser.token(0, 14)?,
-            cstime: token_parser.token(0, 15)?,
-        })
-    }
-}
-
-impl ProcessData for PidStat {
-    fn filepath(pid: u32) -> PathBuf {
-        let mut path = PathBuf::new();
-
-        path.push("/proc");
-        path.push(pid.to_string());
-        path.push("stat");
-
-        path
     }
 }
 
@@ -518,15 +480,206 @@ cpu0 1393280 32966 572056 13343292 6130 0 17875 0 23933 0"
     }
 }
 
+/// Represents data from `/proc/\[pid\]/comm`
+#[derive(Eq, PartialEq, Debug, Clone)]
+pub struct Comm {
+    command: String,
+}
+
+impl Comm {
+    #[cfg(test)]
+    pub fn new<C>(command: C) -> Self
+    where
+        C: Into<String>,
+    {
+        Comm {
+            command: command.into(),
+        }
+    }
+
+    /// Returns the command that spawned the process
+    pub fn into_command(self) -> String {
+        self.command
+    }
+}
+
+impl Parse for Comm {
+    fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
+        Ok(Comm {
+            command: token_parser.token(0, 0)?,
+        })
+    }
+}
+
+impl ProcessData for Comm {
+    fn filepath(pid: Pid) -> PathBuf {
+        let mut pb = PathBuf::new();
+
+        pb.push("/proc");
+        pb.push(pid.to_string());
+        pb.push("comm");
+
+        pb
+    }
+}
+
+#[cfg(test)]
+mod test_comm {
+    use rstest::*;
+
+    use crate::procfs::parsers::{Comm, Parse, TokenParser};
+
+    #[rstest]
+    #[case("bash")]
+    #[case("bash\n")]
+    fn test_should_correctly_parse_command(#[case] comm_content: String) {
+        let parser = TokenParser::new(&comm_content);
+        let comm = Comm::parse(&parser).expect("Cannot parse comm");
+
+        assert_eq!(comm.into_command(), "bash")
+    }
+}
+
+/// Represents data from `/proc/uptime`
+#[derive(Eq, PartialEq, Debug, Copy, Clone)]
+pub struct Uptime {
+    /// Represents the amount of seconds elapsed since the system booted
+    // scanf format: unspecified
+    uptime: u64,
+    /// Represents the actual timestamp at which the system was booted
+    boot_time: Timestamp,
+}
+
+impl Parse for Uptime {
+    fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
+        let uptime_repr: String = token_parser.token(0, 0)?;
+        let uptime: u64 = uptime_repr
+            .parse::<f64>()
+            .map_err(|_| InvalidFileContent("Could not parse uptime".to_string()))? as u64;
+
+        let boot_time = Instant::now()
+            .checked_sub(Duration::from_secs(uptime))
+            .ok_or_else(|| InvalidFileContent("Uptime is greater than current time".to_string()))?;
+        let boot_time = Timestamp::from_instant(boot_time);
+
+        Ok(Self { uptime, boot_time })
+    }
+}
+
+impl Uptime {
+    pub fn boot_time(&self) -> Timestamp {
+        self.boot_time
+    }
+}
+
+impl SystemData for Uptime {
+    fn filepath() -> PathBuf {
+        ["/proc", "uptime"].iter().collect()
+    }
+}
+
+#[cfg(test)]
+mod test_uptime {
+    use std::ops::Sub;
+    use std::time::Duration;
+
+    use crate::core::time::Timestamp;
+    use sn_fake_clock::FakeClock;
+
+    use crate::procfs::parsers::{Parse, TokenParser, Uptime};
+
+    #[test]
+    fn test_parse_uptime() {
+        FakeClock::set_time(1000000000);
+        let content = "10281.87 123230.54".to_string();
+
+        let token_parser = TokenParser::new(&content);
+
+        let uptime = Uptime::parse(&token_parser).expect("Could not read Uptime");
+
+        assert_eq!(uptime.uptime, 10281);
+    }
+
+    #[test]
+    fn test_should_calculate_boottime_from_now_instant() {
+        FakeClock::set_time(1000000000);
+        let content = "2000.87 123230.54".to_string();
+
+        let token_parser = TokenParser::new(&content);
+        let uptime = Uptime::parse(&token_parser).expect("Could not read Uptime");
+
+        let expected_boot_time = Timestamp::from_instant(FakeClock::now().sub(Duration::from_secs(2000)));
+
+        assert_eq!(uptime.boot_time(), expected_boot_time);
+    }
+}
+
+/// Represents data from `/proc/[PID]/stat`
+#[derive(Eq, PartialEq, Debug, Copy, Clone)]
+pub struct PidStat {
+    /// Time spent by the process in user mode
+    // scanf format: %lu
+    utime: u32,
+    /// Time spent by the process in kernel mode
+    // scanf format: %lu
+    stime: u32,
+    /// Time spent by the process waiting for children processes in user mode
+    // scanf format: %ld
+    cutime: i32,
+    /// Time spent by the process waiting for children processes in kernel mode
+    // scanf format: %ld
+    cstime: i32,
+    /// The time the process started after system boot, expressed in clock ticks
+    // scanf format: %llu
+    starttime: u64,
+}
+
+impl PidStat {
+    pub fn running_time(&self) -> i64 {
+        self.utime as i64 + self.stime as i64 + self.cutime as i64 + self.cstime as i64
+    }
+
+    /// Indicates how long after boot time the process started
+    /// This value is expressed in clock ticks. It must be divided by `sysconf(_SC_CLK_TCK)` to get its value in seconds
+    pub fn starttime(&self) -> u64 {
+        self.starttime
+    }
+}
+
+impl Parse for PidStat {
+    fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
+        Ok(PidStat {
+            utime: token_parser.token(0, 12)?,
+            stime: token_parser.token(0, 13)?,
+            cutime: token_parser.token(0, 14)?,
+            cstime: token_parser.token(0, 15)?,
+            starttime: token_parser.token(0, 21)?,
+        })
+    }
+}
+
+impl ProcessData for PidStat {
+    fn filepath(pid: u32) -> PathBuf {
+        let mut path = PathBuf::new();
+
+        path.push("/proc");
+        path.push(pid.to_string());
+        path.push("stat");
+
+        path
+    }
+}
+
 #[cfg(test)]
 impl PidStat {
     /// PidStat constructor for test purposes
-    pub fn new(utime: u32, stime: u32, cutime: i32, cstime: i32) -> Self {
+    pub fn new(utime: u32, stime: u32, cutime: i32, cstime: i32, starttime: u64) -> Self {
         PidStat {
             utime,
             stime,
             cutime,
             cstime,
+            starttime,
         }
     }
 }
@@ -556,6 +709,7 @@ mod test_pid_stat {
                 stime: 42,
                 cutime: 11,
                 cstime: 10,
+                starttime: 487679
             }
         );
     }
@@ -567,6 +721,7 @@ mod test_pid_stat {
             stime: 2,
             cutime: 4,
             cstime: 8,
+            starttime: 10,
         };
 
         assert_eq!(15, pid_stat.running_time())
@@ -607,7 +762,7 @@ impl PidIO {
     }
 }
 
-impl Data for PidIO {
+impl Parse for PidIO {
     fn parse(token_parser: &TokenParser) -> Result<Self, ProcfsError> {
         Ok(PidIO {
             read_bytes: token_parser.token(4, 1)?,
@@ -633,7 +788,7 @@ impl ProcessData for PidIO {
 mod test_pid_io {
     use std::path::PathBuf;
 
-    use crate::procfs::parsers::{Data, PidIO, ProcessData, TokenParser};
+    use crate::procfs::parsers::{Parse, PidIO, ProcessData, TokenParser};
 
     #[test]
     fn test_should_produce_correct_file_path() {

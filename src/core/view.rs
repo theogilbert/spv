@@ -293,11 +293,15 @@ mod test_process_view {
     use rstest::*;
 
     use crate::core::process::ProcessMetadata;
+    use crate::core::time::Timestamp;
     use crate::core::view::ProcessesView;
 
     #[fixture]
     fn processes() -> Vec<ProcessMetadata> {
-        vec![ProcessMetadata::new(1, "cmd_1"), ProcessMetadata::new(2, "cmd_2")]
+        vec![
+            ProcessMetadata::new(1, "cmd_1", Timestamp::now()),
+            ProcessMetadata::new(2, "cmd_2", Timestamp::now()),
+        ]
     }
 
     #[rstest]

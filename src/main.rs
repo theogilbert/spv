@@ -27,7 +27,7 @@ fn main() -> anyhow::Result<()> {
     TriggersEmitter::launch_async(tx, refresh_period);
     let impulse_tolerance = TriggersEmitter::impulse_time_tolerance(refresh_period);
 
-    let process_scanner = ProcfsScanner::new();
+    let process_scanner = ProcfsScanner::new()?;
     let process_view = ProcessCollector::new(Box::new(process_scanner));
 
     let collectors = build_collectors()?;

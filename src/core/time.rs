@@ -112,8 +112,7 @@ impl Timestamp {
     }
 
     /// Builds a timestamp from an `Instant` value
-    /// For internal usage only
-    fn from_instant(instant: Instant) -> Self {
+    pub fn from_instant(instant: Instant) -> Self {
         Self { stamp: instant }
     }
 

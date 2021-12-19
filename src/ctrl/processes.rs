@@ -14,6 +14,7 @@ impl ProcessSelector {
     /// Sets the processes that the user can selected
     pub fn set_processes(&mut self, processes: Vec<ProcessMetadata>) {
         self.sorted_processes = processes;
+        self.selected_pid = self.selected_process().map(|pm| pm.pid());
     }
 
     pub fn selected_process(&self) -> Option<&ProcessMetadata> {
@@ -60,14 +61,15 @@ mod test_processes {
     use rstest::{fixture, rstest};
 
     use crate::core::process::ProcessMetadata;
+    use crate::core::time::Timestamp;
     use crate::ctrl::processes::ProcessSelector;
 
     #[fixture]
     fn processes() -> Vec<ProcessMetadata> {
         vec![
-            ProcessMetadata::new(1, "cmd_1"),
-            ProcessMetadata::new(2, "cmd_2"),
-            ProcessMetadata::new(3, "cmd_3"),
+            ProcessMetadata::new(1, "cmd_1", Timestamp::now()),
+            ProcessMetadata::new(2, "cmd_2", Timestamp::now()),
+            ProcessMetadata::new(3, "cmd_3", Timestamp::now()),
         ]
     }
 
@@ -84,6 +86,24 @@ mod test_processes {
         selector.set_processes(processes.clone());
 
         assert_eq!(selector.selected_process(), Some(&processes[0]));
+    }
+
+    #[rstest]
+    fn test_should_track_initial_first_process_by_default(mut processes: Vec<ProcessMetadata>) {
+        let first_process = processes[0].clone();
+        let mut selector = ProcessSelector::default();
+        selector.set_processes(processes.clone());
+
+        // By default, the first process is selected
+        assert_eq!(selector.selected_process(), Some(&first_process));
+        assert_eq!(selector.selected_index(), Some(0));
+
+        // This first process should still be selected after the processes order changes, even if we did not select this
+        // process explicitely through a next/previous method call
+        processes.reverse();
+        selector.set_processes(processes.clone());
+        assert_eq!(selector.selected_process(), Some(&first_process));
+        assert_eq!(selector.selected_index(), Some(processes.len() - 1));
     }
 
     #[rstest]

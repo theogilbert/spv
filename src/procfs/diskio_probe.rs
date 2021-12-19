@@ -69,7 +69,7 @@ mod test_disk_io_probe {
     use crate::core::metrics::IOMetric;
     use crate::core::probe::Probe;
     use crate::procfs::diskio_probe::DiskIOProbe;
-    use crate::procfs::parsers::test_utils::FakeProcessDataReader;
+    use crate::procfs::parsers::fakes::FakeProcessDataReader;
     use crate::procfs::parsers::PidIO;
 
     #[rstest]

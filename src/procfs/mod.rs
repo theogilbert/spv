@@ -17,6 +17,7 @@ pub mod diskio_probe;
 pub mod net_io_probe;
 
 mod rates;
+mod sysconf;
 
 #[derive(Error, Debug)]
 pub enum ProcfsError {
@@ -30,4 +31,6 @@ pub enum ProcfsError {
     UnknownPID(Pid),
     #[error("Not enough data to estimate rate")]
     NotEnoughData,
+    #[error("Error while fetching system configuration")]
+    SysconfError,
 }

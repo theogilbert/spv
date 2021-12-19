@@ -40,7 +40,7 @@ impl Display for Status {
 /// Describes a process
 impl ProcessMetadata {
     /// Returns a new instance of a ProcessMetadata
-    pub fn new<T>(pid: Pid, command: T) -> Self
+    pub fn new<T>(pid: Pid, command: T, spawntime: Timestamp) -> Self
     where
         T: Into<String>,
     {
@@ -48,7 +48,7 @@ impl ProcessMetadata {
             pid,
             command: command.into(),
             status: Status::RUNNING,
-            running_span: Span::from_begin(Timestamp::now()),
+            running_span: Span::from_begin(spawntime),
         }
     }
 
@@ -97,29 +97,35 @@ mod test_process_metadata {
 
     #[test]
     fn test_pid_should_be_pm_pid() {
-        assert_eq!(ProcessMetadata::new(123, "command").pid(), 123);
+        assert_eq!(ProcessMetadata::new(123, "command", Timestamp::now()).pid(), 123);
     }
 
     #[test]
     fn test_command_should_be_pm_command() {
-        assert_eq!(ProcessMetadata::new(123, "command").command(), "command");
+        assert_eq!(
+            ProcessMetadata::new(123, "command", Timestamp::now()).command(),
+            "command"
+        );
     }
 
     #[test]
     fn test_status_should_be_running_by_default() {
-        assert_eq!(ProcessMetadata::new(123, "command").status(), Status::RUNNING);
+        assert_eq!(
+            ProcessMetadata::new(123, "command", Timestamp::now()).status(),
+            Status::RUNNING
+        );
     }
 
     #[test]
     fn test_status_should_be_dead_once_marked_as_dead() {
-        let mut pm = ProcessMetadata::new(123, "command");
+        let mut pm = ProcessMetadata::new(123, "command", Timestamp::now());
         pm.mark_dead();
         assert_eq!(pm.status(), Status::DEAD);
     }
 
     #[test]
     fn test_span_should_only_include_spawn_timestamp_by_default() {
-        let pm = ProcessMetadata::new(456, "command");
+        let pm = ProcessMetadata::new(456, "command", Timestamp::now());
         let running_span = pm.running_span();
 
         assert_eq!(running_span.begin(), Timestamp::now());
@@ -129,7 +135,7 @@ mod test_process_metadata {
     #[test]
     fn test_span_should_increase_when_process_marked_alive() {
         let spawn_time = Timestamp::now();
-        let mut pm = ProcessMetadata::new(456, "command");
+        let mut pm = ProcessMetadata::new(456, "command", Timestamp::now());
 
         advance_time_and_refresh_timestamp(Duration::from_secs(42));
 
@@ -189,7 +195,7 @@ impl ProcessCollector {
         Ok(())
     }
 
-    fn parse_new_processes(&self, running_pids: &[Pid]) -> Vec<ProcessMetadata> {
+    fn parse_new_processes(&mut self, running_pids: &[Pid]) -> Vec<ProcessMetadata> {
         running_pids
             .iter()
             .filter(|p| !self.registered_processes.contains_key(*p))
@@ -258,11 +264,11 @@ mod test_process_collector {
             Ok(self.scanned_pids[self.scan_count - 1].clone())
         }
 
-        fn fetch_metadata(&self, pid: Pid) -> Result<ProcessMetadata, Error> {
+        fn fetch_metadata(&mut self, pid: Pid) -> Result<ProcessMetadata, Error> {
             if self.failing_processes.contains(&pid) {
                 Err(InvalidPID(pid))
             } else {
-                Ok(ProcessMetadata::new(pid, "command"))
+                Ok(ProcessMetadata::new(pid, "command", Timestamp::now()))
             }
         }
     }
@@ -423,5 +429,5 @@ pub trait ProcessScanner {
     /// # Arguments
     ///
     /// * `pid`: The process identifier of the currently running process
-    fn fetch_metadata(&self, pid: Pid) -> Result<ProcessMetadata, Error>;
+    fn fetch_metadata(&mut self, pid: Pid) -> Result<ProcessMetadata, Error>;
 }
