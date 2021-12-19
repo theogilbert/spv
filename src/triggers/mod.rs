@@ -1,3 +1,5 @@
+//! Generates events which drive spv, either from user input, OS events or a timer
+
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 use std::{io, thread};

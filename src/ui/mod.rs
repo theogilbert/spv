@@ -1,3 +1,5 @@
+//! Renders spv on the terminal
+
 use std::io;
 use std::time::Duration;
 

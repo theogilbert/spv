@@ -1,3 +1,5 @@
+//! Integrates all other modules to run spv
+
 use std::cmp::Ordering;
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
