@@ -228,7 +228,7 @@ impl Metric for IOMetric {
 ///
 /// # Examples:
 ///
-/// ```
+/// ```ignore
 /// assert_eq!(formatted_bytes(123), "123".to_string());
 /// assert_eq!(formatted_bytes(1294221), "1.2M".to_string());
 /// ```
