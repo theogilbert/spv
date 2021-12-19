@@ -629,7 +629,7 @@ pub struct PidStat {
     /// Time spent by the process waiting for children processes in kernel mode
     // scanf format: %ld
     cstime: i32,
-    /// The time the process started after system boot
+    /// The time the process started after system boot, expressed in clock ticks
     // scanf format: %llu
     starttime: u64,
 }
@@ -640,6 +640,7 @@ impl PidStat {
     }
 
     /// Indicates how long after boot time the process started
+    /// This value is expressed in clock ticks. It must be divided by `sysconf(_SC_CLK_TCK)` to get its value in seconds
     pub fn starttime(&self) -> u64 {
         self.starttime
     }
