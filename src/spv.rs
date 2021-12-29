@@ -1,17 +1,15 @@
 //! Integrates all other modules to run spv
 
-use std::cmp::Ordering;
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
 use log::warn;
 
 use crate::core::collection::MetricCollector;
-use crate::core::process::{ProcessCollector, ProcessMetadata, Status};
+use crate::core::ordering::sort_processes;
+use crate::core::process::{ProcessCollector, ProcessMetadata};
 use crate::core::time::refresh_current_timestamp;
-use crate::ctrl::collectors::Collectors;
-use crate::ctrl::processes::ProcessSelector;
-use crate::ctrl::span::RenderingSpan;
+use crate::ctrl::{Controls, Effect};
 use crate::triggers::Trigger;
 use crate::ui::SpvUI;
 use crate::Error;
@@ -20,9 +18,7 @@ pub struct SpvApplication {
     receiver: Receiver<Trigger>,
     process_collector: ProcessCollector,
     ui: SpvUI,
-    collectors: Collectors,
-    rendering_span: RenderingSpan,
-    process_selector: ProcessSelector,
+    controls: Controls,
 }
 
 impl SpvApplication {
@@ -38,9 +34,7 @@ impl SpvApplication {
             receiver,
             process_collector,
             ui: SpvUI::new(2 * impulse_tolerance)?,
-            collectors: Collectors::new(collectors),
-            rendering_span: RenderingSpan::new(DEFAULT_REPRESENTED_SPAN_DURATION, 2 * impulse_tolerance),
-            process_selector: ProcessSelector::default(),
+            controls: Controls::new(collectors, DEFAULT_REPRESENTED_SPAN_DURATION, 2 * impulse_tolerance),
         })
     }
 
@@ -56,14 +50,13 @@ impl SpvApplication {
                     self.increment_iteration();
                     self.collect_metrics()?;
                 }
-                Trigger::NextProcess => self.process_selector.next_process(),
-                Trigger::PreviousProcess => self.process_selector.previous_process(),
                 Trigger::Resize => (), // No need to do anything, just receiving a signal will refresh UI at the end of the loop
-                Trigger::NextTab => self.collectors.next_collector(),
-                Trigger::PreviousTab => self.collectors.previous_collector(),
-                Trigger::ScrollLeft => self.rendering_span.scroll_left(),
-                Trigger::ScrollRight => self.rendering_span.scroll_right(),
-                Trigger::ScrollReset => self.rendering_span.reset_scroll(),
+                Trigger::Input(input) => {
+                    let effect = self.controls.interpret_input(input);
+                    if effect != Effect::None {
+                        self.ui.set_status_from_effect(effect);
+                    }
+                }
             }
 
             self.draw_ui()?;
@@ -74,14 +67,14 @@ impl SpvApplication {
 
     fn increment_iteration(&mut self) {
         refresh_current_timestamp();
-        self.rendering_span.refresh();
+        self.controls.refresh_span();
     }
 
     fn calibrate_probes(&mut self) -> Result<(), Error> {
         self.scan_processes()?;
         let pids = self.process_collector.running_pids();
 
-        for c in self.collectors.as_mut_slice() {
+        for c in self.controls.collectors_as_mut_slice() {
             c.calibrate(&pids)?;
         }
 
@@ -92,15 +85,19 @@ impl SpvApplication {
         self.scan_processes()?;
         let running_pids = self.process_collector.running_pids();
 
-        for collector in self.collectors.as_mut_slice() {
+        for collector in self.controls.collectors_as_mut_slice() {
             collector.collect(&running_pids).unwrap_or_else(|e| {
                 warn!("Error reading from collector {}: {}", collector.name(), e.to_string());
             });
         }
 
         let mut exposed_processes = self.represented_processes();
-        self.sort_processes_by_status_and_metric(&mut exposed_processes);
-        self.process_selector.set_processes(exposed_processes);
+        sort_processes(
+            &mut exposed_processes,
+            self.controls.process_ordering_criteria(),
+            self.controls.current_collector(),
+        );
+        self.controls.set_processes(exposed_processes);
 
         Ok(())
     }
@@ -111,7 +108,7 @@ impl SpvApplication {
 
     fn represented_processes(&self) -> Vec<ProcessMetadata> {
         // TODO selected process should be represented even if it expired
-        let rendered_span = self.rendering_span.to_span();
+        let rendered_span = self.controls.to_span();
 
         self.process_collector
             .processes()
@@ -120,31 +117,26 @@ impl SpvApplication {
             .collect()
     }
 
-    fn sort_processes_by_status_and_metric(&self, processes: &mut Vec<ProcessMetadata>) {
-        processes.sort_by(|pm1, pm2| match (pm1.status(), pm2.status()) {
-            (Status::RUNNING, Status::DEAD) => Ordering::Less,
-            (Status::DEAD, Status::RUNNING) => Ordering::Greater,
-            (_, _) => self
-                .collectors
-                .current()
-                .compare_pids_by_last_metrics(pm1.pid(), pm2.pid())
-                .reverse(),
-        });
-    }
-
     fn draw_ui(&mut self) -> Result<(), Error> {
-        let collectors = self.collectors.to_view();
-        let processes = self.process_selector.to_view();
+        let collectors = self.controls.to_collectors_view();
+        let processes = self.controls.to_processes_view();
 
-        let current_collector = self.collectors.current_mut();
+        // TODO move overview building code to Controls module
+        let current_collector = self.controls.current_collector();
         let overview = current_collector.overview();
-        let metrics_view = self
-            .process_selector
+        let metrics_view = processes
             .selected_process()
-            .map(|pm| current_collector.view(pm.pid(), self.rendering_span.to_span()));
+            .map(|pm| current_collector.view(pm.pid(), self.controls.to_span()));
 
+        // TODO wrap all these views/state in a standalone structure (or pass Controls) ?
         self.ui
-            .render(&collectors, &processes, &overview, metrics_view.as_ref())
+            .render(
+                &collectors,
+                &processes,
+                &overview,
+                metrics_view.as_ref(),
+                self.controls.state(),
+            )
             .map_err(Error::UiError)
     }
 }

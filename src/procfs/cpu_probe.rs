@@ -23,7 +23,7 @@ pub struct CpuProbe {
 impl CpuProbe {
     pub fn new() -> Result<Self, Error> {
         let stat_reader = SystemDataReader::new()
-            .map_err(|e| Error::ProbingError("Error initializing SystemDataReader".to_string(), e.into()))?;
+            .map_err(|e| Error::ProbingError("Could not access /proc directory".to_string(), e.into()))?;
 
         Self::from_readers(Box::new(stat_reader), Box::new(ProcessDataReader::new()))
     }
@@ -49,7 +49,7 @@ impl Probe<PercentMetric> for CpuProbe {
         let new_stat: Stat = self
             .stat_reader
             .read()
-            .map_err(|e| Error::ProbingError("Error reading global CPU stats".to_string(), e.into()))?;
+            .map_err(|e| Error::ProbingError("Could not read system CPU stats".to_string(), e.into()))?;
 
         self.calculator.compute_new_runtime_diff(new_stat);
 
@@ -60,7 +60,7 @@ impl Probe<PercentMetric> for CpuProbe {
         let pid_stat = self
             .pid_stat_reader
             .read(pid)
-            .map_err(|e| Error::ProbingError(format!("Error probing CPU stats for PID {}", pid), e.into()))?;
+            .map_err(|e| Error::ProbingError(format!("Could not read process CPU stats for PID {}", pid), e.into()))?;
 
         let percent = self.calculator.calculate_pid_usage(pid, pid_stat);
         Ok(PercentMetric::new(percent))

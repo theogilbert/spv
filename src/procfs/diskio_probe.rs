@@ -43,19 +43,19 @@ impl Probe<IOMetric> for DiskIOProbe {
         let pid_io = self
             .reader
             .read(pid)
-            .map_err(|e| Error::ProbingError(format!("Error probing disk IO stats for PID {}", pid), e.into()))?;
+            .map_err(|e| Error::ProbingError("Could not read process IO stats".to_string(), e.into()))?;
 
         self.input_rate_calculator.push(pid, pid_io.read_bytes());
         let input_rate = self
             .input_rate_calculator
             .rate(pid)
-            .map_err(|e| Error::ProbingError(format!("Error calculating input rate for PID {}", pid), e.into()))?;
+            .map_err(|e| Error::ProbingError("Could not calculate disk input rate".to_string(), e.into()))?;
 
         self.output_rate_calculator.push(pid, pid_io.written_bytes());
         let output_rate = self
             .output_rate_calculator
             .rate(pid)
-            .map_err(|e| Error::ProbingError(format!("Error calculating output rate for PID {}", pid), e.into()))?;
+            .map_err(|e| Error::ProbingError("Could not calculate disk output rate".to_string(), e.into()))?;
 
         Ok(IOMetric::new(input_rate as usize, output_rate as usize))
     }

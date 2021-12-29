@@ -23,20 +23,25 @@ pub enum Error {
     SignalError(#[source] io::Error),
 }
 
+/// All events that the application has to manage
 pub enum Trigger {
     Exit,
     Impulse,
-    NextProcess,
-    PreviousProcess,
     Resize,
-    NextTab,
-    PreviousTab,
-    /// Scroll the chart toward the left
-    ScrollLeft,
-    /// Scroll the chart toward the right
-    ScrollRight,
-    /// Reset the chart's default position to the current iteration
-    ScrollReset,
+    Input(Key),
+}
+
+/// Keyboard events submitted by users to interact with the application
+pub enum Key {
+    Down,
+    Up,
+    Right,
+    Left,
+    S,
+    H,
+    L,
+    G,
+    Submit,
 }
 
 pub struct TriggersEmitter;

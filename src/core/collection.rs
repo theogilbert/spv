@@ -125,35 +125,18 @@ where
 
 #[cfg(test)]
 mod test_probe_collector {
+    use crate::core::collection::{MetricCollector, ProbeCollector};
+    use crate::core::metrics::PercentMetric;
+    use crate::core::probe::fakes::FakeProbe;
+    use crate::core::process::Pid;
+    use crate::core::time::{Span, Timestamp};
+    use rstest::rstest;
     use std::cmp::Ordering;
     use std::collections::HashMap;
     use std::time::Duration;
 
-    use rstest::*;
-
-    use crate::core::collection::{MetricCollector, ProbeCollector};
-    use crate::core::metrics::PercentMetric;
-    use crate::core::probe::Probe;
-    use crate::core::process::Pid;
-    use crate::core::time::{Span, Timestamp};
-    use crate::core::Error;
-
-    struct ProbeFake {
-        return_map: HashMap<Pid, f64>,
-    }
-
-    impl Probe<PercentMetric> for ProbeFake {
-        fn name(&self) -> &'static str {
-            return "fake";
-        }
-
-        fn probe(&mut self, pid: Pid) -> Result<PercentMetric, Error> {
-            Ok(PercentMetric::new(self.return_map.get(&pid).copied().unwrap()))
-        }
-    }
-
     fn create_collector_with_map(return_map: HashMap<Pid, f64>) -> ProbeCollector<PercentMetric> {
-        let probe = ProbeFake { return_map };
+        let probe = FakeProbe::from_percent_map(return_map);
         ProbeCollector::new(probe)
     }
 

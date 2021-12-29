@@ -52,7 +52,7 @@ impl NetIoProbe {
     pub fn new() -> Result<Self, Error> {
         let net_ifs = Netinfo::list_net_interfaces()
             .map_err(|e| NetinfoError::from_std_error(&e))
-            .map_err(|e| Error::ProbingError("Error listing net interfaces".to_string(), e.into()))?;
+            .map_err(|e| Error::ProbingError("Could not list net interfaces".to_string(), e.into()))?;
         let mut net_info = Netinfo::new(&net_ifs)
             .map_err(|e| NetinfoError::from_std_error(&e))
             .map_err(|e| Error::ProbingError("Could not initialize NetInfo".to_string(), e.into()))?;
@@ -85,11 +85,11 @@ impl Probe<IOMetric> for NetIoProbe {
             .net_info
             .get_net_statistics()
             .map_err(|e| NetinfoError::from_std_error(&e))
-            .map_err(|e| Error::ProbingError("Error getting net statistics".to_string(), e.into()))?;
+            .map_err(|e| Error::ProbingError("Could not get net statistics".to_string(), e.into()))?;
         self.net_info
             .clear()
             .map_err(|e| NetinfoError::from_std_error(&e))
-            .map_err(|e| Error::ProbingError("Error clearing net io cache".to_string(), e.into()))?;
+            .map_err(|e| Error::ProbingError("Could not clear net IO cache".to_string(), e.into()))?;
 
         self.net_stats = Some(net_stats);
 
@@ -97,7 +97,7 @@ impl Probe<IOMetric> for NetIoProbe {
             .net_info
             .pop_thread_errors()
             .map_err(|e| NetinfoError::from_std_error(&e))
-            .map_err(|e| Error::ProbingError("Could not fetch net io thread errors".into(), e.into()))?;
+            .map_err(|e| Error::ProbingError("Could not fetch net IO thread errors".into(), e.into()))?;
         errors.iter().for_each(|e| {
             error!("Error while parsing net packets: {:?}", e);
         });
@@ -116,11 +116,11 @@ impl Probe<IOMetric> for NetIoProbe {
             let input_rate = self
                 .input_processes_rates
                 .rate(pid)
-                .map_err(|e| Error::ProbingError("Error calculating input rate".into(), e.into()))?;
+                .map_err(|e| Error::ProbingError("Could not calculate network input rate".into(), e.into()))?;
             let output_rate = self
                 .output_processes_rates
                 .rate(pid)
-                .map_err(|e| Error::ProbingError("Error calculating output rate".into(), e.into()))?;
+                .map_err(|e| Error::ProbingError("Could not calculate network output rate".into(), e.into()))?;
 
             Ok(IOMetric::new(input_rate as usize, output_rate as usize))
         } else {

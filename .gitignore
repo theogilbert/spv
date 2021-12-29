@@ -4,3 +4,6 @@ $CACHE_FILE$
 .gitignore
 *.xml
 *.iml
+*.log
+/.vscode
+*.sh
