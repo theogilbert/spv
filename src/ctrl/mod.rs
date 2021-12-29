@@ -16,6 +16,7 @@ pub mod processes;
 pub mod span;
 
 /// Indicates the effect caused by a user input
+#[derive(Eq, PartialEq)]
 pub enum Effect {
     None,
     ProcessesSorted(ProcessOrdering),

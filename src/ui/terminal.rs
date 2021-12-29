@@ -60,12 +60,17 @@ impl Drop for Terminal {
 pub struct FrameRegion<'a, 'b: 'a> {
     frame: &'a mut Frame<'b, TuiBackend>,
     region: Rect,
+    original_region: Rect,
 }
 
 impl<'a, 'b: 'a> FrameRegion<'a, 'b> {
     pub fn new(frame: &'a mut Frame<'b, TuiBackend>) -> Self {
         let region = frame.size();
-        FrameRegion { frame, region }
+        FrameRegion {
+            frame,
+            region,
+            original_region: region,
+        }
     }
     pub fn render_widget<W>(&mut self, widget: W)
     where
@@ -87,6 +92,11 @@ impl<'a, 'b: 'a> FrameRegion<'a, 'b> {
 
     pub fn with_region(&mut self, region: Rect) -> &mut Self {
         self.region = region;
+        self
+    }
+
+    pub fn with_original_region(&mut self) -> &mut Self {
+        self.region = self.original_region;
         self
     }
 }

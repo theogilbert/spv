@@ -36,10 +36,6 @@ impl Collectors {
         self.collectors[self.selected_index].as_ref()
     }
 
-    pub fn current_mut(&mut self) -> &mut dyn MetricCollector {
-        self.collectors[self.selected_index].as_mut()
-    }
-
     pub fn as_mut_slice(&mut self) -> &mut [Box<dyn MetricCollector>] {
         self.collectors.as_mut_slice()
     }
@@ -109,10 +105,9 @@ mod test_collectors_selector {
 
     #[rstest]
     fn test_should_select_first_collector_by_default(collectors: Vec<Box<dyn MetricCollector>>) {
-        let mut selector = Collectors::new(collectors);
+        let selector = Collectors::new(collectors);
 
         assert_eq!(selector.current().name(), "collector_1");
-        assert_eq!(selector.current_mut().name(), "collector_1");
     }
 
     #[rstest]
@@ -121,7 +116,6 @@ mod test_collectors_selector {
         selector.next_collector();
 
         assert_eq!(selector.current().name(), "collector_2");
-        assert_eq!(selector.current_mut().name(), "collector_2");
     }
 
     #[rstest]
@@ -131,7 +125,6 @@ mod test_collectors_selector {
         selector.previous_collector();
 
         assert_eq!(selector.current().name(), "collector_1");
-        assert_eq!(selector.current_mut().name(), "collector_1");
     }
 
     #[rstest]
@@ -141,7 +134,6 @@ mod test_collectors_selector {
         selector.next_collector();
 
         assert_eq!(selector.current().name(), "collector_1");
-        assert_eq!(selector.current_mut().name(), "collector_1");
     }
 
     #[rstest]
@@ -150,7 +142,6 @@ mod test_collectors_selector {
         selector.previous_collector();
 
         assert_eq!(selector.current().name(), "collector_2");
-        assert_eq!(selector.current_mut().name(), "collector_2");
     }
 
     #[rstest]

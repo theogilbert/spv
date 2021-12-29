@@ -22,7 +22,7 @@ struct GlobalTimestamp {
 
 impl GlobalTimestamp {
     fn new() -> Self {
-        let now = Timestamp::from_instant(Instant::now());
+        let now = Timestamp::from_current_instant();
         Self {
             current_timestamp: RefCell::new(now),
             initial_timestamp: now,
@@ -30,7 +30,7 @@ impl GlobalTimestamp {
     }
 
     fn refresh(&self) {
-        let now = Timestamp::from_instant(Instant::now());
+        let now = Timestamp::from_current_instant();
         self.current_timestamp.replace(now);
     }
 
@@ -114,6 +114,11 @@ impl Timestamp {
     /// Builds a timestamp from an `Instant` value
     pub fn from_instant(instant: Instant) -> Self {
         Self { stamp: instant }
+    }
+
+    /// Builds a timestamp from the current `Instant::now()` value
+    pub fn from_current_instant() -> Self {
+        Self::from_instant(Instant::now())
     }
 
     /// Calculates elapsed time between `self` and `earlier`
