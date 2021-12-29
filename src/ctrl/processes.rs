@@ -1,4 +1,5 @@
 //! Manages the selection of the current process
+use crate::core::ordering::{ProcessOrdering, PROCESS_ORDERING_CRITERIA};
 use crate::core::process::{Pid, ProcessMetadata};
 use crate::core::view::ProcessesView;
 
@@ -170,5 +171,86 @@ mod test_processes {
         assert_eq!(view.as_slice(), &processes);
         assert_eq!(view.selected_process(), Some(&processes[1]));
         assert_eq!(view.selected_index(), Some(1));
+    }
+}
+
+/// Allows the selection of processes sorting criteria
+#[derive(Default)]
+pub struct SortCriteriaSelector {
+    selected_index: usize,
+    applied_selection: usize,
+}
+
+impl SortCriteriaSelector {
+    /// Select the next criteria
+    pub fn next(&mut self) {
+        let max_index = PROCESS_ORDERING_CRITERIA.len() - 1;
+        self.selected_index = (self.selected_index + 1).min(max_index);
+    }
+
+    /// Select the previous criteria
+    pub fn previous(&mut self) {
+        self.selected_index = self.selected_index.saturating_sub(1);
+    }
+
+    /// Returns the criteria which is currently selected, but not necessarily applied
+    pub fn selected(&self) -> ProcessOrdering {
+        PROCESS_ORDERING_CRITERIA[self.selected_index]
+    }
+
+    /// Applies the selected criteria as the critieria to use to sort processes
+    pub fn apply(&mut self) {
+        self.applied_selection = self.selected_index;
+    }
+
+    /// Returns the critieria which is currently applied, even if it is not selected
+    pub fn applied(&self) -> ProcessOrdering {
+        PROCESS_ORDERING_CRITERIA[self.applied_selection]
+    }
+}
+
+#[cfg(test)]
+mod test_process_criteria_selector {
+    use crate::core::ordering::PROCESS_ORDERING_CRITERIA;
+    use crate::ctrl::processes::SortCriteriaSelector;
+
+    #[test]
+    fn should_select_first_criteria_by_default() {
+        let selector = SortCriteriaSelector::default();
+        assert_eq!(selector.selected(), PROCESS_ORDERING_CRITERIA[0]);
+    }
+
+    #[test]
+    fn should_select_next_process() {
+        let mut selector = SortCriteriaSelector::default();
+        selector.next();
+
+        assert_eq!(selector.selected(), PROCESS_ORDERING_CRITERIA[1]);
+    }
+
+    #[test]
+    fn should_select_previous_process() {
+        let mut selector = SortCriteriaSelector::default();
+        selector.next();
+        selector.previous();
+
+        assert_eq!(selector.selected(), PROCESS_ORDERING_CRITERIA[0]);
+    }
+
+    #[test]
+    fn should_not_apply_selection_by_default() {
+        let mut selector = SortCriteriaSelector::default();
+        selector.next();
+
+        assert_eq!(selector.applied(), PROCESS_ORDERING_CRITERIA[0]);
+    }
+
+    #[test]
+    fn should_return_selected_selection_as_applied_once_the_selection_is_applied() {
+        let mut selector = SortCriteriaSelector::default();
+        selector.next();
+        selector.apply();
+
+        assert_eq!(selector.applied(), PROCESS_ORDERING_CRITERIA[1]);
     }
 }
