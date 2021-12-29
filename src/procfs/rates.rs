@@ -5,6 +5,7 @@ use std::time::Duration;
 #[cfg(not(test))]
 use std::time::Instant;
 
+use log::error;
 #[cfg(test)]
 use sn_fake_clock::FakeClock as Instant;
 
@@ -105,7 +106,7 @@ impl ProcessesRates {
         }
 
         let last_value = values.back().unwrap();
-        let first_value = self.estimate_origin_value(values, last_value.date).unwrap();
+        let first_value = self.estimate_origin_value(values, last_value.date, pid).unwrap();
 
         let rate = (last_value.value as f64 - first_value) / self.range.as_secs_f64();
 
@@ -115,7 +116,7 @@ impl ProcessesRates {
     /// Estimate the value at the date `now - self.range`
     /// This very simple implementation estimates this value by performing a regression from the
     /// first two values of `values`
-    fn estimate_origin_value(&self, values: &VecDeque<DatedValue>, now: Instant) -> Option<f64> {
+    fn estimate_origin_value(&self, values: &VecDeque<DatedValue>, now: Instant, pid: Pid) -> Option<f64> {
         let origin = now - self.range;
 
         if values.len() < 2 {
@@ -129,7 +130,14 @@ impl ProcessesRates {
             return None; // If the two dates are identical, we don't want to divide by zero below
         }
 
-        let slope = (second.value - first.value) as f64 / (second.date - first.date).as_secs_f64();
+        if first.value > second.value {
+            error!(
+                "Error: the first value {:?} is greater than the second value {:?} for pid {:?}",
+                first.value, second.value, pid
+            );
+        }
+
+        let slope = second.value.saturating_sub(first.value) as f64 / (second.date - first.date).as_secs_f64();
 
         let origin_time_delta = Self::get_delta_as_secs_f64(origin, first.date);
         let regression = first.value as f64 + slope * (origin_time_delta);
