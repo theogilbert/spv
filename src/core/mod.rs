@@ -8,6 +8,7 @@ use crate::core::process::Pid;
 
 pub mod collection;
 pub mod metrics;
+pub mod ordering;
 pub mod probe;
 pub mod process;
 pub mod time;
@@ -18,7 +19,7 @@ pub enum Error {
     // Error raised from trait implementors
     #[error("Error scanning process: {0}")]
     ScanProcessesError(#[source] anyhow::Error),
-    #[error("Error while probing metrics")]
+    #[error("{0}: {1:?}")]
     ProbingError(String, #[source] anyhow::Error),
     #[error("Invalid PID: '{0:?}'")]
     InvalidPID(Pid),
