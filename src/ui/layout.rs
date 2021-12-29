@@ -52,3 +52,41 @@ impl UiLayout {
         self.main_chunks[2]
     }
 }
+
+pub fn centered_area(parent_area: Rect, width: u16, height: u16) -> Rect {
+    let width = width.min(parent_area.width);
+    let height = height.min(parent_area.height);
+
+    let remaining_width = parent_area.width - width;
+    let remaining_height = parent_area.height - height;
+
+    Rect::new(
+        parent_area.left() + remaining_width / 2,
+        parent_area.top() + remaining_height / 2,
+        width,
+        height,
+    )
+}
+
+#[cfg(test)]
+mod test_centered_area {
+    use tui::layout::Rect;
+
+    use crate::ui::layout::centered_area;
+
+    #[test]
+    fn should_return_centered_area() {
+        let parent_area = Rect::new(5, 5, 15, 15);
+        let centered_area = centered_area(parent_area, 5, 5);
+
+        assert_eq!(centered_area, Rect::new(10, 10, 5, 5));
+    }
+
+    #[test]
+    fn should_handle_case_where_parent_area_smaller_than_given_dimensions() {
+        let parent_area = Rect::new(0, 0, 10, 10);
+        let centered_area = centered_area(parent_area, 20, 20);
+
+        assert_eq!(centered_area, Rect::new(0, 0, 10, 10));
+    }
+}
