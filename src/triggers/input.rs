@@ -1,10 +1,10 @@
 use std::io::stdin;
 use std::sync::mpsc::Sender;
 
-use termion::event::Key;
+use termion::event::Key as TermionKey;
 use termion::input::TermRead;
 
-use crate::triggers::{Error, Trigger};
+use crate::triggers::{Error, Key, Trigger};
 
 pub struct InputListener {
     sender: Sender<Trigger>,
@@ -23,12 +23,12 @@ impl InputListener {
             let key = key_ret.map_err(Error::InputError)?;
 
             match key {
-                Key::Ctrl(c) => self.on_ctrl_key_pressed(c),
-                Key::Char(c) => self.on_key_pressed(c),
-                Key::Left => self.send(Trigger::PreviousTab),
-                Key::Right => self.send(Trigger::NextTab),
-                Key::Up => self.send(Trigger::PreviousProcess),
-                Key::Down => self.send(Trigger::NextProcess),
+                TermionKey::Ctrl(c) => self.on_ctrl_key_pressed(c),
+                TermionKey::Char(c) => self.on_key_pressed(c),
+                TermionKey::Left => self.send(Trigger::Input(Key::Left)),
+                TermionKey::Right => self.send(Trigger::Input(Key::Right)),
+                TermionKey::Up => self.send(Trigger::Input(Key::Up)),
+                TermionKey::Down => self.send(Trigger::Input(Key::Down)),
                 _ => (),
             }
 
@@ -50,9 +50,11 @@ impl InputListener {
     fn on_key_pressed(&mut self, key: char) {
         match key {
             'q' => self.send_exit(),
-            'h' => self.send(Trigger::ScrollLeft),
-            'l' => self.send(Trigger::ScrollRight),
-            'g' => self.send(Trigger::ScrollReset),
+            'h' => self.send(Trigger::Input(Key::H)),
+            'l' => self.send(Trigger::Input(Key::L)),
+            'g' => self.send(Trigger::Input(Key::G)),
+            's' => self.send(Trigger::Input(Key::S)),
+            '\n' => self.send(Trigger::Input(Key::Submit)),
             _ => {}
         };
     }
