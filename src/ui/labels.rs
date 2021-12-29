@@ -1,5 +1,6 @@
 //! Generates human-readable labels from raw data
 
+use crate::core::ordering::ProcessOrdering;
 use crate::core::time::Timestamp;
 
 /// Generates a label describing the time delta between now and the given timestamp (e.g. `"12s ago"`).<br/>
@@ -31,10 +32,10 @@ pub fn relative_timestamp_label(timestamp: Timestamp) -> String {
 mod test_relative_time_label {
     use std::time::Duration;
 
-    use crate::core::time::test_utils::setup_fake_clock_to_prevent_substract_overflow;
-    use crate::core::time::Timestamp;
     use rstest::*;
 
+    use crate::core::time::test_utils::setup_fake_clock_to_prevent_substract_overflow;
+    use crate::core::time::Timestamp;
     use crate::ui::labels::relative_timestamp_label;
 
     #[rstest]
@@ -96,5 +97,14 @@ mod test_relative_time_label {
         let label = relative_timestamp_label(timestamp);
 
         assert_eq!(label, "100h ago");
+    }
+}
+
+/// Returns a user-friendly representation of a process ordering criteria
+pub fn process_criteria_label(criteria: &ProcessOrdering) -> String {
+    match criteria {
+        ProcessOrdering::CurrentMetric => "Latest metric".to_string(),
+        ProcessOrdering::Pid => "Process PID".to_string(),
+        ProcessOrdering::Command => "Process command".to_string(),
     }
 }
