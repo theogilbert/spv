@@ -6,8 +6,6 @@ use thiserror::Error;
 
 use crate::core::process::Pid;
 
-mod parsers;
-
 pub mod process;
 
 pub mod cpu_probe;
@@ -16,6 +14,7 @@ pub mod diskio_probe;
 #[cfg(feature = "netio")]
 pub mod net_io_probe;
 
+mod parsers;
 mod rates;
 mod sysconf;
 

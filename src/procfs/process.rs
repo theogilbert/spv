@@ -11,9 +11,9 @@ use thiserror::Error;
 use crate::core::process::{Pid, ProcessMetadata, ProcessScanner};
 use crate::core::time::Timestamp;
 use crate::core::Error as CoreError;
-use crate::procfs::parsers::{
-    Comm, PidStat, ProcessDataReader, ReadProcessData, ReadSystemData, SystemDataReader, Uptime,
-};
+use crate::procfs::parsers::process::{Comm, PidStat};
+use crate::procfs::parsers::system::Uptime;
+use crate::procfs::parsers::{ProcessDataReader, ReadProcessData, ReadSystemData, SystemDataReader};
 use crate::procfs::sysconf::clock_ticks;
 use crate::procfs::ProcfsError;
 

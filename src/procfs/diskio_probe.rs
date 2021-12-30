@@ -6,7 +6,8 @@ use crate::core::metrics::IOMetric;
 use crate::core::probe::Probe;
 use crate::core::process::Pid;
 use crate::core::Error;
-use crate::procfs::parsers::{PidIO, ProcessDataReader, ReadProcessData};
+use crate::procfs::parsers::process::PidIO;
+use crate::procfs::parsers::{ProcessDataReader, ReadProcessData};
 use crate::procfs::rates::{ProcessesRates, PushMode};
 
 const IO_RATE_RETENTION: Duration = Duration::from_secs(1);
@@ -70,7 +71,7 @@ mod test_disk_io_probe {
     use crate::core::probe::Probe;
     use crate::procfs::diskio_probe::DiskIOProbe;
     use crate::procfs::parsers::fakes::FakeProcessDataReader;
-    use crate::procfs::parsers::PidIO;
+    use crate::procfs::parsers::process::PidIO;
 
     #[rstest]
     #[case(0, 0, 0, 0, 0)]

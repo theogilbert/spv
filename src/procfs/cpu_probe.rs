@@ -6,8 +6,9 @@ use crate::core::metrics::PercentMetric;
 use crate::core::probe::Probe;
 use crate::core::process::Pid;
 use crate::core::Error;
-use crate::procfs::parsers;
-use crate::procfs::parsers::{PidStat, ProcessDataReader, ReadProcessData, ReadSystemData, Stat, SystemDataReader};
+use crate::procfs::parsers::process::PidStat;
+use crate::procfs::parsers::system::Stat;
+use crate::procfs::parsers::{ProcessDataReader, ReadProcessData, ReadSystemData, SystemDataReader};
 
 // TODO When a process CPU usage is low, some iterations will detect a CPU usage of 0%, causing a
 //   fluctuating value between each iterations. Fix this, maybe by averaging reported values over
@@ -68,8 +69,8 @@ impl Probe<PercentMetric> for CpuProbe {
 }
 
 struct UsageCalculator {
-    processes_prev_stats: HashMap<Pid, parsers::PidStat>,
-    prev_global_stat: parsers::Stat,
+    processes_prev_stats: HashMap<Pid, PidStat>,
+    prev_global_stat: Stat,
     global_runtime_diff: f64,
 }
 
@@ -77,7 +78,7 @@ impl Default for UsageCalculator {
     fn default() -> Self {
         UsageCalculator {
             processes_prev_stats: HashMap::new(),
-            prev_global_stat: parsers::Stat::new(0, 0, 0, 0, 0, 0),
+            prev_global_stat: Stat::new(0, 0, 0, 0, 0, 0),
             global_runtime_diff: 0.,
         }
     }
@@ -129,7 +130,8 @@ mod test_cpu_probe {
     use crate::procfs::cpu_probe::common_test_utils::{create_pid_stat, create_stat};
     use crate::procfs::cpu_probe::CpuProbe;
     use crate::procfs::parsers::fakes::{FakeProcessDataReader, FakeSystemDataReader};
-    use crate::procfs::parsers::{PidStat, Stat};
+    use crate::procfs::parsers::process::PidStat;
+    use crate::procfs::parsers::system::Stat;
 
     fn build_probe(stat_reader: FakeSystemDataReader<Stat>, pid_reader: FakeProcessDataReader<PidStat>) -> CpuProbe {
         CpuProbe::from_readers(Box::new(stat_reader), Box::new(pid_reader)).expect("Could not create procfs")
@@ -198,7 +200,7 @@ mod test_cpu_probe {
 mod test_cpu_calculator {
     use crate::procfs::cpu_probe::common_test_utils::create_stat;
     use crate::procfs::cpu_probe::UsageCalculator;
-    use crate::procfs::parsers;
+    use crate::procfs::parsers::process::PidStat;
 
     fn create_initialized_calc(elapsed_ticks: u64) -> UsageCalculator {
         let mut calc = UsageCalculator::default();
@@ -213,7 +215,7 @@ mod test_cpu_calculator {
     fn test_zero_percent_usage() {
         let mut calc = create_initialized_calc(60);
 
-        let pid_stat = parsers::PidStat::new(0, 0, 0, 0, 0);
+        let pid_stat = PidStat::new(0, 0, 0, 0, 0);
 
         assert_eq!(calc.calculate_pid_usage(1, pid_stat), 0.);
     }
@@ -222,7 +224,7 @@ mod test_cpu_calculator {
     fn test_hundred_percent_usage() {
         let mut calc = create_initialized_calc(123);
 
-        let pid_stat = parsers::PidStat::new(100, 20, 2, 1, 0);
+        let pid_stat = PidStat::new(100, 20, 2, 1, 0);
 
         assert_eq!(calc.calculate_pid_usage(1, pid_stat), 100.);
     }
@@ -230,7 +232,8 @@ mod test_cpu_calculator {
 
 #[cfg(test)]
 mod common_test_utils {
-    use crate::procfs::parsers::{PidStat, Stat};
+    use crate::procfs::parsers::process::PidStat;
+    use crate::procfs::parsers::system::Stat;
 
     pub fn create_stat(running_time: u64) -> Stat {
         // Creates a Stat structure indicating that the CPU has been running for `running_time`
