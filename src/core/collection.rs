@@ -24,6 +24,14 @@ pub trait MetricCollector {
     ///  * `pids`: A slice containing the [`Pids`](crate::core::process::Pid) to probe.
     fn collect(&mut self, pids: &[Pid]) -> Result<(), Error>;
 
+    /// Cleans up the data allocated to collect the given processes.
+    ///
+    /// This does not cleanup the already collected data for this process.
+    ///
+    /// # Arguments
+    ///  * `pids`: The IDs of the processes to cleanup
+    fn cleanup(&mut self, pids: &[Pid]);
+
     /// Probes metrics for the given processes, without storing them.
     ///
     /// Some probe implementations require an initial measurement to be calibrated. As this first
@@ -99,6 +107,10 @@ where
         Ok(())
     }
 
+    fn cleanup(&mut self, pids: &[Pid]) {
+        self.probe.cleanup(pids);
+    }
+
     fn calibrate(&mut self, pids: &[Pid]) -> Result<(), Error> {
         self.probe.probe_processes(pids).map(|_| ())
     }
@@ -125,15 +137,17 @@ where
 
 #[cfg(test)]
 mod test_probe_collector {
+    use std::cmp::Ordering;
+    use std::collections::HashMap;
+    use std::time::Duration;
+
+    use rstest::rstest;
+
     use crate::core::collection::{MetricCollector, ProbeCollector};
     use crate::core::metrics::PercentMetric;
     use crate::core::probe::fakes::FakeProbe;
     use crate::core::process::Pid;
     use crate::core::time::{Span, Timestamp};
-    use rstest::rstest;
-    use std::cmp::Ordering;
-    use std::collections::HashMap;
-    use std::time::Duration;
 
     fn create_collector_with_map(return_map: HashMap<Pid, f64>) -> ProbeCollector<PercentMetric> {
         let probe = FakeProbe::from_percent_map(return_map);

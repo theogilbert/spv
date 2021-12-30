@@ -60,6 +60,14 @@ impl Probe<IOMetric> for DiskIOProbe {
 
         Ok(IOMetric::new(input_rate as usize, output_rate as usize))
     }
+
+    fn cleanup(&mut self, pids: &[Pid]) {
+        pids.iter().copied().for_each(|pid| {
+            self.reader.cleanup(pid);
+            self.input_rate_calculator.cleanup(pid);
+            self.output_rate_calculator.cleanup(pid);
+        });
+    }
 }
 
 #[cfg(test)]

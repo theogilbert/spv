@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::mem::replace;
 
 use log::warn;
 
@@ -149,6 +150,7 @@ mod test_process_metadata {
 pub struct ProcessCollector {
     scanner: Box<dyn ProcessScanner>,
     registered_processes: HashMap<Pid, ProcessMetadata>,
+    latest_dead_processes: Vec<Pid>,
 }
 
 impl ProcessCollector {
@@ -156,6 +158,7 @@ impl ProcessCollector {
         Self {
             scanner,
             registered_processes: HashMap::new(),
+            latest_dead_processes: Vec::new(),
         }
     }
 
@@ -180,6 +183,11 @@ impl ProcessCollector {
             .filter(|pm| pm.status == Status::RUNNING)
             .map(|pm| pm.pid())
             .collect()
+    }
+
+    /// Returns all processes that have been marked dead since this method was last called
+    pub fn latest_dead_processes(&mut self) -> Vec<Pid> {
+        replace(&mut self.latest_dead_processes, Vec::new())
     }
 
     /// Scans and retrieves information about running processes
@@ -217,6 +225,7 @@ impl ProcessCollector {
             .for_each(|pm| {
                 if !running_pids.contains(&pm.pid()) {
                     pm.mark_dead();
+                    self.latest_dead_processes.push(pm.pid());
                 } else {
                     pm.refresh_running_span();
                 }
@@ -386,6 +395,21 @@ mod test_process_collector {
         let running_processes = collector.running_processes();
         assert_eq!(running_processes.len(), 1);
         assert_eq!(running_processes[0].pid(), 1);
+    }
+
+    #[test]
+    fn test_should_return_latest_dead_processes() {
+        let pids_sequence = vec![
+            vec![1, 2, 3], // Processes 1, 2 and 3 are running
+            vec![1],       // Processes 2 and 3 are now dead
+        ];
+        let mut collector = build_collector_with_sequence_and_collect(pids_sequence);
+
+        let mut latest_dead_processes = collector.latest_dead_processes();
+        latest_dead_processes.sort();
+        assert_eq!(latest_dead_processes, vec![2, 3]);
+        let latest_dead_processes = collector.latest_dead_processes();
+        assert_eq!(latest_dead_processes, vec![]);
     }
 
     #[test]

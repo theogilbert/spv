@@ -42,6 +42,8 @@ where
     D: ProcessData + Sized,
 {
     fn read(&mut self, pid: Pid) -> Result<D, ProcfsError>;
+
+    fn cleanup(&mut self, pid: Pid);
 }
 
 /// Reads data from procfs system files that are not associated to processes (directly in `/proc`)
@@ -102,6 +104,10 @@ where
             Entry::Vacant(v) => v.insert(ProcfsReader::new(D::filepath(pid).as_path())?),
         })
     }
+
+    fn close_process_file(&mut self, pid: Pid) {
+        self.readers.remove(&pid);
+    }
 }
 
 impl<D> ReadProcessData<D> for ProcessDataReader<D>
@@ -112,10 +118,14 @@ where
         let data_ret = self.process_reader(pid)?.read();
 
         if data_ret.is_err() || !self.keep_files_open {
-            self.readers.remove(&pid);
+            self.close_process_file(pid);
         }
 
         data_ret
+    }
+
+    fn cleanup(&mut self, pid: Pid) {
+        self.close_process_file(pid);
     }
 }
 
@@ -255,6 +265,10 @@ pub mod fakes {
                 .expect("No data is configured for this process")
                 .pop_front()
                 .expect("This process has no data left to return")
+        }
+
+        fn cleanup(&mut self, _pid: Pid) {
+            // Nothing to cleanup
         }
     }
 }

@@ -132,4 +132,11 @@ impl Probe<IOMetric> for NetIoProbe {
             ))
         }
     }
+
+    fn cleanup(&mut self, pids: &[crate::core::process::Pid]) {
+        pids.iter().copied().for_each(|pid| {
+            self.input_processes_rates.cleanup(pid);
+            self.output_processes_rates.cleanup(pid);
+        });
+    }
 }

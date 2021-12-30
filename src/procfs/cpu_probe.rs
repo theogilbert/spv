@@ -66,6 +66,13 @@ impl Probe<PercentMetric> for CpuProbe {
         let percent = self.calculator.calculate_pid_usage(pid, pid_stat);
         Ok(PercentMetric::new(percent))
     }
+
+    fn cleanup(&mut self, pids: &[Pid]) {
+        pids.iter().copied().for_each(|pid| {
+            self.pid_stat_reader.cleanup(pid);
+            self.calculator.cleanup(pid);
+        });
+    }
 }
 
 struct UsageCalculator {
@@ -120,6 +127,11 @@ impl UsageCalculator {
         self.processes_prev_stats.insert(pid, pid_stat_data);
 
         100. * pid_runtime_diff as f64 / self.global_runtime_diff
+    }
+
+    /// Cleanup data allocated for the given process
+    pub fn cleanup(&mut self, pid: Pid) {
+        self.processes_prev_stats.remove(&pid);
     }
 }
 
