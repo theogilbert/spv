@@ -54,10 +54,17 @@ impl ProcfsScanner {
             .map_err(|e| Error::SystemParsingFailure("uptime".into(), e))?
             .boot_time();
 
+        let mut comm_reader = Box::new(ProcessDataReader::new());
+        let mut stat_reader = Box::new(ProcessDataReader::new());
+
+        // As these readers should only read each file once, no need to keep these files open
+        comm_reader.close_file_after_read();
+        stat_reader.close_file_after_read();
+
         Ok(ProcfsScanner {
             proc_dir: PathBuf::from("/proc"),
-            comm_reader: Box::new(ProcessDataReader::new()),
-            stat_reader: Box::new(ProcessDataReader::new()),
+            comm_reader,
+            stat_reader,
             boot_time,
         })
     }

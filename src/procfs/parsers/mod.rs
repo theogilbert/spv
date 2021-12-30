@@ -76,6 +76,7 @@ pub struct ProcessDataReader<D>
 where
     D: ProcessData + Sized,
 {
+    keep_files_open: bool,
     readers: HashMap<Pid, ProcfsReader<D>>,
 }
 
@@ -85,8 +86,14 @@ where
 {
     pub fn new() -> Self {
         ProcessDataReader {
+            keep_files_open: true,
             readers: HashMap::new(),
         }
+    }
+
+    /// Tells the reader to stop keeping process files open
+    pub fn close_file_after_read(&mut self) {
+        self.keep_files_open = false;
     }
 
     fn process_reader(&mut self, pid: Pid) -> Result<&mut ProcfsReader<D>, ProcfsError> {
@@ -104,8 +111,7 @@ where
     fn read(&mut self, pid: u32) -> Result<D, ProcfsError> {
         let data_ret = self.process_reader(pid)?.read();
 
-        if data_ret.is_err() {
-            // if reading files for this PID fails, we stop tracking the file
+        if data_ret.is_err() || !self.keep_files_open {
             self.readers.remove(&pid);
         }
 
