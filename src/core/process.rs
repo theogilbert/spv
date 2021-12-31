@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use std::mem::replace;
+use std::mem::take;
 
 use log::warn;
 
@@ -187,7 +187,7 @@ impl ProcessCollector {
 
     /// Returns all processes that have been marked dead since this method was last called
     pub fn latest_dead_processes(&mut self) -> Vec<Pid> {
-        replace(&mut self.latest_dead_processes, Vec::new())
+        take(&mut self.latest_dead_processes)
     }
 
     /// Scans and retrieves information about running processes
