@@ -13,7 +13,7 @@ use crate::core::time::Timestamp;
 use crate::core::Error as CoreError;
 use crate::procfs::parsers::process::{Comm, PidStat};
 use crate::procfs::parsers::system::Uptime;
-use crate::procfs::parsers::{ProcessDataReader, ReadProcessData, ReadSystemData, SystemDataReader};
+use crate::procfs::parsers::{ReadProcessData, ReadSystemData, SystemDataReader, TransientProcessDataReader};
 use crate::procfs::sysconf::clock_ticks;
 use crate::procfs::ProcfsError;
 
@@ -54,17 +54,10 @@ impl ProcfsScanner {
             .map_err(|e| Error::SystemParsingFailure("uptime".into(), e))?
             .boot_time();
 
-        let mut comm_reader = Box::new(ProcessDataReader::new());
-        let mut stat_reader = Box::new(ProcessDataReader::new());
-
-        // As these readers should only read each file once, no need to keep these files open
-        comm_reader.close_file_after_read();
-        stat_reader.close_file_after_read();
-
         Ok(ProcfsScanner {
             proc_dir: PathBuf::from("/proc"),
-            comm_reader,
-            stat_reader,
+            comm_reader: Box::new(TransientProcessDataReader::default()),
+            stat_reader: Box::new(TransientProcessDataReader::default()),
             boot_time,
         })
     }
