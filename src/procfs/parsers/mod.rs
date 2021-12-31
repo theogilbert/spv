@@ -51,7 +51,7 @@ pub struct SystemDataReader<D>
 where
     D: SystemData + Sized,
 {
-    reader: ProcfsReader<D>,
+    reader: ProcfsFileReader<D>,
 }
 
 impl<D> SystemDataReader<D>
@@ -59,7 +59,7 @@ where
     D: SystemData + Sized,
 {
     pub fn new() -> Result<Self, ProcfsError> {
-        let reader = ProcfsReader::new(D::filepath().as_path())?;
+        let reader = ProcfsFileReader::new(D::filepath().as_path())?;
         Ok(SystemDataReader { reader })
     }
 }
@@ -84,7 +84,7 @@ where
     D: ProcessData + Sized,
 {
     fn read(&mut self, pid: Pid) -> Result<D, ProcfsError> {
-        ProcfsReader::new(D::filepath(pid).as_path())?.read()
+        ProcfsFileReader::new(D::filepath(pid).as_path())?.read()
     }
 
     fn cleanup(&mut self, _pid: Pid) {
@@ -99,28 +99,34 @@ pub struct ProcessDataReader<D>
 where
     D: ProcessData + Sized,
 {
-    readers: HashMap<Pid, ProcfsReader<D>>,
+    readers: HashMap<Pid, ProcfsFileReader<D>>,
+    limiter: TailedProcessLimiter,
 }
 
 impl<D> ProcessDataReader<D>
 where
     D: ProcessData + Sized,
 {
-    pub fn new() -> Self {
+    pub fn with_capacity(capacity: usize) -> Self {
         ProcessDataReader {
             readers: HashMap::new(),
+            limiter: TailedProcessLimiter::with_capacity(capacity),
         }
     }
 
-    fn process_reader(&mut self, pid: Pid) -> Result<&mut ProcfsReader<D>, ProcfsError> {
+    fn process_reader(&mut self, pid: Pid) -> Result<&mut ProcfsFileReader<D>, ProcfsError> {
         Ok(match self.readers.entry(pid) {
             Entry::Occupied(o) => o.into_mut(),
-            Entry::Vacant(v) => v.insert(ProcfsReader::new(D::filepath(pid).as_path())?),
+            Entry::Vacant(v) => {
+                self.limiter.push_pid(pid);
+                v.insert(ProcfsFileReader::new(D::filepath(pid).as_path())?)
+            }
         })
     }
 
     fn close_process_file(&mut self, pid: Pid) {
         self.readers.remove(&pid);
+        self.limiter.delete_pid(pid);
     }
 }
 
@@ -131,7 +137,7 @@ where
     fn read(&mut self, pid: u32) -> Result<D, ProcfsError> {
         let data_ret = self.process_reader(pid)?.read();
 
-        if data_ret.is_err() {
+        if data_ret.is_err() || !self.limiter.should_keep_process_file_opened(pid) {
             self.close_process_file(pid);
         }
 
@@ -143,14 +149,124 @@ where
     }
 }
 
-struct ProcfsReader<D>
+/// This structure is there to help `ProcessDataReader` limit the amount of opened files.
+///
+/// As opening a file is an expensive operation, we want to keep as many files open as possible.
+/// But on Linux, there is a limit to how many files a single process can hold open.
+///
+/// The issue is that if we do not limit the amount of opened files, the application will panic when too many processes
+/// will be probed, as it will want to keep all of their procfs files opened.
+///
+/// The current strategy of this limiter is to only keep open the files of the oldest processes. The idea behind it is
+/// that the oldest running processes are less likely to die in the near future, reducing the amount of open files
+/// turnover when the application reaches the limit of files to keep open.
+struct TailedProcessLimiter {
+    opened_processes: Vec<Pid>,
+    capacity: usize,
+}
+
+impl TailedProcessLimiter {
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            opened_processes: Vec::with_capacity(capacity),
+            capacity,
+        }
+    }
+
+    pub fn push_pid(&mut self, pid: Pid) {
+        if self.opened_processes.len() >= self.capacity {
+            return;
+        }
+
+        self.opened_processes.push(pid);
+    }
+
+    pub fn delete_pid(&mut self, pid: Pid) {
+        let pid_index = self.opened_processes.iter().position(|pid_in_vec| *pid_in_vec == pid);
+
+        if let Some(pid_index) = pid_index {
+            self.opened_processes.remove(pid_index);
+        }
+    }
+
+    pub fn should_keep_process_file_opened(&self, pid: Pid) -> bool {
+        self.opened_processes.contains(&pid)
+    }
+}
+
+#[cfg(test)]
+mod test_tailed_process_limiter {
+    use crate::procfs::parsers::TailedProcessLimiter;
+
+    #[test]
+    fn should_keep_file_opened_when_under_capacity() {
+        let mut limiter = TailedProcessLimiter::with_capacity(2);
+
+        limiter.push_pid(1);
+        limiter.push_pid(2);
+
+        assert!(limiter.should_keep_process_file_opened(2));
+    }
+
+    #[test]
+    fn should_not_keep_file_opened_when_above_capacity() {
+        let mut limiter = TailedProcessLimiter::with_capacity(2);
+
+        limiter.push_pid(1);
+        limiter.push_pid(2);
+        limiter.push_pid(3);
+
+        assert!(!limiter.should_keep_process_file_opened(3));
+    }
+
+    #[test]
+    fn should_keep_file_opened_when_below_capacity_after_cleanup() {
+        let mut limiter = TailedProcessLimiter::with_capacity(2);
+
+        limiter.push_pid(1);
+        limiter.push_pid(2);
+        limiter.delete_pid(2);
+        limiter.push_pid(3);
+
+        assert!(limiter.should_keep_process_file_opened(3));
+    }
+
+    #[test]
+    fn should_keep_already_pushed_file_open_even_if_pushed_again_above_capacity() {
+        let mut limiter = TailedProcessLimiter::with_capacity(2);
+
+        limiter.push_pid(1);
+        limiter.push_pid(2);
+        limiter.push_pid(1);
+
+        assert!(limiter.should_keep_process_file_opened(1));
+    }
+
+    #[test]
+    fn should_not_keep_file_open_if_pushed_and_destroyed_and_repushed_above_capacity() {
+        let mut limiter = TailedProcessLimiter::with_capacity(2);
+
+        limiter.push_pid(1);
+        limiter.push_pid(2);
+        limiter.delete_pid(2);
+        limiter.push_pid(3);
+        limiter.push_pid(2);
+
+        assert!(!limiter.should_keep_process_file_opened(2));
+    }
+}
+
+/// This reader can repeatedly read and parse data from a given procfs file.
+///
+/// It keeps the file it reads open.
+struct ProcfsFileReader<D>
 where
     D: Parse + Sized,
 {
     reader: DataReader<File, D>,
 }
 
-impl<D> ProcfsReader<D>
+impl<D> ProcfsFileReader<D>
 where
     D: Parse + Sized,
 {
@@ -165,6 +281,7 @@ where
     }
 }
 
+/// This reader parses a struct implementing `Parse` from any structure which implements the `Read + Seek` traits
 struct DataReader<R, D>
 where
     R: Read + Seek,
@@ -196,94 +313,6 @@ where
         let tp = TokenParser::new(&stat_content);
 
         D::parse(&tp)
-    }
-}
-
-#[cfg(test)]
-pub mod fakes {
-    use std::collections::{HashMap, VecDeque};
-    use std::io;
-
-    use crate::core::process::Pid;
-    use crate::procfs::parsers::{ProcessData, ReadProcessData, ReadSystemData, SystemData};
-    use crate::procfs::ProcfsError;
-
-    /// A fake structure implementing `ReadSystemData` for any implementation of `SystemData`.
-    /// The `SystemData` returned by this reader can be customized through the [`Self::from_sequence()`] function.
-    pub struct FakeSystemDataReader<D>
-    where
-        D: SystemData + Sized,
-    {
-        data_sequence: VecDeque<D>,
-    }
-
-    impl<D> FakeSystemDataReader<D>
-    where
-        D: SystemData + Sized,
-    {
-        pub fn from_sequence(sequence: Vec<D>) -> Self {
-            Self {
-                data_sequence: sequence.into(),
-            }
-        }
-    }
-
-    impl<D> ReadSystemData<D> for FakeSystemDataReader<D>
-    where
-        D: SystemData + Sized,
-    {
-        fn read(&mut self) -> Result<D, ProcfsError> {
-            Ok(self
-                .data_sequence
-                .pop_front()
-                .expect("The system data reader has nothing to return"))
-        }
-    }
-
-    /// A fake structure implementing `ReadProcessData` for any implementation of `ProcessData`.
-    pub struct FakeProcessDataReader<D>
-    where
-        D: ProcessData + Sized,
-    {
-        process_data_sequences: HashMap<Pid, VecDeque<Result<D, ProcfsError>>>,
-    }
-
-    impl<D> FakeProcessDataReader<D>
-    where
-        D: ProcessData + Sized,
-    {
-        pub fn new() -> Self {
-            Self {
-                process_data_sequences: hashmap!(),
-            }
-        }
-
-        pub fn set_pid_sequence(&mut self, pid: Pid, sequence: Vec<D>) {
-            let result_sequence = sequence.into_iter().map(|d| Ok(d)).collect();
-            self.process_data_sequences.insert(pid, result_sequence);
-        }
-
-        pub fn make_pid_fail(&mut self, pid: Pid) {
-            let err = Err(ProcfsError::IOError(io::Error::new(io::ErrorKind::Other, "oh no!")));
-            self.process_data_sequences.insert(pid, vecdeque!(err));
-        }
-    }
-
-    impl<D> ReadProcessData<D> for FakeProcessDataReader<D>
-    where
-        D: ProcessData + Sized,
-    {
-        fn read(&mut self, pid: Pid) -> Result<D, ProcfsError> {
-            self.process_data_sequences
-                .get_mut(&pid)
-                .expect("No data is configured for this process")
-                .pop_front()
-                .expect("This process has no data left to return")
-        }
-
-        fn cleanup(&mut self, _pid: Pid) {
-            // Nothing to cleanup
-        }
     }
 }
 
@@ -405,5 +434,94 @@ mod test_token_parser {
         let tp = TokenParser::new("1 2 3\n4 a 6");
 
         assert!(tp.token::<u8>(1, 1).is_err());
+    }
+}
+
+/// Modules containing fake readers to be used in tests
+#[cfg(test)]
+pub mod fakes {
+    use std::collections::{HashMap, VecDeque};
+    use std::io;
+
+    use crate::core::process::Pid;
+    use crate::procfs::parsers::{ProcessData, ReadProcessData, ReadSystemData, SystemData};
+    use crate::procfs::ProcfsError;
+
+    /// A fake structure implementing `ReadSystemData` for any implementation of `SystemData`.
+    /// The `SystemData` returned by this reader can be customized through the [`Self::from_sequence()`] function.
+    pub struct FakeSystemDataReader<D>
+    where
+        D: SystemData + Sized,
+    {
+        data_sequence: VecDeque<D>,
+    }
+
+    impl<D> FakeSystemDataReader<D>
+    where
+        D: SystemData + Sized,
+    {
+        pub fn from_sequence(sequence: Vec<D>) -> Self {
+            Self {
+                data_sequence: sequence.into(),
+            }
+        }
+    }
+
+    impl<D> ReadSystemData<D> for FakeSystemDataReader<D>
+    where
+        D: SystemData + Sized,
+    {
+        fn read(&mut self) -> Result<D, ProcfsError> {
+            Ok(self
+                .data_sequence
+                .pop_front()
+                .expect("The system data reader has nothing to return"))
+        }
+    }
+
+    /// A fake structure implementing `ReadProcessData` for any implementation of `ProcessData`.
+    pub struct FakeProcessDataReader<D>
+    where
+        D: ProcessData + Sized,
+    {
+        process_data_sequences: HashMap<Pid, VecDeque<Result<D, ProcfsError>>>,
+    }
+
+    impl<D> FakeProcessDataReader<D>
+    where
+        D: ProcessData + Sized,
+    {
+        pub fn new() -> Self {
+            Self {
+                process_data_sequences: hashmap!(),
+            }
+        }
+
+        pub fn set_pid_sequence(&mut self, pid: Pid, sequence: Vec<D>) {
+            let result_sequence = sequence.into_iter().map(|d| Ok(d)).collect();
+            self.process_data_sequences.insert(pid, result_sequence);
+        }
+
+        pub fn make_pid_fail(&mut self, pid: Pid) {
+            let err = Err(ProcfsError::IOError(io::Error::new(io::ErrorKind::Other, "oh no!")));
+            self.process_data_sequences.insert(pid, vecdeque!(err));
+        }
+    }
+
+    impl<D> ReadProcessData<D> for FakeProcessDataReader<D>
+    where
+        D: ProcessData + Sized,
+    {
+        fn read(&mut self, pid: Pid) -> Result<D, ProcfsError> {
+            self.process_data_sequences
+                .get_mut(&pid)
+                .expect("No data is configured for this process")
+                .pop_front()
+                .expect("This process has no data left to return")
+        }
+
+        fn cleanup(&mut self, _pid: Pid) {
+            // Nothing to cleanup
+        }
     }
 }

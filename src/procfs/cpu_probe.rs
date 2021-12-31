@@ -22,11 +22,18 @@ pub struct CpuProbe {
 }
 
 impl CpuProbe {
-    pub fn new() -> Result<Self, Error> {
+    /// Creates a new probe that can detect the CPU usage of processes
+    ///
+    /// # Arguments
+    ///  * `fd_limit`: Indicates how many files descriptor the probe should keep open at most
+    pub fn new(fd_limit: usize) -> Result<Self, Error> {
         let stat_reader = SystemDataReader::new()
             .map_err(|e| Error::ProbingError("Could not access /proc directory".to_string(), e.into()))?;
 
-        Self::from_readers(Box::new(stat_reader), Box::new(ProcessDataReader::new()))
+        Self::from_readers(
+            Box::new(stat_reader),
+            Box::new(ProcessDataReader::with_capacity(fd_limit)),
+        )
     }
 
     fn from_readers(

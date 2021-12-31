@@ -10,6 +10,7 @@ use spv::core::collection::{MetricCollector, ProbeCollector};
 use spv::core::process::ProcessCollector;
 use spv::procfs::cpu_probe::CpuProbe;
 use spv::procfs::diskio_probe::DiskIOProbe;
+use spv::procfs::libc::open_file_limit;
 #[cfg(feature = "netio")]
 use spv::procfs::net_io_probe::NetIoProbe;
 use spv::procfs::process::ProcfsScanner;
@@ -64,13 +65,16 @@ fn init_logging() {
 }
 
 fn build_collectors() -> Result<Vec<Box<dyn MetricCollector>>, Error> {
+    let fd_not_for_probes = 10; // ~ the no of files that the application will keep open not for probing purposes
+    let max_fd = open_file_limit().expect("Could not read process file limits") as usize - fd_not_for_probes;
+
     let mut collectors = vec![];
 
-    let cpu_probe = CpuProbe::new().map_err(Error::CoreError)?;
+    let cpu_probe = CpuProbe::new(max_fd / 2).map_err(Error::CoreError)?;
     let cpu_collector = ProbeCollector::new(cpu_probe);
     collectors.push(Box::new(cpu_collector) as Box<dyn MetricCollector>);
 
-    let disk_io_probe = DiskIOProbe::default();
+    let disk_io_probe = DiskIOProbe::new(max_fd / 2);
     let disk_io_collector = ProbeCollector::new(disk_io_probe);
     collectors.push(Box::new(disk_io_collector) as Box<dyn MetricCollector>);
 

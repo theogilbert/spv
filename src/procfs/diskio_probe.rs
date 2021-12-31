@@ -19,13 +19,15 @@ pub struct DiskIOProbe {
     output_rate_calculator: ProcessesRates,
 }
 
-impl Default for DiskIOProbe {
-    fn default() -> Self {
-        Self::from_reader(Box::new(ProcessDataReader::new()))
-    }
-}
-
 impl DiskIOProbe {
+    /// Creates a new probe that can detect the IO stats of processes
+    ///
+    /// # Arguments
+    ///  * `fd_limit`: Indicates how many open file descriptors this probe can keep open at most
+    pub fn new(fd_limit: usize) -> Self {
+        Self::from_reader(Box::new(ProcessDataReader::with_capacity(fd_limit)))
+    }
+
     fn from_reader(reader: Box<dyn ReadProcessData<PidIO>>) -> Self {
         DiskIOProbe {
             reader,

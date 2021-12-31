@@ -14,7 +14,7 @@ use crate::core::Error as CoreError;
 use crate::procfs::parsers::process::{Comm, PidStat};
 use crate::procfs::parsers::system::Uptime;
 use crate::procfs::parsers::{ReadProcessData, ReadSystemData, SystemDataReader, TransientProcessDataReader};
-use crate::procfs::sysconf::clock_ticks;
+use crate::procfs::libc::clock_ticks;
 use crate::procfs::ProcfsError;
 
 /// Errors internal to the process module
