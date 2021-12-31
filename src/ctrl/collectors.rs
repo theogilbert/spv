@@ -68,6 +68,10 @@ mod test_collectors_selector {
             unimplemented!()
         }
 
+        fn cleanup(&mut self, _pids: &[Pid]) {
+            unimplemented!()
+        }
+
         fn calibrate(&mut self, _pids: &[Pid]) -> Result<(), Error> {
             unimplemented!()
         }

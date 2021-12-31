@@ -6,8 +6,6 @@ use thiserror::Error;
 
 use crate::core::process::Pid;
 
-mod parsers;
-
 pub mod process;
 
 pub mod cpu_probe;
@@ -16,8 +14,9 @@ pub mod diskio_probe;
 #[cfg(feature = "netio")]
 pub mod net_io_probe;
 
+pub mod libc;
+mod parsers;
 mod rates;
-mod sysconf;
 
 #[derive(Error, Debug)]
 pub enum ProcfsError {
@@ -33,4 +32,6 @@ pub enum ProcfsError {
     NotEnoughData,
     #[error("Error while fetching system configuration")]
     SysconfError,
+    #[error("Error while reading system limits")]
+    RLimitError,
 }

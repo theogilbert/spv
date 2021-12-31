@@ -11,10 +11,10 @@ use thiserror::Error;
 use crate::core::process::{Pid, ProcessMetadata, ProcessScanner};
 use crate::core::time::Timestamp;
 use crate::core::Error as CoreError;
-use crate::procfs::parsers::{
-    Comm, PidStat, ProcessDataReader, ReadProcessData, ReadSystemData, SystemDataReader, Uptime,
-};
-use crate::procfs::sysconf::clock_ticks;
+use crate::procfs::libc::clock_ticks;
+use crate::procfs::parsers::process::{Comm, PidStat};
+use crate::procfs::parsers::system::Uptime;
+use crate::procfs::parsers::{ReadProcessData, ReadSystemData, SystemDataReader, TransientProcessDataReader};
 use crate::procfs::ProcfsError;
 
 /// Errors internal to the process module
@@ -56,8 +56,8 @@ impl ProcfsScanner {
 
         Ok(ProcfsScanner {
             proc_dir: PathBuf::from("/proc"),
-            comm_reader: Box::new(ProcessDataReader::new()),
-            stat_reader: Box::new(ProcessDataReader::new()),
+            comm_reader: Box::new(TransientProcessDataReader::default()),
+            stat_reader: Box::new(TransientProcessDataReader::default()),
             boot_time,
         })
     }

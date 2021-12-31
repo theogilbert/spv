@@ -54,6 +54,9 @@ where
 
         Ok(metrics)
     }
+
+    /// Indicates to the probe that the resources allocated for the given processes should be cleaned
+    fn cleanup(&mut self, pids: &[Pid]);
 }
 
 #[cfg(test)]
@@ -115,6 +118,10 @@ pub mod fakes {
             self.probed_metrics
                 .remove(&pid)
                 .expect("No metric has been set for this pid")
+        }
+
+        fn cleanup(&mut self, _pids: &[Pid]) {
+            // Nothing to do
         }
     }
 }

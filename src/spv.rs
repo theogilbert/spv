@@ -103,7 +103,14 @@ impl SpvApplication {
     }
 
     fn scan_processes(&mut self) -> Result<(), Error> {
-        self.process_collector.collect_processes().map_err(Error::CoreError)
+        let collection_ret = self.process_collector.collect_processes().map_err(Error::CoreError);
+
+        let dead_processes = self.process_collector.latest_dead_processes();
+        for collector in self.controls.collectors_as_mut_slice() {
+            collector.cleanup(&dead_processes);
+        }
+
+        collection_ret
     }
 
     fn represented_processes(&self) -> Vec<ProcessMetadata> {

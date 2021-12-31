@@ -6,7 +6,8 @@ use crate::core::metrics::IOMetric;
 use crate::core::probe::Probe;
 use crate::core::process::Pid;
 use crate::core::Error;
-use crate::procfs::parsers::{PidIO, ProcessDataReader, ReadProcessData};
+use crate::procfs::parsers::process::PidIO;
+use crate::procfs::parsers::{ProcessDataReader, ReadProcessData};
 use crate::procfs::rates::{ProcessesRates, PushMode};
 
 const IO_RATE_RETENTION: Duration = Duration::from_secs(1);
@@ -18,13 +19,15 @@ pub struct DiskIOProbe {
     output_rate_calculator: ProcessesRates,
 }
 
-impl Default for DiskIOProbe {
-    fn default() -> Self {
-        Self::from_reader(Box::new(ProcessDataReader::new()))
-    }
-}
-
 impl DiskIOProbe {
+    /// Creates a new probe that can detect the IO stats of processes
+    ///
+    /// # Arguments
+    ///  * `fd_limit`: Indicates how many open file descriptors this probe can keep open at most
+    pub fn new(fd_limit: usize) -> Self {
+        Self::from_reader(Box::new(ProcessDataReader::with_capacity(fd_limit)))
+    }
+
     fn from_reader(reader: Box<dyn ReadProcessData<PidIO>>) -> Self {
         DiskIOProbe {
             reader,
@@ -59,6 +62,14 @@ impl Probe<IOMetric> for DiskIOProbe {
 
         Ok(IOMetric::new(input_rate as usize, output_rate as usize))
     }
+
+    fn cleanup(&mut self, pids: &[Pid]) {
+        pids.iter().copied().for_each(|pid| {
+            self.reader.cleanup(pid);
+            self.input_rate_calculator.cleanup(pid);
+            self.output_rate_calculator.cleanup(pid);
+        });
+    }
 }
 
 #[cfg(test)]
@@ -70,7 +81,7 @@ mod test_disk_io_probe {
     use crate::core::probe::Probe;
     use crate::procfs::diskio_probe::DiskIOProbe;
     use crate::procfs::parsers::fakes::FakeProcessDataReader;
-    use crate::procfs::parsers::PidIO;
+    use crate::procfs::parsers::process::PidIO;
 
     #[rstest]
     #[case(0, 0, 0, 0, 0)]

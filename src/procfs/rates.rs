@@ -155,7 +155,10 @@ impl ProcessesRates {
         }
     }
 
-    // TODO Clear process values when the process has died
+    /// Cleanup data allocated to the given process
+    pub fn cleanup(&mut self, pid: Pid) {
+        self.acc_values.remove(&pid);
+    }
 }
 
 #[cfg(test)]
