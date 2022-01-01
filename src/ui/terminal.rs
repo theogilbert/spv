@@ -1,21 +1,30 @@
-use std::io;
-use std::io::Stdout;
-
 use log::error;
-use termion::raw::{IntoRawMode, RawTerminal};
-use tui::backend::TermionBackend;
 use tui::layout::Rect;
 use tui::widgets::{StatefulWidget, Widget};
 use tui::{Frame, Terminal as TuiTerminal};
 
+#[cfg(not(test))]
+use {
+    std::io,
+    std::io::Stdout,
+    termion::raw::{IntoRawMode, RawTerminal},
+    tui::backend::TermionBackend,
+};
+#[cfg(test)]
+use {tui::backend::TestBackend, tui::buffer::Buffer};
+
 use crate::ui::Error;
 
+#[cfg(not(test))]
 pub type TuiBackend = TermionBackend<RawTerminal<Stdout>>;
+#[cfg(test)]
+pub type TuiBackend = TestBackend;
 
 pub struct Terminal {
     tui_terminal: TuiTerminal<TuiBackend>,
 }
 
+#[cfg(not(test))]
 impl Terminal {
     pub fn new() -> Result<Self, Error> {
         let stdout = io::stdout().into_raw_mode()?;
@@ -34,7 +43,28 @@ impl Terminal {
     fn generate_empty_frame(terminal: &mut TuiTerminal<TuiBackend>) {
         print!("{}", "\n".repeat(terminal.get_frame().size().height as usize));
     }
+}
 
+#[cfg(test)]
+impl Terminal {
+    pub fn new() -> Result<Self, Error> {
+        Self::from_size(200, 100)
+    }
+
+    pub fn from_size(width: u16, height: u16) -> Result<Self, Error> {
+        let backend = TestBackend::new(width, height);
+
+        let tui_terminal = TuiTerminal::new(backend)?;
+
+        Ok(Terminal { tui_terminal })
+    }
+
+    pub fn assert_buffer(&self, buffer: Buffer) {
+        self.tui_terminal.backend().assert_buffer(&buffer);
+    }
+}
+
+impl Terminal {
     pub fn draw<F>(&mut self, render_fn: F) -> Result<(), Error>
     where
         for<'f, 'g> F: FnOnce(&'f mut FrameRegion<'f, 'g>),
