@@ -1,4 +1,5 @@
 //! Manages the configuration of the span of metrics to render
+use std::cmp::{max, min};
 use std::time::Duration;
 
 use crate::core::time::{Span, Timestamp};
@@ -55,16 +56,6 @@ impl RenderingSpan {
         self.follow = self.span.end() == Timestamp::now();
     }
 
-    /// Returns the actual `Span` representing the scope to render
-    pub fn to_span(&self) -> Span {
-        Span::new(self.span.begin() - self.tolerance, self.span.end())
-    }
-
-    #[cfg(test)]
-    pub fn tolerance(&self) -> Duration {
-        self.tolerance
-    }
-
     /// Sets the end of the span and shift it (without resizing it)
     /// The end is capped so that the span cannot cover a time before the application started, or after the current time
     fn set_bounded_end_and_shift(&mut self, unbounded_end: Timestamp) {
@@ -72,6 +63,34 @@ impl RenderingSpan {
         let max_end = Timestamp::now();
         let bounded_end = unbounded_end.max(min_end).min(max_end);
         self.span.set_end_and_shift(bounded_end);
+    }
+
+    /// Returns the actual `Span` representing the scope to render
+    pub fn to_span(&self) -> Span {
+        Span::new(self.span.begin() - self.tolerance, self.span.end())
+    }
+
+    pub fn zoom_in(&mut self) {
+        self.resize(self.span.duration() - Duration::from_secs(1))
+    }
+
+    pub fn zoom_out(&mut self) {
+        self.resize(self.span.duration() + Duration::from_secs(1))
+    }
+
+    fn resize(&mut self, mut target_size: Duration) {
+        let min_duration = Duration::from_secs(1);
+        let max_duration = self.span.end().duration_since(&Timestamp::app_init());
+
+        target_size = min(target_size, max_duration);
+        target_size = max(target_size, min_duration);
+
+        self.span.set_begin_and_resize(self.span.end() - target_size);
+    }
+
+    #[cfg(test)]
+    pub fn tolerance(&self) -> Duration {
+        self.tolerance
     }
 }
 
@@ -240,5 +259,44 @@ mod test_rendering_span {
 
         assert!(!span.intersects(&other_span));
         assert!(!other_span.intersects(&span));
+    }
+
+    #[rstest]
+    fn test_should_zoom_in(mut rendering_span: RenderingSpan) {
+        let initial_duration = rendering_span.to_span().duration();
+
+        rendering_span.zoom_in();
+        let zoomed_in_span = rendering_span.to_span();
+
+        assert!(zoomed_in_span.duration() < initial_duration);
+    }
+
+    #[rstest]
+    fn test_should_never_cover_less_than_1_second(mut rendering_span: RenderingSpan) {
+        for _ in 0..1000 {
+            rendering_span.zoom_in();
+        }
+
+        assert!(rendering_span.to_span().duration() >= Duration::from_secs(1));
+    }
+
+    #[rstest]
+    fn test_should_zoom_out(mut rendering_span: RenderingSpan) {
+        let initial_duration = rendering_span.to_span().duration();
+
+        rendering_span.zoom_out();
+
+        assert!(rendering_span.to_span().duration() > initial_duration);
+    }
+
+    #[rstest]
+    fn test_should_not_break_on_infinite_zooming_out(mut rendering_span: RenderingSpan) {
+        let initial_duration = rendering_span.to_span().duration();
+
+        for _ in 0..1000 {
+            rendering_span.zoom_out();
+        }
+
+        assert!(rendering_span.to_span().duration() > initial_duration);
     }
 }
