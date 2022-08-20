@@ -229,8 +229,23 @@ impl Span {
         Span { begin, end }
     }
 
+    /// Updates the begining value of the span without updating its end
+    /// After this operation, the `end` value of the span will remain the same.
+    ///
+    /// This method panics if `begin` is greater than `end`.
+    ///
+    /// # Arguments
+    /// * `begin`: The first timestamp covered by the span
+
+    pub fn set_begin_and_resize(&mut self, begin: Timestamp) {
+        if begin > self.end {
+            panic!("Invalid begin for span {:?}: {:?}", self, begin);
+        }
+        self.begin = begin;
+    }
+
     /// Updates the end of the span without updating the begining of the span
-    /// After this operation, the `begin` iteration of the span will remain the same.
+    /// After this operation, the `begin` value of the span will remain the same.
     ///
     /// This method panics if `end` is less than `begin`.
     ///
@@ -324,6 +339,21 @@ mod test_span {
         assert_eq!(span.end(), original_span.end() + Duration::from_secs(120));
         assert_eq!(span.duration(), Duration::from_secs(60));
     }
+
+    #[test]
+    fn test_should_update_span_when_setting_begin_and_updating_size() {
+        setup_fake_clock_to_prevent_substract_overflow();
+
+        let mut span = Span::from_duration(Duration::from_secs(10));
+        let original_span = span;
+
+        span.set_begin_and_resize(span.begin() + Duration::from_secs(3));
+
+        assert_eq!(span.begin(), original_span.begin() + Duration::from_secs(3));
+        assert_eq!(span.end(), original_span.end());
+        assert_eq!(span.duration(), Duration::from_secs(7));
+    }
+
 
     #[test]
     fn test_should_update_span_when_setting_end_and_updating_size() {
