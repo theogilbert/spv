@@ -305,8 +305,8 @@ mod test_span {
 
     use rstest::*;
 
-    use crate::core::time::test_utils::setup_fake_clock_to_prevent_substract_overflow;
     use crate::core::time::{Span, Timestamp};
+    use crate::core::time::test_utils::setup_fake_clock_to_prevent_substract_overflow;
 
     #[test]
     fn test_should_correctly_define_span_when_creating_from_begin() {
@@ -401,9 +401,9 @@ mod test_span {
     }
 
     #[rstest]
-    #[case(-10, 10)]
+    #[case(- 10, 10)]
     #[case(0, 10)]
-    #[case(-10, 0)]
+    #[case(- 10, 0)]
     fn test_should_return_true_if_timestamp_contained_in_span(#[case] relative_begin: i64, #[case] relative_end: u64) {
         setup_fake_clock_to_prevent_substract_overflow();
         let timestamp = Timestamp::now();
