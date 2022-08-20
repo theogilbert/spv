@@ -72,6 +72,8 @@ impl Controls {
             Key::G => self.rendering_span.reset_scroll(),
             Key::Left => self.rendering_span.scroll_left(),
             Key::Right => self.rendering_span.scroll_right(),
+            Key::I => self.rendering_span.zoom_in(),
+            Key::O => self.rendering_span.zoom_out(),
             Key::S => self.current_state = State::SortingPrompt(self.sort_criteria_selector.applied()),
             _ => {}
         }

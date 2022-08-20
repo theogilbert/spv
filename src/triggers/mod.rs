@@ -42,6 +42,8 @@ pub enum Key {
     G,
     P,
     N,
+    I,
+    O,
     Submit,
 }
 

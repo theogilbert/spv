@@ -59,6 +59,8 @@ impl InputListener {
             'k' => self.send(Trigger::Input(Key::Up)),
             'p' => self.send(Trigger::Input(Key::P)),
             'n' => self.send(Trigger::Input(Key::N)),
+            'i' => self.send(Trigger::Input(Key::I)),
+            'o' => self.send(Trigger::Input(Key::O)),
             '\n' => self.send(Trigger::Input(Key::Submit)),
             _ => {}
         };
