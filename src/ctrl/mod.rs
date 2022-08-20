@@ -65,13 +65,13 @@ impl Controls {
 
     fn interpret_spv_input(&mut self, input: Key) -> Effect {
         match input {
-            Key::Left => self.collectors.previous_collector(),
-            Key::Right => self.collectors.next_collector(),
+            Key::P => self.collectors.previous_collector(),
+            Key::N => self.collectors.next_collector(),
             Key::Up => self.process_selector.previous_process(),
             Key::Down => self.process_selector.next_process(),
             Key::G => self.rendering_span.reset_scroll(),
-            Key::H => self.rendering_span.scroll_left(),
-            Key::L => self.rendering_span.scroll_right(),
+            Key::Left => self.rendering_span.scroll_left(),
+            Key::Right => self.rendering_span.scroll_right(),
             Key::S => self.current_state = State::SortingPrompt(self.sort_criteria_selector.applied()),
             _ => {}
         }
@@ -81,7 +81,7 @@ impl Controls {
 
     fn interpret_sorting_prompt_input(&mut self, input: Key) -> Effect {
         match input {
-            Key::S => self.current_state = State::Spv,
+            Key::S | Key::Escape => self.current_state = State::Spv,
             Key::Down => {
                 self.sort_criteria_selector.next();
                 self.refresh_state();

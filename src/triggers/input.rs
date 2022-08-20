@@ -29,6 +29,7 @@ impl InputListener {
                 TermionKey::Right => self.send(Trigger::Input(Key::Right)),
                 TermionKey::Up => self.send(Trigger::Input(Key::Up)),
                 TermionKey::Down => self.send(Trigger::Input(Key::Down)),
+                TermionKey::Esc => self.send(Trigger::Input(Key::Escape)),
                 _ => (),
             }
 
@@ -50,10 +51,14 @@ impl InputListener {
     fn on_key_pressed(&mut self, key: char) {
         match key {
             'q' => self.send_exit(),
-            'h' => self.send(Trigger::Input(Key::H)),
-            'l' => self.send(Trigger::Input(Key::L)),
+            'h' => self.send(Trigger::Input(Key::Left)),
+            'l' => self.send(Trigger::Input(Key::Right)),
             'g' => self.send(Trigger::Input(Key::G)),
             's' => self.send(Trigger::Input(Key::S)),
+            'j' => self.send(Trigger::Input(Key::Down)),
+            'k' => self.send(Trigger::Input(Key::Up)),
+            'p' => self.send(Trigger::Input(Key::P)),
+            'n' => self.send(Trigger::Input(Key::N)),
             '\n' => self.send(Trigger::Input(Key::Submit)),
             _ => {}
         };

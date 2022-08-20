@@ -33,14 +33,15 @@ pub enum Trigger {
 
 /// Keyboard events submitted by users to interact with the application
 pub enum Key {
+    Escape,
     Down,
     Up,
     Right,
     Left,
     S,
-    H,
-    L,
     G,
+    P,
+    N,
     Submit,
 }
 
