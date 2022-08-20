@@ -252,8 +252,7 @@ where
     pub fn last_or_default(&self, pid: Pid) -> &M {
         self.processes_data
             .get(&pid)
-            .map(|pd| pd.last())
-            .flatten()
+            .and_then(|pd| pd.last())
             .unwrap_or(&self.default)
     }
 

@@ -1,4 +1,5 @@
 use std::time::Duration;
+use std::fmt::Write;
 
 use tui::layout::Alignment;
 use tui::style::{Color, Style};
@@ -75,7 +76,7 @@ fn render_process_info(frame: &mut FrameRegion, pm: &ProcessMetadata) {
 
     if pm.status() == Status::DEAD {
         let end_time = relative_timestamp_label(pm.running_span().end());
-        right_text.push_str(&format!(" - Dead {}", end_time));
+        let _ = write!(right_text, " - Dead {}", end_time);
     }
 
     let should_draw_right_paragraph = frame.region().width as usize > left_text.len() + right_text.len();

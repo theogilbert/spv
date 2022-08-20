@@ -26,7 +26,7 @@ pub const PROCESS_ORDERING_CRITERIA: [ProcessOrdering; 3] = [
 ///
 /// Regardless of the criteria, running processes are displayed before dead processes
 pub fn sort_processes(
-    processes: &mut Vec<ProcessMetadata>,
+    processes: &mut [ProcessMetadata],
     criteria: ProcessOrdering,
     current_collector: &dyn MetricCollector,
 ) {

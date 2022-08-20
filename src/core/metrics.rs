@@ -167,7 +167,7 @@ mod test_percent_metric {
 }
 
 /// Metric representing input / output bitrates (e.g. network throughput) in bytes/sec
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct IOMetric {
     input: usize,
     output: usize,
