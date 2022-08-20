@@ -173,7 +173,7 @@ mod test_metric_view {
     }
 }
 
-/// Overview of a single probe's latest metrics, for all running processes
+/// Overview of a single probe's latest metric, for each running processes
 ///
 /// Refer to the [`MetricCollector`](crate::core::collection::MetricCollector) trait to instanciate a `MetricsOverview`
 pub struct MetricsOverview<'a> {
