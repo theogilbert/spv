@@ -108,7 +108,7 @@ impl Controls {
     }
 
     pub fn refresh_span(&mut self) {
-        self.rendering_span.refresh();
+        self.rendering_span.follow();
     }
 
     pub fn to_span(&self) -> Span {

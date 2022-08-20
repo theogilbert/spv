@@ -22,9 +22,8 @@ impl RenderingSpan {
         }
     }
 
-    /// Refreshes the rendering span so that it keeps being scrolled to the right
-    pub fn refresh(&mut self) {
-        // TODO find a more appropriate name for the method
+    /// Shifts the rendering span so that it ends at the current time
+    pub fn follow(&mut self) {
         if self.follow {
             self.span.set_end_and_shift(Timestamp::now());
             self.set_follow_if_span_is_tracking_current_timestamp();
@@ -168,7 +167,7 @@ mod test_rendering_span {
     #[rstest]
     fn test_should_follow_when_refreshed(mut rendering_span: RenderingSpan) {
         advance_time_and_refresh_timestamp(Duration::from_secs(10));
-        rendering_span.refresh();
+        rendering_span.follow();
 
         assert_eq!(rendering_span.to_span().end(), Timestamp::now());
     }
@@ -178,7 +177,7 @@ mod test_rendering_span {
         rendering_span.scroll_left();
 
         advance_time_and_refresh_timestamp(Duration::from_secs(10));
-        rendering_span.refresh();
+        rendering_span.follow();
 
         assert_ne!(rendering_span.to_span().end(), Timestamp::now());
     }
@@ -190,7 +189,7 @@ mod test_rendering_span {
         rendering_span.scroll_right();
 
         advance_time_and_refresh_timestamp(Duration::from_secs(10));
-        rendering_span.refresh();
+        rendering_span.follow();
 
         assert_ne!(rendering_span.to_span().end(), Timestamp::now());
     }
@@ -201,7 +200,7 @@ mod test_rendering_span {
         rendering_span.scroll_right();
 
         advance_time_and_refresh_timestamp(Duration::from_secs(10));
-        rendering_span.refresh();
+        rendering_span.follow();
 
         assert_eq!(rendering_span.to_span().end(), Timestamp::now());
     }
