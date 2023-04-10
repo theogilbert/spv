@@ -4,7 +4,7 @@ use std::sync::mpsc::Sender;
 use termion::event::Key as TermionKey;
 use termion::input::TermRead;
 
-use crate::triggers::{Error, Key, Trigger};
+use crate::triggers::{Error, Input, Trigger};
 
 pub struct InputListener {
     sender: Sender<Trigger>,
@@ -25,11 +25,11 @@ impl InputListener {
             match key {
                 TermionKey::Ctrl(c) => self.on_ctrl_key_pressed(c),
                 TermionKey::Char(c) => self.on_key_pressed(c),
-                TermionKey::Left => self.send(Trigger::Input(Key::Left)),
-                TermionKey::Right => self.send(Trigger::Input(Key::Right)),
-                TermionKey::Up => self.send(Trigger::Input(Key::Up)),
-                TermionKey::Down => self.send(Trigger::Input(Key::Down)),
-                TermionKey::Esc => self.send(Trigger::Input(Key::Escape)),
+                TermionKey::Left => self.send(Trigger::Input(Input::Left)),
+                TermionKey::Right => self.send(Trigger::Input(Input::Right)),
+                TermionKey::Up => self.send(Trigger::Input(Input::Up)),
+                TermionKey::Down => self.send(Trigger::Input(Input::Down)),
+                TermionKey::Esc => self.send(Trigger::Input(Input::Escape)),
                 _ => (),
             }
 
@@ -51,17 +51,17 @@ impl InputListener {
     fn on_key_pressed(&mut self, key: char) {
         match key {
             'q' => self.send_exit(),
-            'h' => self.send(Trigger::Input(Key::Left)),
-            'l' => self.send(Trigger::Input(Key::Right)),
-            'g' => self.send(Trigger::Input(Key::G)),
-            's' => self.send(Trigger::Input(Key::S)),
-            'j' => self.send(Trigger::Input(Key::Down)),
-            'k' => self.send(Trigger::Input(Key::Up)),
-            'p' => self.send(Trigger::Input(Key::P)),
-            'n' => self.send(Trigger::Input(Key::N)),
-            'i' => self.send(Trigger::Input(Key::I)),
-            'o' => self.send(Trigger::Input(Key::O)),
-            '\n' => self.send(Trigger::Input(Key::Submit)),
+            'h' => self.send(Trigger::Input(Input::Left)),
+            'j' => self.send(Trigger::Input(Input::Down)),
+            'k' => self.send(Trigger::Input(Input::Up)),
+            'l' => self.send(Trigger::Input(Input::Right)),
+            'H' => self.send(Trigger::Input(Input::AltLeft)),
+            'J' => self.send(Trigger::Input(Input::AltDown)),
+            'K' => self.send(Trigger::Input(Input::AltUp)),
+            'L' => self.send(Trigger::Input(Input::AltRight)),
+            'g' => self.send(Trigger::Input(Input::G)),
+            's' => self.send(Trigger::Input(Input::S)),
+            '\n' => self.send(Trigger::Input(Input::Submit)),
             _ => {}
         };
     }

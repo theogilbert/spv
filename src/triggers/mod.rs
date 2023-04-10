@@ -28,22 +28,22 @@ pub enum Trigger {
     Exit,
     Impulse,
     Resize,
-    Input(Key),
+    Input(Input),
 }
 
 /// Keyboard events submitted by users to interact with the application
-pub enum Key {
+pub enum Input {
     Escape,
     Down,
     Up,
     Right,
     Left,
+    AltDown,
+    AltUp,
+    AltRight,
+    AltLeft,
     S,
     G,
-    P,
-    N,
-    I,
-    O,
     Submit,
 }
 

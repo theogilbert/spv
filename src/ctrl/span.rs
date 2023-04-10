@@ -96,7 +96,7 @@ mod test_rendering_span {
     use crate::core::time::test_utils::{
         advance_time_and_refresh_timestamp, setup_fake_clock_to_prevent_substract_overflow,
     };
-    use crate::core::time::{Span, Timestamp};
+    use crate::core::time::Timestamp;
     use crate::ctrl::span::RenderingSpan;
 
     #[fixture]
