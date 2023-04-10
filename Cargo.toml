@@ -7,7 +7,7 @@ description = "Command line utility to supervize resource usage of processes"
 license = "MIT"
 
 [features]
-netio = ["netinfo"]
+# netio = ["netinfo"]
 
 [dependencies]
 tui = { version = "0.19", default-features = false, features = ["termion"] }
@@ -20,11 +20,11 @@ anyhow = "1.0.44"
 libc = "0.2.108"
 # This will have to stay this way until https://github.com/kaegi/netinfo/pull/5 is merged and a new version is produced
 #netinfo = { version = "0.5.1", optional = true }
-netinfo = { git = "https://github.com/theogilbert/netinfo", branch = "fixed", optional = true }
+#netinfo = { git = "https://github.com/theogilbert/netinfo", branch = "fixed", optional = true }
 
 [dev-dependencies]
 tempfile = "3.2.0"
-rstest = "0.11.0"
+rstest = "0.16.0"
 sn_fake_clock = "0.4.14"
 rand = "0.8.4"
 
