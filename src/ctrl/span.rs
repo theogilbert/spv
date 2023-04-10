@@ -6,7 +6,6 @@ use crate::core::time::{Span, Timestamp};
 
 pub struct RenderingSpan {
     span: Span,
-    tolerance: Duration,
     follow: bool,
 }
 
@@ -15,10 +14,9 @@ impl RenderingSpan {
     /// - `duration`: Indicates the amount of time that the span covers
     /// - `tolerance`: Tracking time precisely to the nanosecond is difficult.<br/>
     ///     The tolerance, will loosen the constraints of the span, by shifting its begin to the past.
-    pub fn new(duration: Duration, tolerance: Duration) -> Self {
+    pub fn new(duration: Duration) -> Self {
         Self {
             span: Span::from_duration(duration),
-            tolerance,
             follow: true,
         }
     }
@@ -67,7 +65,7 @@ impl RenderingSpan {
 
     /// Returns the actual `Span` representing the scope to render
     pub fn to_span(&self) -> Span {
-        Span::new(self.span.begin() - self.tolerance, self.span.end())
+        Span::new(self.span.begin(), self.span.end())
     }
 
     pub fn zoom_in(&mut self) {
@@ -87,11 +85,6 @@ impl RenderingSpan {
 
         self.span.set_begin_and_resize(self.span.end() - target_size);
     }
-
-    #[cfg(test)]
-    pub fn tolerance(&self) -> Duration {
-        self.tolerance
-    }
 }
 
 #[cfg(test)]
@@ -109,7 +102,7 @@ mod test_rendering_span {
     #[fixture]
     fn rendering_span() -> RenderingSpan {
         setup_fake_clock_to_prevent_substract_overflow();
-        RenderingSpan::new(Duration::from_secs(60), Duration::from_secs(1))
+        RenderingSpan::new(Duration::from_secs(60))
     }
 
     #[rstest]
@@ -161,7 +154,7 @@ mod test_rendering_span {
     #[rstest]
     fn test_should_not_scroll_before_the_first_timestamp_of_the_application() {
         advance_time_and_refresh_timestamp(Duration::from_secs(10));
-        let mut rendering_span = RenderingSpan::new(Duration::from_secs(10), Duration::default());
+        let mut rendering_span = RenderingSpan::new(Duration::from_secs(10));
         advance_time_and_refresh_timestamp(Duration::from_secs(10));
 
         let original_span = rendering_span.to_span();
@@ -222,43 +215,6 @@ mod test_rendering_span {
         rendering_span.follow();
 
         assert_eq!(rendering_span.to_span().end(), Timestamp::now());
-    }
-
-    #[rstest]
-    fn test_should_be_tolerant_with_span_in_past_within_tolerance_constraints(rendering_span: RenderingSpan) {
-        let span = rendering_span.to_span();
-        let other_span = Span::new(
-            rendering_span.span.begin() - Duration::from_secs(10),
-            rendering_span.span.begin() - rendering_span.tolerance(),
-        );
-
-        assert!(span.intersects(&other_span));
-        assert!(other_span.intersects(&span));
-    }
-
-    #[rstest]
-    fn test_should_not_be_tolerant_with_span_in_past_out_of_tolerance_bounds(rendering_span: RenderingSpan) {
-        let span = rendering_span.to_span();
-        let other_span = Span::new(
-            rendering_span.span.begin() - Duration::from_secs(10),
-            rendering_span.span.begin() - 2 * rendering_span.tolerance(),
-        );
-
-        assert!(!span.intersects(&other_span));
-        assert!(!other_span.intersects(&span));
-    }
-
-    #[rstest]
-    fn test_should_not_be_tolerant_with_span_in_future(rendering_span: RenderingSpan) {
-        let span = rendering_span.to_span();
-
-        let other_span = Span::new(
-            rendering_span.span.end() + rendering_span.tolerance(),
-            rendering_span.span.end() + Duration::from_secs(10),
-        );
-
-        assert!(!span.intersects(&other_span));
-        assert!(!other_span.intersects(&span));
     }
 
     #[rstest]

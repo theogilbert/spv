@@ -38,14 +38,10 @@ pub struct Controls {
 }
 
 impl Controls {
-    pub fn new(
-        collectors: Vec<Box<dyn MetricCollector>>,
-        initial_span_duration: Duration,
-        span_tolerance: Duration,
-    ) -> Self {
+    pub fn new(collectors: Vec<Box<dyn MetricCollector>>, initial_span_duration: Duration) -> Self {
         Self {
             collectors: Collectors::new(collectors),
-            rendering_span: RenderingSpan::new(initial_span_duration, span_tolerance),
+            rendering_span: RenderingSpan::new(initial_span_duration),
             process_selector: ProcessSelector::default(),
             sort_criteria_selector: SortCriteriaSelector::default(),
             current_state: State::Spv,

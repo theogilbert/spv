@@ -344,7 +344,6 @@ where
 
     /** Builds and returns a sorted list of dated metrics who are included in the span, or adjacent to this span **/
     fn extract_metrics_around_span(&self, span: &Span) -> Vec<DatedMetric> {
-        // TODO remove RenderingSpan tolerance made obsolete by adjacent metrics being returned
         return self
             .metrics
             .iter()
