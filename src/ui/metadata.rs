@@ -1,5 +1,5 @@
-use std::time::Duration;
 use std::fmt::Write;
+use std::time::Duration;
 
 use tui::layout::Alignment;
 use tui::style::{Color, Style};

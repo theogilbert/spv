@@ -305,8 +305,8 @@ mod test_span {
 
     use rstest::*;
 
-    use crate::core::time::{Span, Timestamp};
     use crate::core::time::test_utils::setup_fake_clock_to_prevent_substract_overflow;
+    use crate::core::time::{Span, Timestamp};
 
     #[test]
     fn test_should_correctly_define_span_when_creating_from_begin() {
@@ -353,7 +353,6 @@ mod test_span {
         assert_eq!(span.end(), original_span.end());
         assert_eq!(span.duration(), Duration::from_secs(7));
     }
-
 
     #[test]
     fn test_should_update_span_when_setting_end_and_updating_size() {
