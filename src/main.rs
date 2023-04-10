@@ -57,9 +57,7 @@ fn init_logging() {
         .open("spv.log")
         .expect("Could not open log file");
 
-    let log_config = ConfigBuilder::default()
-        .set_time_format_str("%Y-%m-%d %H:%M:%S%.3f")
-        .build();
+    let log_config = ConfigBuilder::default().set_time_format_rfc2822().build();
 
     WriteLogger::init(LevelFilter::Debug, log_config, log_file).expect("Could not initialize logging");
 }
