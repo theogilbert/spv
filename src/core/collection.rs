@@ -11,9 +11,9 @@ use crate::core::time::{Span, Timestamp};
 use crate::core::view::{MetricView, MetricsOverview};
 use crate::core::Error;
 
-/// Types which can collect and store a specific type of [`Metric`](crate::core::metrics::Metric)
+/// Types which can collect and store a specific type of [`Metric`](Metric)
 ///
-/// A `MetricCollector` should only collect metrics from a single [`Probe`](crate::core::probe::Probe).
+/// A `MetricCollector` should only collect metrics from a single [`Probe`](Probe).
 ///
 /// Each concrete `Metric` type requires its own `MetricCollector` implementation (c.f. [ProbeCollector](struct.ProbeCollector)).<br/>
 /// Through this trait, these different implementations can be managed in a generic manner.
@@ -21,7 +21,7 @@ pub trait MetricCollector {
     /// Probes metrics for the given processes, and stores them.
     ///
     /// # Arguments
-    ///  * `pids`: A slice containing the [`Pids`](crate::core::process::Pid) to probe.
+    ///  * `pids`: A slice containing the [`Pids`](Pid) to probe.
     fn collect(&mut self, pids: &[Pid]) -> Result<(), Error>;
 
     /// Cleans up the data allocated to collect the given processes.
@@ -38,12 +38,12 @@ pub trait MetricCollector {
     /// metric might not be accurate, we do not store it.
     ///
     /// # Arguments
-    ///  * `pids`: A slice containing the [`Pids`](crate::core::process::Pid) to probe.
+    ///  * `pids`: A slice containing the [`Pids`](Pid) to probe.
     fn calibrate(&mut self, pids: &[Pid]) -> Result<(), Error>;
 
     /// Compares two processes by their last collected metric.
     ///
-    /// As we do not allow comparison between [`Metric`](crate::core::metrics::Metric) trait objects, we
+    /// As we do not allow comparison between [`Metric`](Metric) trait objects, we
     /// can rely on this method to sort two processes based on their last metrics. A given collector
     /// instance knows how to compare metrics as it knows their concrete type.
     ///
@@ -57,22 +57,22 @@ pub trait MetricCollector {
     /// Returns a name describing the collected metrics.
     fn name(&self) -> &'static str;
 
-    /// Builds a [`MetricView`](crate::core::view::MetricView), offering insight on the collected
+    /// Builds a [`MetricView`](MetricView), offering insight on the collected
     /// metrics of a given process.
     ///
     /// # Arguments
     ///  * `pid`: The ID of the process for which to view metrics
-    ///  * `span`: The time period covered by the metric view
+    ///  * `span`: The time period covered by the metric view. Metrics adjacent to this span are also returned.
     fn view(&self, pid: Pid, span: Span) -> MetricView;
 
-    /// Builds a [`MetricsOverview`](crate::core::view::MetricsOverview), containing the last metrics
+    /// Builds a [`MetricsOverview`](MetricsOverview), containing the last metrics
     /// of all running processes.
     fn overview(&self) -> MetricsOverview;
 }
 
 /// An implementation of [`MetricCollector`](MetricCollector)
 ///
-/// Uses a [`Probe`](crate::core::probe::Probe) object to probe metrics.
+/// Uses a [`Probe`](Probe) object to probe metrics.
 pub struct ProbeCollector<M>
 where
     M: Metric + Copy + PartialOrd + Default,
@@ -337,17 +337,25 @@ where
     }
 
     pub fn view(&self, span: Span) -> MetricView {
-        let metrics = self.extract_metrics_according_to_span(&span);
+        let metrics = self.extract_metrics_around_span(&span);
         let default = Box::new(M::default()) as Box<dyn Metric>;
         MetricView::new(metrics, default, span)
     }
 
-    fn extract_metrics_according_to_span(&self, span: &Span) -> Vec<DatedMetric> {
-        self.metrics
+    /** Builds and returns a sorted list of dated metrics who are included in the span, or adjacent to this span **/
+    fn extract_metrics_around_span(&self, span: &Span) -> Vec<DatedMetric> {
+        // TODO remove RenderingSpan tolerance made obsolete by adjacent metrics being returned
+        return self
+            .metrics
             .iter()
-            .filter(|cdm| span.contains(cdm.timestamp))
-            .map(|cdm| DatedMetric::new(&cdm.metric as &dyn Metric, cdm.timestamp))
-            .collect()
+            .enumerate()
+            .filter(|(idx, cdm)| {
+                span.contains(cdm.timestamp)
+                    || (idx > &0 && span.contains(self.metrics[idx - 1].timestamp))
+                    || (idx < &(self.metrics.len() - 1) && span.contains(self.metrics[idx + 1].timestamp))
+            })
+            .map(|(_, cdm)| DatedMetric::new(&cdm.metric as &dyn Metric, cdm.timestamp))
+            .collect();
     }
 }
 
@@ -436,11 +444,11 @@ mod test_process_data {
         let span = Span::new(Timestamp::now() - Duration::from_secs(1), Timestamp::now());
         let view = process_data.view(span);
 
-        assert_view_metrics_equals_percent_metrics(&view, &[2., 3.]);
+        assert_view_metrics_equals_percent_metrics(&view, &[1., 2., 3.]);
     }
 
     #[rstest]
-    fn test_extract_should_only_return_1_metric_if_span_covers_1_iteration() {
+    fn test_extract_should_only_return_3_metric_if_span_covers_1_iteration() {
         let process_data = build_process_data_and_push(&[0., 1., 2., 3.]);
 
         let second_value_timestamp = Timestamp::now() - Duration::from_secs(2);
@@ -448,17 +456,20 @@ mod test_process_data {
 
         let view = process_data.view(span);
 
-        assert_view_metrics_equals_percent_metrics(&view, &[1.]);
+        assert_view_metrics_equals_percent_metrics(&view, &[0., 1., 2.]);
     }
 
     #[rstest]
-    fn test_extract_should_only_return_2_metrics_if_span_covers_2_iterations() {
-        let process_data = build_process_data_and_push(&[0., 1., 2., 3.]);
+    fn test_extract_should_only_return_4_metrics_if_span_covers_2_iterations() {
+        let process_data = build_process_data_and_push(&[0., 1., 2., 3., 4., 5.]);
 
-        let span = Span::new(Timestamp::now() - Duration::from_secs(1), Timestamp::now());
+        let span = Span::new(
+            Timestamp::now() - Duration::from_secs(3),
+            Timestamp::now() - Duration::from_secs(2),
+        );
         let view = process_data.view(span);
 
-        assert_view_metrics_equals_percent_metrics(&view, &[2., 3.]);
+        assert_view_metrics_equals_percent_metrics(&view, &[1., 2., 3., 4.]);
     }
 
     #[rstest]
@@ -476,8 +487,8 @@ mod test_process_data {
     }
 
     #[rstest]
-    fn test_max_f64_should_not_return_values_out_of_span() {
-        let process_data = build_process_data_and_push(&[10., 0., 2.]);
+    fn test_max_f64_should_not_return_values_out_of_span_except_first_and_last_metrics() {
+        let process_data = build_process_data_and_push(&[10., 0., 1., 2.]);
 
         let span = Span::new(Timestamp::now() - Duration::from_secs(1), Timestamp::now());
         let view = process_data.view(span);
