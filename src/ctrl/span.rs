@@ -1,12 +1,25 @@
 //! Manages the configuration of the span of metrics to render
-use std::cmp::{max, min};
+use log::info;
+use std::cmp::min;
 use std::time::Duration;
 
 use crate::core::time::{Span, Timestamp};
 
+/**
+The smallest amount of duration for the rendering span.
+
+A value of 15 was picked to be able to configure the size of the span by dividing/multiplying the current size by 2, and
+to be able to display a span of 1 minute by default.
+ */
+const SPAN_UNIT: Duration = Duration::from_secs(15);
+
+const DEFAULT_SPAN_DURATION: Duration = Duration::from_secs(60);
+
 pub struct RenderingSpan {
     span: Span,
     follow: bool,
+    // Span size can be calculated from zoom_level using this formula: 15s * 2^zoom_level
+    zoom_level: u32,
 }
 
 impl RenderingSpan {
@@ -18,6 +31,7 @@ impl RenderingSpan {
         Self {
             span: Span::from_duration(duration),
             follow: true,
+            zoom_level: 2,
         }
     }
 
@@ -69,20 +83,25 @@ impl RenderingSpan {
     }
 
     pub fn zoom_in(&mut self) {
-        self.resize(self.span.duration() - Duration::from_secs(1))
+        self.zoom_level = self.zoom_level.checked_sub(1).unwrap_or(0);
+        self.resize_from_zoom_level();
     }
 
     pub fn zoom_out(&mut self) {
-        self.resize(self.span.duration() + Duration::from_secs(1))
+        let now = Timestamp::now();
+        let min_begin = min(Timestamp::app_init(), now - DEFAULT_SPAN_DURATION);
+        let max_span_duration = now.duration_since(&min_begin);
+        let max_units_to_display = max_span_duration.as_secs() as f64 / SPAN_UNIT.as_secs() as f64;
+        let max_zoom_level = f64::log2(max_units_to_display).ceil() as u32;
+
+        if self.zoom_level < max_zoom_level {
+            self.zoom_level += 1;
+            self.resize_from_zoom_level();
+        }
     }
 
-    fn resize(&mut self, mut target_size: Duration) {
-        let min_duration = Duration::from_secs(1);
-        let max_duration = self.span.end().duration_since(&Timestamp::app_init());
-
-        target_size = min(target_size, max_duration);
-        target_size = max(target_size, min_duration);
-
+    fn resize_from_zoom_level(&mut self) {
+        let target_size: Duration = Duration::from_secs(SPAN_UNIT.as_secs() * (1 << self.zoom_level));
         self.span.set_begin_and_resize(self.span.end() - target_size);
     }
 }
@@ -253,6 +272,6 @@ mod test_rendering_span {
             rendering_span.zoom_out();
         }
 
-        assert!(rendering_span.to_span().duration() > initial_duration);
+        assert!(rendering_span.to_span().duration() > 2 * initial_duration);
     }
 }

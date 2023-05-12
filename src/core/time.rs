@@ -82,14 +82,19 @@ pub mod test_utils {
     }
 
     /// FakeClock returns a default Instant with a timestamp 0 (represented as u64) if the time is not set.
-    /// This means that substracting from Instant::now() in a test will produce a subtraction overflow, as we will try
+    /// This means that subtracting from Instant::now() in a test will produce a subtraction overflow, as we will try
     /// to produce an unsigned value under 0.
     /// To avoid this error, we configure the current time of FakeClock to a high value, so that we can safely subtract
     /// from it.
     pub fn setup_fake_clock_to_prevent_substract_overflow() {
-        refresh_current_timestamp(); // We do a first refresh to set Timestamp::app_init()
-        FakeClock::set_time(365 * 24 * 3600 * 1000);
-        refresh_current_timestamp(); // And now to actually make Timestamp::now() reflect the updated time
+        const CURRENT_MS: u64 = 365 * 24 * 3600 * 1000;
+
+        // We do a first refresh to set Timestamp::app_init() to 5 min in the past
+        FakeClock::set_time(CURRENT_MS - 300 * 1000);
+        refresh_current_timestamp();
+        // And now to actually make Timestamp::now() reflect the updated time
+        FakeClock::set_time(CURRENT_MS);
+        refresh_current_timestamp();
     }
 }
 
