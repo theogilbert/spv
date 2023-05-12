@@ -83,8 +83,8 @@ impl RenderingSpan {
     }
 
     pub fn zoom_in(&mut self) {
-        self.zoom_level = self.zoom_level.checked_sub(1).unwrap_or(0);
-        self.resize_from_zoom_level();
+        let new_zoom_level = self.zoom_level.checked_sub(1).unwrap_or(0);
+        self.resize(new_zoom_level);
     }
 
     pub fn zoom_out(&mut self) {
@@ -95,14 +95,14 @@ impl RenderingSpan {
         let max_zoom_level = f64::log2(max_units_to_display).ceil() as u32;
 
         if self.zoom_level < max_zoom_level {
-            self.zoom_level += 1;
-            self.resize_from_zoom_level();
+            self.resize(self.zoom_level + 1);
         }
     }
 
-    fn resize_from_zoom_level(&mut self) {
-        let target_size: Duration = Duration::from_secs(SPAN_UNIT.as_secs() * (1 << self.zoom_level));
+    fn resize(&mut self, zoom_level: u32) {
+        let target_size: Duration = Duration::from_secs(SPAN_UNIT.as_secs() * (1 << zoom_level));
         self.span.set_begin_and_resize(self.span.end() - target_size);
+        self.zoom_level = zoom_level;
     }
 }
 
