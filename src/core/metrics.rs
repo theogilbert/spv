@@ -86,12 +86,12 @@ impl<'a> DatedMetric<'a> {
 /// Metric representing a percent value (e.g. CPU usage)
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct PercentMetric {
-    percent_usage: f64,
+    value: f64,
 }
 
 impl PercentMetric {
     pub fn new(percent_usage: f64) -> Self {
-        Self { percent_usage }
+        Self { value: percent_usage }
     }
 }
 
@@ -109,13 +109,13 @@ impl Metric for PercentMetric {
 
     fn as_f64(&self, index: usize) -> Result<f64, Error> {
         match index {
-            0 => Ok(self.percent_usage),
+            0 => Ok(self.value),
             _ => Err(Error::RawMetricAccessError(index, self.cardinality())),
         }
     }
 
     fn max_value(&self) -> f64 {
-        self.percent_usage
+        self.value
     }
 
     fn unit(&self) -> &'static str {
@@ -123,7 +123,7 @@ impl Metric for PercentMetric {
     }
 
     fn concise_repr(&self) -> String {
-        self.concise_repr_of_value(self.percent_usage)
+        self.concise_repr_of_value(self.value)
     }
 
     fn concise_repr_of_value(&self, value: f64) -> String {
@@ -132,7 +132,7 @@ impl Metric for PercentMetric {
 
     fn explicit_repr(&self, index: usize) -> Result<String, Error> {
         match index {
-            0 => Ok(format!("Usage {:.2}%", self.percent_usage)),
+            0 => Ok(format!("Usage {:.2}%", self.value)),
             _ => Err(Error::RawMetricAccessError(index, self.cardinality())),
         }
     }
@@ -140,7 +140,7 @@ impl Metric for PercentMetric {
 
 impl PartialOrd for PercentMetric {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.percent_usage.partial_cmp(&other.percent_usage)
+        self.value.partial_cmp(&other.value)
     }
 }
 
@@ -167,7 +167,7 @@ mod test_percent_metric {
 }
 
 /// Metric representing input / output bitrates (e.g. network throughput) in bytes/sec
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct IOMetric {
     input: usize,
     output: usize,

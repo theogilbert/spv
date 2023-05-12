@@ -7,24 +7,24 @@ description = "Command line utility to supervize resource usage of processes"
 license = "MIT"
 
 [features]
-netio = ["netinfo"]
+# netio = ["netinfo"]
 
 [dependencies]
-tui = "0.16.0"
+tui = { version = "0.19", default-features = false, features = ["termion"] }
 termion = "1.5.6"
 log = { version = " 0.4", features = ["max_level_debug", "release_max_level_info"] }
-simplelog = "0.10.0"
+simplelog = "0.12.0"
 signal-hook = "0.3.10"
 thiserror = "1.0.29"
 anyhow = "1.0.44"
 libc = "0.2.108"
 # This will have to stay this way until https://github.com/kaegi/netinfo/pull/5 is merged and a new version is produced
 #netinfo = { version = "0.5.1", optional = true }
-netinfo = { git = "https://github.com/theogilbert/netinfo", branch = "fixed", optional = true }
+#netinfo = { git = "https://github.com/theogilbert/netinfo", branch = "fixed", optional = true }
 
 [dev-dependencies]
 tempfile = "3.2.0"
-rstest = "0.11.0"
+rstest = "0.16.0"
 sn_fake_clock = "0.4.14"
 rand = "0.8.4"
 

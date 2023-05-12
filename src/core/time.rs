@@ -82,14 +82,19 @@ pub mod test_utils {
     }
 
     /// FakeClock returns a default Instant with a timestamp 0 (represented as u64) if the time is not set.
-    /// This means that substracting from Instant::now() in a test will produce a subtraction overflow, as we will try
+    /// This means that subtracting from Instant::now() in a test will produce a subtraction overflow, as we will try
     /// to produce an unsigned value under 0.
     /// To avoid this error, we configure the current time of FakeClock to a high value, so that we can safely subtract
     /// from it.
     pub fn setup_fake_clock_to_prevent_substract_overflow() {
-        refresh_current_timestamp(); // We do a first refresh to set Timestamp::app_init()
-        FakeClock::set_time(365 * 24 * 3600 * 1000);
-        refresh_current_timestamp(); // And now to actually make Timestamp::now() reflect the updated time
+        const CURRENT_MS: u64 = 365 * 24 * 3600 * 1000;
+
+        // We do a first refresh to set Timestamp::app_init() to 5 min in the past
+        FakeClock::set_time(CURRENT_MS - 300 * 1000);
+        refresh_current_timestamp();
+        // And now to actually make Timestamp::now() reflect the updated time
+        FakeClock::set_time(CURRENT_MS);
+        refresh_current_timestamp();
     }
 }
 
@@ -229,8 +234,23 @@ impl Span {
         Span { begin, end }
     }
 
+    /// Updates the begining value of the span without updating its end
+    /// After this operation, the `end` value of the span will remain the same.
+    ///
+    /// This method panics if `begin` is greater than `end`.
+    ///
+    /// # Arguments
+    /// * `begin`: The first timestamp covered by the span
+
+    pub fn set_begin_and_resize(&mut self, begin: Timestamp) {
+        if begin > self.end {
+            panic!("Invalid begin for span {:?}: {:?}", self, begin);
+        }
+        self.begin = begin;
+    }
+
     /// Updates the end of the span without updating the begining of the span
-    /// After this operation, the `begin` iteration of the span will remain the same.
+    /// After this operation, the `begin` value of the span will remain the same.
     ///
     /// This method panics if `end` is less than `begin`.
     ///
@@ -326,6 +346,20 @@ mod test_span {
     }
 
     #[test]
+    fn test_should_update_span_when_setting_begin_and_updating_size() {
+        setup_fake_clock_to_prevent_substract_overflow();
+
+        let mut span = Span::from_duration(Duration::from_secs(10));
+        let original_span = span;
+
+        span.set_begin_and_resize(span.begin() + Duration::from_secs(3));
+
+        assert_eq!(span.begin(), original_span.begin() + Duration::from_secs(3));
+        assert_eq!(span.end(), original_span.end());
+        assert_eq!(span.duration(), Duration::from_secs(7));
+    }
+
+    #[test]
     fn test_should_update_span_when_setting_end_and_updating_size() {
         let mut span = Span::from_begin(Timestamp::now());
         let original_span = span;
@@ -371,9 +405,9 @@ mod test_span {
     }
 
     #[rstest]
-    #[case(-10, 10)]
+    #[case(- 10, 10)]
     #[case(0, 10)]
-    #[case(-10, 0)]
+    #[case(- 10, 0)]
     fn test_should_return_true_if_timestamp_contained_in_span(#[case] relative_begin: i64, #[case] relative_end: u64) {
         setup_fake_clock_to_prevent_substract_overflow();
         let timestamp = Timestamp::now();

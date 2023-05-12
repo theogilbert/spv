@@ -73,6 +73,7 @@ impl MetricsChart {
                 calculate_x_value_of_timestamp(metrics_view.span().end(), self.resolution),
             ])
             .labels(labels)
+            .labels_alignment(Alignment::Right)
     }
 
     fn define_y_axis(&self, metrics_view: &MetricView) -> Axis {
@@ -81,9 +82,6 @@ impl MetricsChart {
 
         let labels = vec![
             Span::from("0"),
-            // To keep the first X-axis label from resizing the chart when its length changes:
-            // TODO remove this once issue #567 from tui-rs is solved (or PR #568 is merged)
-            Span::from("           "),
             Span::from(metrics_view.concise_repr_of_value(upper_bound)),
         ];
 

@@ -9,7 +9,7 @@ use crate::core::view::{CollectorsView, ProcessesView};
 use crate::ctrl::collectors::Collectors;
 use crate::ctrl::processes::{ProcessSelector, SortCriteriaSelector};
 use crate::ctrl::span::RenderingSpan;
-use crate::triggers::Key;
+use crate::triggers::Input;
 
 pub mod collectors;
 pub mod processes;
@@ -38,14 +38,10 @@ pub struct Controls {
 }
 
 impl Controls {
-    pub fn new(
-        collectors: Vec<Box<dyn MetricCollector>>,
-        initial_span_duration: Duration,
-        span_tolerance: Duration,
-    ) -> Self {
+    pub fn new(collectors: Vec<Box<dyn MetricCollector>>, initial_span_duration: Duration) -> Self {
         Self {
             collectors: Collectors::new(collectors),
-            rendering_span: RenderingSpan::new(initial_span_duration, span_tolerance),
+            rendering_span: RenderingSpan::new(initial_span_duration),
             process_selector: ProcessSelector::default(),
             sort_criteria_selector: SortCriteriaSelector::default(),
             current_state: State::Spv,
@@ -56,41 +52,43 @@ impl Controls {
     /// The input will have a different effect depending on the state of the application.
     ///
     /// Returns the effect caused by the input.
-    pub fn interpret_input(&mut self, input: Key) -> Effect {
+    pub fn interpret_input(&mut self, input: Input) -> Effect {
         match self.current_state {
             State::Spv => self.interpret_spv_input(input),
             State::SortingPrompt(_) => self.interpret_sorting_prompt_input(input),
         }
     }
 
-    fn interpret_spv_input(&mut self, input: Key) -> Effect {
+    fn interpret_spv_input(&mut self, input: Input) -> Effect {
         match input {
-            Key::Left => self.collectors.previous_collector(),
-            Key::Right => self.collectors.next_collector(),
-            Key::Up => self.process_selector.previous_process(),
-            Key::Down => self.process_selector.next_process(),
-            Key::G => self.rendering_span.reset_scroll(),
-            Key::H => self.rendering_span.scroll_left(),
-            Key::L => self.rendering_span.scroll_right(),
-            Key::S => self.current_state = State::SortingPrompt(self.sort_criteria_selector.applied()),
+            Input::Left => self.collectors.previous_collector(),
+            Input::Right => self.collectors.next_collector(),
+            Input::Up => self.process_selector.previous_process(),
+            Input::Down => self.process_selector.next_process(),
+            Input::G => self.rendering_span.reset_scroll(),
+            Input::AltLeft => self.rendering_span.scroll_left(),
+            Input::AltRight => self.rendering_span.scroll_right(),
+            Input::AltUp => self.rendering_span.zoom_in(),
+            Input::AltDown => self.rendering_span.zoom_out(),
+            Input::S => self.current_state = State::SortingPrompt(self.sort_criteria_selector.applied()),
             _ => {}
         }
 
         Effect::None
     }
 
-    fn interpret_sorting_prompt_input(&mut self, input: Key) -> Effect {
+    fn interpret_sorting_prompt_input(&mut self, input: Input) -> Effect {
         match input {
-            Key::S => self.current_state = State::Spv,
-            Key::Down => {
+            Input::S | Input::Escape => self.current_state = State::Spv,
+            Input::Down => {
                 self.sort_criteria_selector.next();
                 self.refresh_state();
             }
-            Key::Up => {
+            Input::Up => {
                 self.sort_criteria_selector.previous();
                 self.refresh_state();
             }
-            Key::Submit => {
+            Input::Submit => {
                 self.sort_criteria_selector.apply();
                 self.current_state = State::Spv;
                 return Effect::ProcessesSorted(self.sort_criteria_selector.applied());
@@ -108,7 +106,7 @@ impl Controls {
     }
 
     pub fn refresh_span(&mut self) {
-        self.rendering_span.refresh();
+        self.rendering_span.follow();
     }
 
     pub fn to_span(&self) -> Span {

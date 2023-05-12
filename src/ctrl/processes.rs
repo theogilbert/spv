@@ -203,7 +203,7 @@ impl SortCriteriaSelector {
         self.applied_selection = self.selected_index;
     }
 
-    /// Returns the critieria which is currently applied, even if it is not selected
+    /// Returns the criteria which is currently applied, even if it is not selected
     pub fn applied(&self) -> ProcessOrdering {
         PROCESS_ORDERING_CRITERIA[self.applied_selection]
     }

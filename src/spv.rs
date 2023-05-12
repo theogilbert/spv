@@ -34,7 +34,7 @@ impl SpvApplication {
             receiver,
             process_collector,
             ui: SpvUI::new(2 * impulse_tolerance)?,
-            controls: Controls::new(collectors, DEFAULT_REPRESENTED_SPAN_DURATION, 2 * impulse_tolerance),
+            controls: Controls::new(collectors, DEFAULT_REPRESENTED_SPAN_DURATION),
         })
     }
 

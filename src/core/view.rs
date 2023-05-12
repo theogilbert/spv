@@ -7,7 +7,7 @@ use crate::core::metrics::{DatedMetric, Metric};
 use crate::core::process::{Pid, ProcessMetadata};
 use crate::core::time::Span;
 
-/// Snapshot of all collected metrics of a single process, from a single probe
+/// Snapshot of a slice of collected metrics of a single process, from a single probe
 ///
 /// Refer to the [`MetricCollector`](crate::core::collection::MetricCollector) trait to instanciate a `MetricView`
 pub struct MetricView<'a> {
@@ -173,7 +173,7 @@ mod test_metric_view {
     }
 }
 
-/// Overview of a single probe's latest metrics, for all running processes
+/// Overview of a single probe's latest metric, for each running processes
 ///
 /// Refer to the [`MetricCollector`](crate::core::collection::MetricCollector) trait to instanciate a `MetricsOverview`
 pub struct MetricsOverview<'a> {
